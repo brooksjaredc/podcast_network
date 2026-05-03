@@ -155,11 +155,49 @@ class LegacyRepository:
     def true_positives(self) -> list[TruePositive]:
         return load_fixture(self.data_dir / "true_positives.json", TruePositive)
 
+    @cached_property
+    def podcasts_by_name(self) -> dict[str, Podcast]:
+        return {podcast.name: podcast for podcast in self.podcasts}
+
+    @cached_property
+    def people_by_name(self) -> dict[str, Person]:
+        return {person.name: person for person in self.people}
+
     def podcast(self, podcast_id: int) -> Podcast:
         return self._by_id(self.podcasts, podcast_id)
 
     def person(self, person_id: int) -> Person:
         return self._by_id(self.people, person_id)
+
+    def durations_for_podcast(self, podcast_id: int) -> list[Duration]:
+        return [duration for duration in self.durations if duration.podcast_id == podcast_id]
+
+    def durations_for_person(self, person_name: str) -> list[Duration]:
+        return [duration for duration in self.durations if duration.guests == person_name]
+
+    def predictions_for_podcast(self, podcast_id: int) -> list[Prediction]:
+        return [
+            prediction for prediction in self.predictions if prediction.podcast_id == podcast_id
+        ]
+
+    def predictions_for_person(self, person_id: int) -> list[Prediction]:
+        return [prediction for prediction in self.predictions if prediction.person_id == person_id]
+
+    def common_guests(
+        self,
+        first_podcast_id: int,
+        second_podcast_id: int,
+    ) -> list[tuple[Duration, Duration]]:
+        first = {
+            duration.guests: duration
+            for duration in self.durations_for_podcast(first_podcast_id)
+        }
+        second = {
+            duration.guests: duration
+            for duration in self.durations_for_podcast(second_podcast_id)
+        }
+        common_names = sorted(set(first) & set(second))
+        return [(first[name], second[name]) for name in common_names]
 
     @staticmethod
     def _by_id[FixtureModel: BaseModel](

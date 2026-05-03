@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Rankings{% endblock %}
+
+{% block content %}
+  <h1>{{ rank_label }}</h1>
+
+  <form class="toolbar" method="get">
+    <input name="q" value="{{ query }}" placeholder="Search people">
+    <select name="rank">
+      <option value="pr" {% if rank == "pr" %}selected{% endif %}>PageRank</option>
+      <option value="hub" {% if rank == "hub" %}selected{% endif %}>Hub</option>
+      <option value="auth" {% if rank == "auth" %}selected{% endif %}>Authority</option>
+      <option value="degree" {% if rank == "degree" %}selected{% endif %}>Degree</option>
+      <option value="bt" {% if rank == "bt" %}selected{% endif %}>Betweenness</option>
+      <option value="close" {% if rank == "close" %}selected{% endif %}>Closeness</option>
+    </select>
+    <button type="submit">Apply</button>
+  </form>
+
+  {% if suggestion %}
+    <p>Sorry, no exact match. Did you mean
+      <a href="{% url 'explorer:rankings' %}?q={{ suggestion|urlencode }}">{{ suggestion }}</a>?
+    </p>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Name</th>
+        <th>Top Category</th>
+        <th>Host Of</th>
+        <th>Guest On</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for person in people %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
+          <td>{{ person.top_category }}</td>
+          <td>{{ person.host_podcast }}</td>
+          <td>{{ person.guest_podcast }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
+

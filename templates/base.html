@@ -102,6 +102,50 @@
       .muted {
         color: var(--muted);
       }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 16px 0;
+      }
+      .pill-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 14px 0;
+      }
+      .pill {
+        display: inline-block;
+        padding: 5px 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink);
+        text-decoration: none;
+        background: #fff;
+      }
+      .pill.active {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 22px;
+      }
+      .panel {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+      .plot {
+        margin: 14px 0 28px;
+        min-height: 260px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
       @media (max-width: 700px) {
         input {
           width: 100%;
@@ -119,7 +163,10 @@
         <a href="{% url 'explorer:home' %}">Podcast Network</a>
         <a href="{% url 'explorer:podcasts' %}">Podcasts</a>
         <a href="{% url 'explorer:people' %}">People</a>
+        <a href="{% url 'explorer:rankings' %}">Rankings</a>
         <a href="{% url 'explorer:path' %}">Six Degrees</a>
+        <a href="{% url 'explorer:common' %}">Common Guests</a>
+        <a href="{% url 'explorer:advanced' %}">Advanced</a>
       </nav>
     </header>
     <main>
@@ -127,4 +174,3 @@
     </main>
   </body>
 </html>
-

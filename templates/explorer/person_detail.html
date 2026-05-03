@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}{{ person.name }}{% endblock %}
+
+{% block content %}
+  <h1>{{ person.name }}</h1>
+  <p class="muted">{{ person.top_category }}</p>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Host Of</h2>
+      {% if host_podcasts %}
+        <ul>
+          {% for podcast in host_podcasts %}
+            <li><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No hosted podcasts in the legacy dataset.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Centrality Rankings</h2>
+      <table>
+        <tbody>
+          <tr><td>PageRank</td><td>{{ person.pr_rank }}</td></tr>
+          <tr><td>Hub</td><td>{{ person.hub_rank }}</td></tr>
+          <tr><td>Authority</td><td>{{ person.auth_rank }}</td></tr>
+          <tr><td>Closeness</td><td>{{ person.close_rank }}</td></tr>
+          <tr><td>Betweenness</td><td>{{ person.bt_rank }}</td></tr>
+          <tr><td>Degree</td><td>{{ person.degree_rank }}</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <h2>Guest Appearances</h2>
+  <table>
+    <thead>
+      <tr><th>Podcast</th><th>Duration</th><th>Appearances</th><th>Most Recent</th></tr>
+    </thead>
+    <tbody>
+      {% for duration in durations %}
+        <tr>
+          <td><a href="{% url 'explorer:podcast_detail' duration.podcast_id %}">{{ duration.podcast }}</a></td>
+          <td>{{ duration.hours }}</td>
+          <td>{{ duration.count }}</td>
+          <td>{{ duration.recent }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Podcast Predictions</h2>
+  <table>
+    <thead>
+      <tr><th>Podcast</th><th>Probability</th></tr>
+    </thead>
+    <tbody>
+      {% for prediction in predictions %}
+        <tr>
+          <td><a href="{% url 'explorer:podcast_detail' prediction.podcast_id %}">{{ prediction.podcast }}</a></td>
+          <td>{{ prediction.prob|floatformat:3 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">No predictions loaded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
+

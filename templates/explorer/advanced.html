@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }}{% endblock %}
+
+{% block content %}
+  <h1>{{ page.title }}</h1>
+
+  <div class="pill-row">
+    {% for slug, item in pages.items %}
+      <a class="pill {% if item.title == page.title %}active{% endif %}" href="{% url 'explorer:advanced_page' slug %}">{{ item.title }}</a>
+    {% endfor %}
+  </div>
+
+  {% for section in page.sections %}
+    <section>
+      <h2>{{ section.heading }}</h2>
+      <p>{{ section.body }}</p>
+      {% if section.plotly %}
+        <div class="plot">
+          <script data-plotly="{{ section.plotly.0 }}" sharekey-plotly="{{ section.plotly.1 }}" src="https://plot.ly/embed.js" async></script>
+        </div>
+      {% endif %}
+    </section>
+  {% endfor %}
+
+  {% if page.title == "Predictions" %}
+    <h2>True Positives in Test Set</h2>
+    <table>
+      <thead><tr><th>Podcast</th><th>Guest</th><th>Test Probability</th></tr></thead>
+      <tbody>
+        {% for item in true_positives|slice:":200" %}
+          <tr>
+            <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast }}</a></td>
+            <td><a href="{% url 'explorer:person_detail' item.person_id %}">{{ item.guest }}</a></td>
+            <td>{{ item.test_prob|floatformat:3 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Predictions</h2>
+    <table>
+      <thead><tr><th>Podcast</th><th>Guest</th><th>Probability</th></tr></thead>
+      <tbody>
+        {% for item in predictions|slice:":500" %}
+          <tr>
+            <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast }}</a></td>
+            <td><a href="{% url 'explorer:person_detail' item.person_id %}">{{ item.guest }}</a></td>
+            <td>{{ item.prob|floatformat:3 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}
+

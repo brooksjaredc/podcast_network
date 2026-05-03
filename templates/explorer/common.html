@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Common Guests{% endblock %}
+
+{% block content %}
+  <h1>Common Guests</h1>
+  <form class="toolbar" method="get">
+    <select name="first">
+      {% for podcast in podcasts %}
+        <option value="{{ podcast.id }}" {% if first_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="second">
+      {% for podcast in podcasts %}
+        <option value="{{ podcast.id }}" {% if second_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Compare</button>
+  </form>
+
+  {% if first_podcast and second_podcast %}
+    <h2>{{ first_podcast.name }} and {{ second_podcast.name }}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Guest</th>
+          <th>{{ first_podcast.name }} Time</th>
+          <th>{{ first_podcast.name }} Appearances</th>
+          <th>{{ second_podcast.name }} Time</th>
+          <th>{{ second_podcast.name }} Appearances</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for first, second in pairs %}
+          <tr>
+            <td><a href="{% url 'explorer:person_detail' first.person_id %}">{{ first.guests }}</a></td>
+            <td>{{ first.hours }}</td>
+            <td>{{ first.count }}</td>
+            <td>{{ second.hours }}</td>
+            <td>{{ second.count }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No common guests found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}
+
