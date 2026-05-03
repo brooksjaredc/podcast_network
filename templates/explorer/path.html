@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Six Degrees{% endblock %}
+
+{% block content %}
+  <h1>Six Degrees</h1>
+  <form method="get">
+    <input name="source" value="{{ source }}" placeholder="First person">
+    <input name="target" value="{{ target }}" placeholder="Second person">
+    <button type="submit">Find Path</button>
+  </form>
+
+  {% if result %}
+    <h2>Result</h2>
+    <p>{{ result.message }}</p>
+    {% if result.found %}
+      <p class="muted">Length: {{ result.length }}</p>
+    {% endif %}
+  {% endif %}
+{% endblock %}
+

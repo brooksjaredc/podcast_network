@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Podcasts{% endblock %}
+
+{% block content %}
+  <h1>Podcasts</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Name</th>
+        <th>Hosts</th>
+        <th>Guests</th>
+        <th>Unique</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for podcast in podcasts %}
+        <tr>
+          <td>{{ podcast.degree_rank }}</td>
+          <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
+          <td>{{ podcast.hosts|join:", " }}</td>
+          <td>{{ podcast.num_guests }}</td>
+          <td>{{ podcast.percent_unique }}%</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
+

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Podcast Network{% endblock %}
+
+{% block content %}
+  <h1>Podcast Network</h1>
+  <p class="muted">A fresh combined app for exploring podcast hosts, guests, rankings, and paths.</p>
+
+  <section class="stats">
+    <div class="stat"><strong>{{ podcast_count }}</strong><span>podcasts</span></div>
+    <div class="stat"><strong>{{ person_count }}</strong><span>people</span></div>
+    <div class="stat"><strong>{{ duration_count }}</strong><span>guest appearances</span></div>
+  </section>
+
+  <p>
+    <a class="button" href="{% url 'explorer:path' %}?source=Joe%20Rogan&target=Marc%20Maron">Try a path</a>
+  </p>
+{% endblock %}
+

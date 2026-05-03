@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}{{ podcast.name }}{% endblock %}
+
+{% block content %}
+  <h1>{{ podcast.name }}</h1>
+  <p class="muted">{{ podcast.hosts|join:", " }} · {{ podcast.categories|join:", " }}</p>
+  <p>{{ podcast.description|striptags }}</p>
+
+  <section class="stats">
+    <div class="stat"><strong>{{ podcast.num_guests }}</strong><span>guest appearances</span></div>
+    <div class="stat"><strong>{{ podcast.num_unique }}</strong><span>unique guests</span></div>
+    <div class="stat"><strong>{{ podcast.avg_ep_lengths }}</strong><span>average episode length</span></div>
+  </section>
+
+  <h2>Frequent Guests</h2>
+  <table>
+    <thead>
+      <tr><th>Guest</th><th>Appearances</th><th>Hours</th><th>Most Recent</th></tr>
+    </thead>
+    <tbody>
+      {% for duration in durations %}
+        <tr>
+          <td>{{ duration.guests }}</td>
+          <td>{{ duration.count }}</td>
+          <td>{{ duration.hours }}</td>
+          <td>{{ duration.recent }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Predicted Guests</h2>
+  <table>
+    <thead>
+      <tr><th>Guest</th><th>Probability</th></tr>
+    </thead>
+    <tbody>
+      {% for prediction in predictions %}
+        <tr>
+          <td>{{ prediction.guest }}</td>
+          <td>{{ prediction.prob|floatformat:3 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">No predictions loaded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
+
