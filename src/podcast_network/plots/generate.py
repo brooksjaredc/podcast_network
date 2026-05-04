@@ -634,6 +634,7 @@ def write_plotly(filename: str, fig: go.Figure) -> Path:
         output,
         include_plotlyjs="directory",
         full_html=True,
+        div_id=plotly_div_id(filename),
         config={"displaylogo": False, "responsive": True},
     )
     html_text = output.read_text(encoding="utf-8")
@@ -649,6 +650,11 @@ def write_plotly(filename: str, fig: go.Figure) -> Path:
     )
     output.write_text(html_text, encoding="utf-8")
     return output
+
+
+def plotly_div_id(filename: str) -> str:
+    stem = Path(filename).stem.replace("_", "-")
+    return f"podcast-network-{stem}"
 
 
 def svg_header(title: str, *, width: int = WIDTH, height: int = HEIGHT) -> list[str]:

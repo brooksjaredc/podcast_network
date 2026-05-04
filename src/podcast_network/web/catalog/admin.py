@@ -5,7 +5,10 @@ from django.contrib import admin
 from podcast_network.web.catalog.models import (
     Appearance,
     Episode,
+    EpisodeGuestExtraction,
+    ExtractionRun,
     Feed,
+    GuestCandidate,
     Person,
     Podcast,
     RawFeedSnapshot,
@@ -64,3 +67,32 @@ class ScrapeErrorAdmin(admin.ModelAdmin):
     search_fields = ["message", "feed__url"]
     list_display = ["stage", "feed", "created_at"]
     list_filter = ["stage"]
+
+
+@admin.register(ExtractionRun)
+class ExtractionRunAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "status",
+        "provider",
+        "model",
+        "prompt_version",
+        "episodes_succeeded",
+        "episodes_failed",
+        "started_at",
+    ]
+    list_filter = ["status", "provider", "model", "prompt_version"]
+
+
+@admin.register(EpisodeGuestExtraction)
+class EpisodeGuestExtractionAdmin(admin.ModelAdmin):
+    search_fields = ["episode__title", "error"]
+    list_display = ["episode", "status", "model", "prompt_version", "created_at"]
+    list_filter = ["status", "model", "prompt_version"]
+
+
+@admin.register(GuestCandidate)
+class GuestCandidateAdmin(admin.ModelAdmin):
+    search_fields = ["name", "evidence", "extraction__episode__title"]
+    list_display = ["name", "confidence", "accepted", "extraction"]
+    list_filter = ["accepted"]

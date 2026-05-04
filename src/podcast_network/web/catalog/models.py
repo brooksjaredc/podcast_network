@@ -173,3 +173,84 @@ class ScrapeError(models.Model):
 
     def __str__(self) -> str:
         return f"{self.stage}: {self.message[:80]}"
+
+
+class ExtractionRun(models.Model):
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        PARTIAL = "partial", "Partial"
+        FAILED = "failed", "Failed"
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RUNNING)
+    model = models.CharField(max_length=100)
+    prompt_version = models.CharField(max_length=50)
+    provider = models.CharField(max_length=50, default="openai")
+    episodes_requested = models.PositiveIntegerField(default=0)
+    episodes_succeeded = models.PositiveIntegerField(default=0)
+    episodes_failed = models.PositiveIntegerField(default=0)
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        return f"ExtractionRun #{self.pk or 'new'} {self.prompt_version} {self.model}"
+
+
+class EpisodeGuestExtraction(models.Model):
+    class Status(models.TextChoices):
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    episode = models.ForeignKey(Episode, on_delete=models.CASCADE, related_name="guest_extractions")
+    extraction_run = models.ForeignKey(
+        ExtractionRun,
+        on_delete=models.CASCADE,
+        related_name="episode_extractions",
+    )
+    status = models.CharField(max_length=20, choices=Status.choices)
+    prompt_version = models.CharField(max_length=50)
+    model = models.CharField(max_length=100)
+    input_text = models.TextField()
+    raw_response = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["episode", "prompt_version", "model"],
+                name="unique_episode_guest_extraction_model_prompt",
+            )
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.episode_id} {self.prompt_version} {self.status}"
+
+
+class GuestCandidate(models.Model):
+    extraction = models.ForeignKey(
+        EpisodeGuestExtraction,
+        on_delete=models.CASCADE,
+        related_name="guest_candidates",
+    )
+    name = models.CharField(max_length=500)
+    confidence = models.FloatField(default=0)
+    evidence = models.TextField(blank=True)
+    normalized_name = models.CharField(max_length=500, blank=True)
+    accepted = models.BooleanField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-confidence", "name"]
+
+    def __str__(self) -> str:
+        return self.name
