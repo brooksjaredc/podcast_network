@@ -15,16 +15,23 @@
       </tr>
     </thead>
     <tbody>
-      {% for podcast in podcasts %}
+      {% for row in podcast_rows %}
         <tr>
-          <td>{{ podcast.degree_rank }}</td>
-          <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
-          <td>{{ podcast.hosts|join:", " }}</td>
-          <td>{{ podcast.num_guests }}</td>
-          <td>{{ podcast.percent_unique }}%</td>
+          <td>{{ row.podcast.degree_rank }}</td>
+          <td><a href="{% url 'explorer:podcast_detail' row.podcast.id %}">{{ row.podcast.name }}</a></td>
+          <td>
+            {% for host in row.hosts %}
+              {% if host.person %}
+                <a href="{% url 'explorer:person_detail' host.person.id %}">{{ host.name }}</a>{% if not forloop.last %}, {% endif %}
+              {% else %}
+                {{ host.name }}{% if not forloop.last %}, {% endif %}
+              {% endif %}
+            {% endfor %}
+          </td>
+          <td>{{ row.podcast.num_guests }}</td>
+          <td>{{ row.podcast.percent_unique }}%</td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
 {% endblock %}
-

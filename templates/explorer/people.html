@@ -13,16 +13,27 @@
       <tr><th>PageRank</th><th>Name</th><th>Top Category</th><th>Guest Podcast</th><th>Host Podcast</th></tr>
     </thead>
     <tbody>
-      {% for person in people %}
+      {% for row in people %}
         <tr>
-          <td>{{ person.pr_rank }}</td>
-          <td>{{ person.name }}</td>
-          <td>{{ person.top_category }}</td>
-          <td>{{ person.guest_podcast }}</td>
-          <td>{{ person.host_podcast }}</td>
+          <td>{{ row.person.pr_rank }}</td>
+          <td><a href="{% url 'explorer:person_detail' row.person.id %}">{{ row.person.name }}</a></td>
+          <td>{{ row.person.top_category }}</td>
+          <td>
+            {% if row.guest_podcast.podcast %}
+              <a href="{% url 'explorer:podcast_detail' row.guest_podcast.podcast.id %}">{{ row.guest_podcast.name }}</a>
+            {% elif row.guest_podcast %}
+              {{ row.guest_podcast.name }}
+            {% endif %}
+          </td>
+          <td>
+            {% if row.host_podcast.podcast %}
+              <a href="{% url 'explorer:podcast_detail' row.host_podcast.podcast.id %}">{{ row.host_podcast.name }}</a>
+            {% elif row.host_podcast %}
+              {{ row.host_podcast.name }}
+            {% endif %}
+          </td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
 {% endblock %}
-

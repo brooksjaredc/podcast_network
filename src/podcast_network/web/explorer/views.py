@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 
+from podcast_network.data import Duration, LegacyRepository, Person, Podcast, Prediction
 from podcast_network.web.explorer.content import advanced_pages
 from podcast_network.web.explorer.services import legacy_repository, six_degrees_graph
 
@@ -32,7 +35,14 @@ def home(request: HttpRequest) -> HttpResponse:
 def podcasts(request: HttpRequest) -> HttpResponse:
     repo = legacy_repository()
     ordered = sorted(repo.podcasts, key=lambda podcast: podcast.degree_rank or 999_999)
-    return render(request, "explorer/podcasts.html", {"podcasts": ordered})
+    rows = [
+        {
+            "podcast": podcast,
+            "hosts": linked_people(repo, podcast.hosts),
+        }
+        for podcast in ordered
+    ]
+    return render(request, "explorer/podcasts.html", {"podcast_rows": rows})
 
 
 def podcast_detail(request: HttpRequest, podcast_id: int) -> HttpResponse:
@@ -49,16 +59,20 @@ def podcast_detail(request: HttpRequest, podcast_id: int) -> HttpResponse:
         "explorer/podcast_detail.html",
         {
             "podcast": podcast,
-            "durations": sorted(
-                durations,
-                key=lambda duration: duration.count,
-                reverse=True,
-            )[:50],
-            "predictions": sorted(
-                predictions,
-                key=lambda prediction: prediction.prob,
-                reverse=True,
-            )[:25],
+            "durations": duration_rows(
+                sorted(
+                    durations,
+                    key=lambda duration: duration.count,
+                    reverse=True,
+                )[:50],
+            ),
+            "predictions": prediction_rows(
+                sorted(
+                    predictions,
+                    key=lambda prediction: prediction.prob,
+                    reverse=True,
+                )[:25],
+            ),
         },
     )
 
@@ -70,7 +84,11 @@ def people(request: HttpRequest) -> HttpResponse:
     if query:
         lowered = query.lower()
         ordered = [person for person in ordered if lowered in person.name.lower()]
-    return render(request, "explorer/people.html", {"people": ordered[:500], "query": query})
+    return render(
+        request,
+        "explorer/people.html",
+        {"people": person_rows(repo, ordered[:500]), "query": query},
+    )
 
 
 def rankings(request: HttpRequest) -> HttpResponse:
@@ -93,7 +111,7 @@ def rankings(request: HttpRequest) -> HttpResponse:
         request,
         "explorer/rankings.html",
         {
-            "people": ordered[:250],
+            "people": person_rows(repo, ordered[:250]),
             "rank": rank_key,
             "rank_label": label,
             "query": query,
@@ -208,3 +226,44 @@ def parse_int(value: str | None) -> int | None:
     if value in (None, ""):
         return None
     return int(value)
+
+
+def person_rows(repo: LegacyRepository, people: list[Person]) -> list[dict[str, Any]]:
+    return [
+        {
+            "person": person,
+            "host_podcast": linked_podcast(repo, person.host_podcast),
+            "guest_podcast": linked_podcast(repo, person.guest_podcast),
+        }
+        for person in people
+    ]
+
+
+def linked_people(repo: LegacyRepository, names: list[str]) -> list[dict[str, Person | str]]:
+    return [{"name": name, "person": repo.people_by_name.get(name)} for name in names]
+
+
+def linked_podcast(repo: LegacyRepository, name: str) -> dict[str, Podcast | str] | None:
+    if not name:
+        return None
+    return {"name": name, "podcast": repo.podcasts_by_name.get(name)}
+
+
+def duration_rows(durations: list[Duration]) -> list[dict[str, Any]]:
+    return [
+        {
+            "duration": duration,
+            "guest": {"name": duration.guests, "person_id": duration.person_id},
+        }
+        for duration in durations
+    ]
+
+
+def prediction_rows(predictions: list[Prediction]) -> list[dict[str, Any]]:
+    return [
+        {
+            "prediction": prediction,
+            "guest": {"name": prediction.guest, "person_id": prediction.person_id},
+        }
+        for prediction in predictions
+    ]

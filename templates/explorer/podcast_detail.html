@@ -19,12 +19,12 @@
       <tr><th>Guest</th><th>Appearances</th><th>Hours</th><th>Most Recent</th></tr>
     </thead>
     <tbody>
-      {% for duration in durations %}
+      {% for row in durations %}
         <tr>
-          <td>{{ duration.guests }}</td>
-          <td>{{ duration.count }}</td>
-          <td>{{ duration.hours }}</td>
-          <td>{{ duration.recent }}</td>
+          <td><a href="{% url 'explorer:person_detail' row.guest.person_id %}">{{ row.guest.name }}</a></td>
+          <td>{{ row.duration.count }}</td>
+          <td>{{ row.duration.hours }}</td>
+          <td>{{ row.duration.recent }}</td>
         </tr>
       {% endfor %}
     </tbody>
@@ -36,10 +36,10 @@
       <tr><th>Guest</th><th>Probability</th></tr>
     </thead>
     <tbody>
-      {% for prediction in predictions %}
+      {% for row in predictions %}
         <tr>
-          <td>{{ prediction.guest }}</td>
-          <td>{{ prediction.prob|floatformat:3 }}</td>
+          <td><a href="{% url 'explorer:person_detail' row.guest.person_id %}">{{ row.guest.name }}</a></td>
+          <td>{{ row.prediction.prob|floatformat:3 }}</td>
         </tr>
       {% empty %}
         <tr><td colspan="2">No predictions loaded.</td></tr>
@@ -47,4 +47,3 @@
     </tbody>
   </table>
 {% endblock %}
-
