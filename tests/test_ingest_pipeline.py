@@ -103,7 +103,13 @@ def create_feed() -> Feed:
 
 
 def fixture_fetcher(content: bytes):
-    def fetcher(url: str, *, etag: str = "", last_modified: str = "") -> FetchResult:
+    def fetcher(
+        url: str,
+        *,
+        etag: str = "",
+        last_modified: str = "",
+        timeout_seconds: int = 20,
+    ) -> FetchResult:
         return FetchResult(
             url=url,
             status_code=200,
@@ -115,7 +121,13 @@ def fixture_fetcher(content: bytes):
     return fetcher
 
 
-def not_modified_fetcher(url: str, *, etag: str = "", last_modified: str = "") -> FetchResult:
+def not_modified_fetcher(
+    url: str,
+    *,
+    etag: str = "",
+    last_modified: str = "",
+    timeout_seconds: int = 20,
+) -> FetchResult:
     return FetchResult(url=url, status_code=304, content=b"")
 
 

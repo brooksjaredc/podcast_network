@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.error import HTTPError, URLError
 
 from django.db import transaction
 from django.utils import timezone
@@ -31,6 +32,7 @@ def ingest_feeds(
     feeds: list[Feed],
     *,
     storage: LocalRawFeedStorage | None = None,
+    fetch_timeout_seconds: int = 20,
 ) -> ScrapeRun:
     storage = storage or LocalRawFeedStorage()
     run = ScrapeRun.objects.create(feeds_requested=len(feeds))
@@ -38,14 +40,20 @@ def ingest_feeds(
     failed = 0
     for feed in feeds:
         try:
-            ingest_feed(feed, storage=storage, scrape_run=run)
+            ingest_feed(
+                feed,
+                storage=storage,
+                scrape_run=run,
+                fetch_timeout_seconds=fetch_timeout_seconds,
+            )
             succeeded += 1
         except Exception as exc:  # pragma: no cover - command-level safety net
             failed += 1
+            record_feed_failure(feed, status_code=getattr(exc, "code", None))
             ScrapeError.objects.create(
                 scrape_run=run,
                 feed=feed,
-                stage=ScrapeError.Stage.PERSIST,
+                stage=classify_error_stage(exc),
                 message=str(exc),
             )
 
@@ -76,6 +84,7 @@ def ingest_feed(
     scrape_run: ScrapeRun | None = None,
     fetcher=fetch_feed,
     parser=parse_feed,
+    fetch_timeout_seconds: int = 20,
 ) -> FeedIngestResult:
     storage = storage or LocalRawFeedStorage()
     scrape_run = scrape_run or ScrapeRun.objects.create(feeds_requested=1)
@@ -85,6 +94,7 @@ def ingest_feed(
         feed.url,
         etag=feed.etag,
         last_modified=feed.last_modified,
+        timeout_seconds=fetch_timeout_seconds,
     )
     feed.last_status = result.status_code
     feed.last_fetched_at = fetched_at
@@ -210,3 +220,19 @@ def finish_single_feed_run(scrape_run: ScrapeRun) -> None:
             "status",
         ],
     )
+
+
+def record_feed_failure(feed: Feed, *, status_code: int | None = None) -> None:
+    feed.failure_count += 1
+    feed.last_fetched_at = timezone.now()
+    update_fields = ["failure_count", "last_fetched_at", "updated_at"]
+    if status_code is not None:
+        feed.last_status = status_code
+        update_fields.append("last_status")
+    feed.save(update_fields=update_fields)
+
+
+def classify_error_stage(exc: Exception) -> str:
+    if isinstance(exc, (HTTPError, URLError, TimeoutError)):
+        return ScrapeError.Stage.FETCH
+    return ScrapeError.Stage.PERSIST

@@ -26,6 +26,12 @@ class Command(BaseCommand):
             action="store_true",
             help="Include inactive feeds stored in the database.",
         )
+        parser.add_argument(
+            "--timeout",
+            type=int,
+            default=20,
+            help="Per-feed HTTP timeout in seconds.",
+        )
 
     def handle(self, *args: object, **options: object) -> None:
         feed_urls = list(options["feed_url"])
@@ -41,7 +47,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("No feeds to ingest."))
             return
 
-        run = ingest_feeds(feeds)
+        run = ingest_feeds(feeds, fetch_timeout_seconds=int(options["timeout"]))
         self.stdout.write(
             self.style.SUCCESS(
                 "Scrape run "

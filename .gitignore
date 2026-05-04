@@ -8,7 +8,8 @@ dist/
 build/
 *.egg-info/
 db.sqlite3
+data/raw/
+data/reports/
 staticfiles/
 media/
 .env
-
