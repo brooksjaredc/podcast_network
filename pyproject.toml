@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "django>=5.2,<6.0",
+  "feedparser>=6.0,<7.0",
   "networkx>=3.5,<4.0",
   "numpy>=2.0,<3.0",
   "pandas>=2.2,<3.0",
@@ -33,6 +34,7 @@ packages = ["src/podcast_network"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["**/migrations/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

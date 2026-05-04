@@ -10,6 +10,7 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
 INSTALLED_APPS = [
+    "podcast_network.web.catalog",
     "podcast_network.web.explorer",
     "django.contrib.admin",
     "django.contrib.auth",
