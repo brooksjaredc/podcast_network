@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 430" role="img">
+<title>Betweenness Distribution</title>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="30.00" y="34.00" font-family="system-ui, sans-serif" font-size="22" fill="#1f2937" text-anchor="start">Betweenness Distribution</text>
+<line x1="80" y1="340" x2="840" y2="340" stroke="#475467"/><line x1="80" y1="70" x2="80" y2="340" stroke="#475467"/><text x="460.00" y="386.00" font-family="system-ui, sans-serif" font-size="12" fill="#667085" text-anchor="middle">log10(Betweenness)</text>
+<rect x="81.00" y="273.31" width="29.67" height="66.69" fill="#0f766e"/>
+<rect x="112.67" y="193.61" width="29.67" height="146.39" fill="#b45309"/>
+<rect x="144.33" y="322.11" width="29.67" height="17.89" fill="#1d4ed8"/>
+<rect x="176.00" y="299.34" width="29.67" height="40.66" fill="#be123c"/>
+<rect x="207.67" y="271.69" width="29.67" height="68.31" fill="#6d28d9"/>
+<rect x="239.33" y="170.84" width="29.67" height="169.16" fill="#15803d"/>
+<rect x="271.00" y="315.60" width="29.67" height="24.40" fill="#c2410c"/>
+<rect x="302.67" y="284.70" width="29.67" height="55.30" fill="#0369a1"/>
+<rect x="334.33" y="263.55" width="29.67" height="76.45" fill="#7c2d12"/>
+<rect x="366.00" y="206.63" width="29.67" height="133.37" fill="#4338ca"/>
+<rect x="397.67" y="91.14" width="29.67" height="248.86" fill="#0f766e"/>
+<rect x="429.33" y="74.88" width="29.67" height="265.12" fill="#b45309"/>
+<rect x="461.00" y="73.25" width="29.67" height="266.75" fill="#1d4ed8"/>
+<rect x="492.67" y="70.00" width="29.67" height="270.00" fill="#be123c"/>
+<rect x="524.33" y="117.17" width="29.67" height="222.83" fill="#6d28d9"/>
+<rect x="556.00" y="165.96" width="29.67" height="174.04" fill="#15803d"/>
+<rect x="587.67" y="227.77" width="29.67" height="112.23" fill="#c2410c"/>
+<rect x="619.33" y="257.05" width="29.67" height="82.95" fill="#0369a1"/>
+<rect x="651.00" y="286.33" width="29.67" height="53.67" fill="#7c2d12"/>
+<rect x="682.67" y="279.82" width="29.67" height="60.18" fill="#4338ca"/>
+<rect x="714.33" y="268.43" width="29.67" height="71.57" fill="#0f766e"/>
+<rect x="746.00" y="307.47" width="29.67" height="32.53" fill="#b45309"/>
+<rect x="777.67" y="330.24" width="29.67" height="9.76" fill="#1d4ed8"/>
+<rect x="809.33" y="331.87" width="29.67" height="8.13" fill="#be123c"/>
+</svg>

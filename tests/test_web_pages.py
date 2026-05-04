@@ -47,3 +47,5 @@ def test_advanced_predictions_loads() -> None:
 
     assert response.status_code == 200
     assert b"Future Link Predictions" in response.content
+    assert b"plot.ly" not in response.content
+    assert b"plots/predictions_histogram.html" in response.content

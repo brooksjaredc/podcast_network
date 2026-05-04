@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 430" role="img">
+<title>Degree Centrality Distribution</title>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="30.00" y="34.00" font-family="system-ui, sans-serif" font-size="22" fill="#1f2937" text-anchor="start">Degree Centrality Distribution</text>
+<line x1="80" y1="340" x2="840" y2="340" stroke="#475467"/><line x1="80" y1="70" x2="80" y2="340" stroke="#475467"/><text x="460.00" y="386.00" font-family="system-ui, sans-serif" font-size="12" fill="#667085" text-anchor="middle">log10(Degree Centrality)</text>
+<rect x="81.00" y="70.00" width="29.67" height="270.00" fill="#0f766e"/>
+<rect x="112.67" y="192.98" width="29.67" height="147.02" fill="#b45309"/>
+<rect x="144.33" y="260.48" width="29.67" height="79.52" fill="#1d4ed8"/>
+<rect x="176.00" y="297.47" width="29.67" height="42.53" fill="#be123c"/>
+<rect x="207.67" y="278.05" width="29.67" height="61.95" fill="#6d28d9"/>
+<rect x="239.33" y="294.23" width="29.67" height="45.77" fill="#15803d"/>
+<rect x="271.00" y="313.65" width="29.67" height="26.35" fill="#c2410c"/>
+<rect x="302.67" y="322.43" width="29.67" height="17.57" fill="#0369a1"/>
+<rect x="334.33" y="325.67" width="29.67" height="14.33" fill="#7c2d12"/>
+<rect x="366.00" y="327.05" width="29.67" height="12.95" fill="#4338ca"/>
+<rect x="397.67" y="332.60" width="29.67" height="7.40" fill="#0f766e"/>
+<rect x="429.33" y="333.99" width="29.67" height="6.01" fill="#b45309"/>
+<rect x="461.00" y="335.84" width="29.67" height="4.16" fill="#1d4ed8"/>
+<rect x="492.67" y="334.45" width="29.67" height="5.55" fill="#be123c"/>
+<rect x="524.33" y="331.68" width="29.67" height="8.32" fill="#6d28d9"/>
+<rect x="556.00" y="330.29" width="29.67" height="9.71" fill="#15803d"/>
+<rect x="587.67" y="330.29" width="29.67" height="9.71" fill="#c2410c"/>
+<rect x="619.33" y="336.30" width="29.67" height="3.70" fill="#0369a1"/>
+<rect x="651.00" y="337.23" width="29.67" height="2.77" fill="#7c2d12"/>
+<rect x="682.67" y="337.69" width="29.67" height="2.31" fill="#4338ca"/>
+<rect x="714.33" y="339.08" width="29.67" height="0.92" fill="#0f766e"/>
+<rect x="746.00" y="336.76" width="29.67" height="3.24" fill="#b45309"/>
+<rect x="777.67" y="340.00" width="29.67" height="0.00" fill="#1d4ed8"/>
+<rect x="809.33" y="337.23" width="29.67" height="2.77" fill="#be123c"/>
+</svg>

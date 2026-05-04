@@ -15,7 +15,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "on the number of common guests and the total time spent on each "
                         "podcast."
                     ),
-                    "plotly": ("brooksjaredc:4", "o2mXOXSLBajIIoPKAcaE2q"),
+                    "plot": "plots/network_podcasts.html",
                 },
                 {
                     "heading": "People Network Graph",
@@ -23,7 +23,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "The people graph connects hosts and guests, with node size and "
                         "grouping driven by centrality and category structure."
                     ),
-                    "plotly": ("brooksjaredc:2", "cWOUvnl7gNQJQKAaCTmUKA"),
+                    "plot": "plots/network_people.html",
                 },
             ],
         },
@@ -43,7 +43,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "PageRank is computed on a directed graph where guests point at "
                         "podcast hosts."
                     ),
-                    "plotly": ("brooksjaredc:26", "B4JJqwu79dQQblOJFHK5UN"),
+                    "plot": "plots/pr_histogram.html",
                 },
                 {
                     "heading": "Authority Score Histogram",
@@ -51,7 +51,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Authority and hub scores are computed together with the HITS "
                         "algorithm."
                     ),
-                    "plotly": ("brooksjaredc:30", "rlDxLAM8J6YEscGd72dkPS"),
+                    "plot": "plots/auth_histogram.html",
                 },
                 {
                     "heading": "Hub Score Histogram",
@@ -59,7 +59,31 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Hub scores include all people in the network and show a broad, "
                         "long-tailed distribution."
                     ),
-                    "plotly": ("brooksjaredc:28", "s9UoUg6MuCVN2080ImdRD0"),
+                    "plot": "plots/hub_histogram.html",
+                },
+                {
+                    "heading": "Closeness Centrality Histogram",
+                    "body": (
+                        "Closeness centrality summarizes how near a person is to the rest "
+                        "of the connected network."
+                    ),
+                    "plot": "plots/close_histogram.html",
+                },
+                {
+                    "heading": "Degree Centrality Histogram",
+                    "body": (
+                        "Degree centrality captures how many direct podcast-network "
+                        "connections a person has."
+                    ),
+                    "plot": "plots/degree_histogram.html",
+                },
+                {
+                    "heading": "Betweenness Centrality Histogram",
+                    "body": (
+                        "Betweenness centrality highlights people who sit on many shortest "
+                        "paths between others."
+                    ),
+                    "plot": "plots/bt_histogram.html",
                 },
                 {
                     "heading": "Leadership Scores",
@@ -67,7 +91,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Leadership scores estimate which podcasts were early to host guests "
                         "who became especially central."
                     ),
-                    "plotly": ("brooksjaredc:40", "ib8Xacn6ZaAQMx1w7yeGZ5"),
+                    "plot": "plots/leader_histogram.html",
                 },
             ],
         },
@@ -77,10 +101,19 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                 {
                     "heading": "Evolution of the Network",
                     "body": (
-                        "Release dates let us track growth and centrality changes over time. "
-                        "The legacy analysis starts its evolution plots in 2010."
+                        "Release dates let us track growth over time. People and podcast "
+                        "counts are shown together so their scale stays readable."
                     ),
-                    "plotly": ("brooksjaredc:16", "tYkgFV9yqOdRhhjpju66za"),
+                    "plot": "plots/evolution_global.html",
+                },
+                {
+                    "heading": "Network Structure Evolution",
+                    "body": (
+                        "Path length, density, clustering, and transitivity are shown "
+                        "separately from raw counts so smaller structural measures are not "
+                        "flattened."
+                    ),
+                    "plot": "plots/evolution_structure.html",
                 },
                 {
                     "heading": "PageRank Evolution",
@@ -88,7 +121,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "The top PageRank trajectories become smoother after 2015 as the "
                         "network grows and stabilizes."
                     ),
-                    "plotly": ("brooksjaredc:18", "dLNsBE3LlzLWhIRXnWvg51"),
+                    "plot": "plots/evolution_pr.html",
                 },
                 {
                     "heading": "Authority Score Evolution",
@@ -96,7 +129,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Authority scores show how host importance shifted as the podcast "
                         "network became denser."
                     ),
-                    "plotly": ("brooksjaredc:22", "YljWbb8fXAGi5GXi4XdgJr"),
+                    "plot": "plots/evolution_authority.html",
                 },
                 {
                     "heading": "Hub Score Evolution",
@@ -104,7 +137,15 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Hub score changes highlight highly connected guests and hosts over "
                         "time."
                     ),
-                    "plotly": ("brooksjaredc:24", "2Mz85JMo1cstFYj2zZTpLz"),
+                    "plot": "plots/evolution_hub.html",
+                },
+                {
+                    "heading": "Closeness Centrality Evolution",
+                    "body": (
+                        "Closeness evolution shows how the network shortened or stretched "
+                        "as more podcasts and people entered the data."
+                    ),
+                    "plot": "plots/evolution_closeness.html",
                 },
             ],
         },
@@ -117,7 +158,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Each podcast has one or more categories. Comedy is the dominant "
                         "first-listed category in the legacy dataset."
                     ),
-                    "plotly": ("brooksjaredc:10", "Ks83YPyMTXazpS8YU1MTVy"),
+                    "plot": "plots/category_podcasts.html",
                 },
                 {
                     "heading": "People's Top Categories",
@@ -125,7 +166,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "People inherit a top category from the podcast where they spend the "
                         "most host or guest time."
                     ),
-                    "plotly": ("brooksjaredc:8", "oU9SNwUBf2Bl2KSc3aHxam"),
+                    "plot": "plots/category_people.html",
                 },
                 {
                     "heading": "Category Mixing",
@@ -133,7 +174,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Category mixing describes how often links connect people from the "
                         "same or different assigned categories."
                     ),
-                    "plotly": ("brooksjaredc:6", "PndNEZGc3LcfNbEHWHyHbs"),
+                    "plot": "plots/category_mixing.html",
                 },
                 {
                     "heading": "Average Bias per Category",
@@ -141,7 +182,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "Category bias compares a podcast's guest category mix with the "
                         "overall category distribution."
                     ),
-                    "plotly": ("brooksjaredc:14", "n8Ms8VsEh95EqELCtYNRNq"),
+                    "plot": "plots/category_bias.html",
                 },
             ],
         },
@@ -206,7 +247,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                         "and guest pairs. These tables preserve that generated output while "
                         "the model pipeline is modernized."
                     ),
-                    "plotly": ("brooksjaredc:38", "uH1CwQq7XX2KUHVizaetLc"),
+                    "plot": "plots/predictions_histogram.html",
                 },
             ],
         },

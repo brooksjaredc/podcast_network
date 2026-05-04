@@ -1,0 +1,2 @@
+"""Local plot generation."""
+
