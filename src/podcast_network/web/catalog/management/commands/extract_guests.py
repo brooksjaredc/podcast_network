@@ -22,6 +22,7 @@ class Command(BaseCommand):
         parser.add_argument("--model", default=DEFAULT_EXTRACTION_MODEL)
         parser.add_argument("--prompt-version", default=PROMPT_VERSION)
         parser.add_argument("--provider", choices=["openai", "fake"], default="fake")
+        parser.add_argument("--reasoning-effort", default="minimal")
         parser.add_argument("--force", action="store_true")
 
     def handle(self, *args: object, **options: object) -> None:
@@ -40,7 +41,11 @@ class Command(BaseCommand):
             return
 
         try:
-            extractor = build_extractor(provider=provider, model=model)
+            extractor = build_extractor(
+                provider=provider,
+                model=model,
+                reasoning_effort=str(options["reasoning_effort"]),
+            )
         except MissingOpenAIKeyError as exc:
             raise CommandError(str(exc)) from exc
 
@@ -72,6 +77,7 @@ def select_episodes(
     queryset = Episode.objects.select_related("podcast").order_by("-published_at", "id")
     if episode_ids:
         queryset = queryset.filter(id__in=episode_ids)
+        limit = max(limit, len(episode_ids))
     elif not force:
         queryset = queryset.exclude(
             guest_extractions__model=model,
@@ -81,7 +87,7 @@ def select_episodes(
     return list(queryset[:limit])
 
 
-def build_extractor(*, provider: str, model: str):
+def build_extractor(*, provider: str, model: str, reasoning_effort: str):
     if provider == "fake":
         return FakeGuestExtractor()
-    return OpenAIGuestExtractor(model=model)
+    return OpenAIGuestExtractor(model=model, reasoning_effort=reasoning_effort)

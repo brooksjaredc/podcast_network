@@ -19,10 +19,16 @@ class MissingOpenAIKeyError(RuntimeError):
 
 
 class OpenAIGuestExtractor:
-    def __init__(self, *, model: str = DEFAULT_EXTRACTION_MODEL) -> None:
+    def __init__(
+        self,
+        *,
+        model: str = DEFAULT_EXTRACTION_MODEL,
+        reasoning_effort: str = "minimal",
+    ) -> None:
         if not os.environ.get("OPENAI_API_KEY"):
             raise MissingOpenAIKeyError("OPENAI_API_KEY is not set.")
         self.model = model
+        self.reasoning_effort = reasoning_effort
         self.client = OpenAI()
 
     def extract(self, prompt: EpisodePrompt) -> GuestExtractionResult:
@@ -31,9 +37,13 @@ class OpenAIGuestExtractor:
             instructions=prompt.instructions,
             input=prompt.input_text,
             text_format=GuestExtractionResponse,
-            max_output_tokens=600,
+            max_output_tokens=2400,
+            reasoning={"effort": self.reasoning_effort},
         )
         parsed = response.output_parsed
+        if parsed is None:
+            raise RuntimeError("OpenAI response did not contain parsed structured output.")
+
         usage = getattr(response, "usage", None)
         return GuestExtractionResult(
             guests=[
@@ -45,7 +55,11 @@ class OpenAIGuestExtractor:
                 for guest in parsed.guests
                 if guest.name.strip()
             ],
-            raw_response=response.model_dump(mode="json"),
+            raw_response={
+                "id": response.id,
+                "model": response.model,
+                "output_text": response.output_text,
+            },
             input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
         )
