@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 
 from podcast_network.extraction.fake import FakeGuestExtractor
-from podcast_network.extraction.pipeline import extract_guest_batch
+from podcast_network.extraction.models import ExtractedGuestResult, GuestExtractionResult
+from podcast_network.extraction.pipeline import (
+    extract_guest_batch,
+    extract_guest_batch_async,
+)
 from podcast_network.web.catalog.models import (
     Episode,
     EpisodeGuestExtraction,
@@ -39,10 +45,228 @@ class GuestExtractionTests(TestCase):
 
         assert GuestCandidate.objects.filter(name="John Smith").exists()
 
+    def test_backfill_command_resumes_from_successful_extractions(self) -> None:
+        for index in range(3):
+            create_episode(title=f"Episode {index} with Jane Doe")
+
+        call_command(
+            "backfill_guest_extractions",
+            "--provider",
+            "fake",
+            "--model",
+            "fake-model",
+            "--batch-size",
+            "2",
+            "--max-batches",
+            "1",
+        )
+
+        assert EpisodeGuestExtraction.objects.filter(
+            model="fake-model",
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        ).count() == 2
+
+        call_command(
+            "backfill_guest_extractions",
+            "--provider",
+            "fake",
+            "--model",
+            "fake-model",
+            "--batch-size",
+            "2",
+            "--max-batches",
+            "1",
+        )
+
+        assert EpisodeGuestExtraction.objects.filter(
+            model="fake-model",
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        ).count() == 3
+
+    def test_backfill_dry_run_does_not_create_extractions(self) -> None:
+        create_episode(title="Episode with Jane Doe")
+
+        call_command(
+            "backfill_guest_extractions",
+            "--provider",
+            "fake",
+            "--model",
+            "fake-model",
+            "--batch-size",
+            "1",
+            "--dry-run",
+        )
+
+        assert EpisodeGuestExtraction.objects.count() == 0
+
+    def test_backfill_command_can_run_second_pass_review_band(self) -> None:
+        create_episode(title="Episode with Jane Doe")
+
+        call_command(
+            "backfill_guest_extractions",
+            "--provider",
+            "fake",
+            "--model",
+            "fake-model",
+            "--batch-size",
+            "1",
+            "--max-batches",
+            "1",
+            "--second-pass-review-band",
+            "--second-pass-provider",
+            "fake",
+            "--second-pass-model",
+            "fake-review-model",
+        )
+
+        assert EpisodeGuestExtraction.objects.filter(
+            model="fake-model",
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        ).count() == 1
+        assert EpisodeGuestExtraction.objects.filter(
+            model="fake-review-model",
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        ).count() == 1
+
+
+class AsyncGuestExtractionTests(TransactionTestCase):
+    def test_async_extraction_respects_concurrency_and_persists_results(self) -> None:
+        episodes = [create_episode(title=f"Episode {index} with Jane Doe") for index in range(5)]
+        extractor = AsyncFakeGuestExtractor()
+
+        run = asyncio.run(
+            extract_guest_batch_async(
+                episodes,
+                extractor=extractor,
+                model="async-fake-model",
+                provider="fake",
+                concurrency=2,
+                requests_per_minute=6000,
+            )
+        )
+
+        assert run.episodes_succeeded == 5
+        assert run.episodes_failed == 0
+        assert extractor.max_active == 2
+        assert GuestCandidate.objects.filter(name="Jane Doe").count() == 5
+
+    def test_async_extraction_throttles_request_starts(self) -> None:
+        episodes = [create_episode(title=f"Episode {index} with Jane Doe") for index in range(3)]
+        extractor = TimedAsyncFakeGuestExtractor()
+
+        run = asyncio.run(
+            extract_guest_batch_async(
+                episodes,
+                extractor=extractor,
+                model="async-fake-model",
+                provider="fake",
+                concurrency=3,
+                requests_per_minute=6000,
+            )
+        )
+
+        assert run.episodes_succeeded == 3
+        start_gaps = [
+            second - first
+            for first, second in zip(extractor.starts, extractor.starts[1:], strict=False)
+        ]
+        assert min(start_gaps) >= 0.008
+
+    def test_async_extraction_retries_transient_failures(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        extractor = FlakyAsyncFakeGuestExtractor()
+
+        run = asyncio.run(
+            extract_guest_batch_async(
+                [episode],
+                extractor=extractor,
+                model="async-fake-model",
+                provider="fake",
+                concurrency=1,
+                retries=1,
+                retry_base_seconds=0,
+                run_label="test-run",
+            )
+        )
+
+        assert run.episodes_succeeded == 1
+        assert run.metadata["run_label"] == "test-run"
+        assert run.metadata["retries"] == 1
+        assert extractor.calls == 2
+        assert GuestCandidate.objects.filter(name="Jane Doe").count() == 1
+
+
+class AsyncFakeGuestExtractor:
+    def __init__(self) -> None:
+        self.active = 0
+        self.max_active = 0
+
+    async def extract_async(self, prompt) -> GuestExtractionResult:
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        await asyncio.sleep(0.01)
+        self.active -= 1
+        return GuestExtractionResult(
+            guests=[
+                ExtractedGuestResult(
+                    name="Jane Doe",
+                    confidence=0.9,
+                    evidence="Synthetic async test guest.",
+                )
+            ],
+            raw_response={},
+            input_tokens=1,
+            output_tokens=1,
+        )
+
+
+class FlakyAsyncFakeGuestExtractor:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def extract_async(self, prompt) -> GuestExtractionResult:
+        self.calls += 1
+        if self.calls == 1:
+            raise TimeoutError("temporary timeout")
+        return GuestExtractionResult(
+            guests=[
+                ExtractedGuestResult(
+                    name="Jane Doe",
+                    confidence=0.9,
+                    evidence="Synthetic retry test guest.",
+                )
+            ],
+            raw_response={},
+            input_tokens=1,
+            output_tokens=1,
+        )
+
+
+class TimedAsyncFakeGuestExtractor:
+    def __init__(self) -> None:
+        self.starts = []
+
+    async def extract_async(self, prompt) -> GuestExtractionResult:
+        loop = asyncio.get_running_loop()
+        self.starts.append(loop.time())
+        await asyncio.sleep(0)
+        return GuestExtractionResult(
+            guests=[
+                ExtractedGuestResult(
+                    name="Jane Doe",
+                    confidence=0.9,
+                    evidence="Synthetic throttle test guest.",
+                )
+            ],
+            raw_response={},
+            input_tokens=1,
+            output_tokens=1,
+        )
+
 
 def create_episode(*, title: str) -> Episode:
-    podcast = Podcast.objects.create(name="Example Podcast")
-    Feed.objects.create(podcast=podcast, url="https://example.com/rss")
+    podcast = Podcast.objects.create(name=f"Example Podcast {title}")
+    Feed.objects.create(podcast=podcast, url=f"https://example.com/{podcast.id}/rss")
     return Episode.objects.create(
         podcast=podcast,
         guid=title,

@@ -29,3 +29,6 @@ class FakeGuestExtractor:
             ],
             raw_response={"provider": "fake", "guests": [{"name": name}]},
         )
+
+    async def extract_async(self, prompt: EpisodePrompt) -> GuestExtractionResult:
+        return self.extract(prompt)
