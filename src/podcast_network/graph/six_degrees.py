@@ -3,8 +3,11 @@ from __future__ import annotations
 import ast
 import csv
 import pickle
+import re
+import unicodedata
 from collections import deque
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from podcast_network.paths import LEGACY_ANALYSIS_DIR
@@ -18,13 +21,22 @@ class Edge:
 
 
 @dataclass(frozen=True)
+class PathMessagePart:
+    text: str
+    kind: str = "connector"
+
+
+@dataclass(frozen=True)
 class PathResult:
     found: bool
     source: str
     target: str
     path: tuple[str, ...]
     message: str
+    message_parts: tuple[PathMessagePart, ...] = ()
     suggestion: str | None = None
+    suggested_source: str | None = None
+    suggested_target: str | None = None
 
     @property
     def length(self) -> int:
@@ -48,6 +60,7 @@ class SixDegreesGraph:
         self.names = names
         self.podcast_ids = podcast_ids or {}
         self.person_ids = person_ids or {}
+        self._canonical_names = canonical_name_index(names)
         self._adjacency: dict[str, dict[str, str]] = {}
         for edge in edges:
             self._adjacency.setdefault(edge.left, {})[edge.right] = edge.kind
@@ -70,7 +83,7 @@ class SixDegreesGraph:
         queue: deque[tuple[str, tuple[str, ...]]] = deque([(source, (source,))])
         while queue:
             node, path = queue.popleft()
-            for neighbor in self._adjacency.get(node, {}):
+            for neighbor in self._ordered_neighbors(node, is_source=node == source):
                 if neighbor in seen:
                     continue
                 next_path = (*path, neighbor)
@@ -82,72 +95,107 @@ class SixDegreesGraph:
         return ()
 
     def explain(self, source: str, target: str) -> PathResult:
-        missing_name = self._first_missing_name(source, target)
-        if missing_name is not None:
+        canonical_source = self.resolve_name(source)
+        canonical_target = self.resolve_name(target)
+        missing_field = self._first_missing_field(canonical_source, canonical_target)
+        if missing_field is not None:
+            missing_name = source if missing_field == "source" else target
             suggestion = self.suggest_name(missing_name)
+            suggested_source = suggestion if missing_field == "source" else source
+            suggested_target = suggestion if missing_field == "target" else target
             return PathResult(
                 found=False,
                 source=source,
                 target=target,
                 path=(),
                 suggestion=suggestion,
+                suggested_source=suggested_source,
+                suggested_target=suggested_target,
+                message_parts=(),
                 message=(
                     f"Sorry, we could not find {missing_name} in the database."
                     f" Did you mean {suggestion}?"
                 ),
             )
 
-        path = self.shortest_path(source, target)
+        path = self.shortest_path(canonical_source, canonical_target)
         if not path:
             return PathResult(
                 found=False,
-                source=source,
-                target=target,
+                source=canonical_source,
+                target=canonical_target,
                 path=(),
-                message=f"No connection found between {source} and {target}.",
+                message_parts=(),
+                message=f"No connection found between {canonical_source} and {canonical_target}.",
             )
 
+        message_parts = self._path_sentence_parts(path)
         return PathResult(
             found=True,
-            source=source,
-            target=target,
+            source=canonical_source,
+            target=canonical_target,
             path=path,
-            message=self._path_sentence(path),
+            message="".join(part.text for part in message_parts),
+            message_parts=message_parts,
         )
 
+    def resolve_name(self, target: str) -> str | None:
+        if target in self.names:
+            return target
+        return self._canonical_names.get(normalize_name(target))
+
     def suggest_name(self, target: str) -> str:
-        candidates = [name for name in self.names if name[:1].lower() == target[:1].lower()]
-        if not candidates:
-            candidates = list(self.names)
-        return min(candidates, key=lambda name: ngram_distance(target.lower(), name.lower()))
+        resolved = self.resolve_name(target)
+        if resolved is not None:
+            return resolved
+        return max(self.names, key=lambda name: name_match_score(target, name))
 
     def edge_kind(self, left: str, right: str) -> str:
         return self._adjacency[left][right]
 
-    def _first_missing_name(self, source: str, target: str) -> str | None:
-        if source not in self.names:
-            return source
-        if target not in self.names:
-            return target
+    def _ordered_neighbors(self, node: str, *, is_source: bool) -> list[str]:
+        neighbors = self._adjacency.get(node, {})
+        if not neighbors:
+            return []
+        if is_source and node in self.names:
+            return sorted(neighbors, key=lambda neighbor: neighbors[neighbor] != "host")
+        return list(neighbors)
+
+    def _first_missing_field(
+        self,
+        canonical_source: str | None,
+        canonical_target: str | None,
+    ) -> str | None:
+        if canonical_source is None:
+            return "source"
+        if canonical_target is None:
+            return "target"
         return None
 
     def _path_sentence(self, path: tuple[str, ...]) -> str:
-        if len(path) == 1:
-            return f"{path[0]} is the same person."
+        return "".join(part.text for part in self._path_sentence_parts(path))
 
-        parts = [path[0]]
+    def _path_sentence_parts(self, path: tuple[str, ...]) -> tuple[PathMessagePart, ...]:
+        if len(path) == 1:
+            return (
+                PathMessagePart(path[0], "person"),
+                PathMessagePart(" is the same person."),
+            )
+
+        parts = [PathMessagePart(path[0], "person")]
         for index, node in enumerate(path[1:], start=1):
             previous = path[index - 1]
             kind = self.edge_kind(previous, node)
             if index == 1:
-                parts.append(" is a host of " if kind == "host" else " was a guest on ")
+                text = " is a host of " if kind == "host" else " was a guest on "
             elif index % 2 == 0:
-                parts.append(", which is hosted by " if kind == "host" else ", who had as a guest ")
+                text = ", which is hosted by " if kind == "host" else ", who had as a guest "
             else:
-                parts.append(", who was a guest on ")
-            parts.append(node)
-        parts.append(".")
-        return "".join(parts)
+                text = ", who was a guest on "
+            parts.append(PathMessagePart(text))
+            parts.append(PathMessagePart(node, "person" if node in self.names else "podcast"))
+        parts.append(PathMessagePart("."))
+        return tuple(parts)
 
 
 def load_edges(path: Path) -> list[Edge]:
@@ -180,6 +228,39 @@ def load_pickle(path: Path) -> dict[str, int]:
     if not isinstance(value, dict):
         raise TypeError(f"Expected {path} to contain a dict, got {type(value).__name__}")
     return value
+
+
+def canonical_name_index(names: set[str]) -> dict[str, str]:
+    index: dict[str, str] = {}
+    for name in sorted(names):
+        normalized = normalize_name(name)
+        if normalized:
+            index.setdefault(normalized, name)
+    return index
+
+
+def normalize_name(value: str) -> str:
+    without_accents = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", value)
+        if not unicodedata.combining(char)
+    )
+    lowered = without_accents.casefold().replace("&", " and ")
+    words = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return " ".join(words.split())
+
+
+def name_match_score(target: str, candidate: str) -> float:
+    normalized_target = normalize_name(target)
+    normalized_candidate = normalize_name(candidate)
+    if not normalized_target or not normalized_candidate:
+        return 0.0
+
+    direct_similarity = SequenceMatcher(None, normalized_target, normalized_candidate).ratio()
+    sorted_target = " ".join(sorted(normalized_target.split()))
+    sorted_candidate = " ".join(sorted(normalized_candidate.split()))
+    token_order_similarity = SequenceMatcher(None, sorted_target, sorted_candidate).ratio()
+    return max(direct_similarity, token_order_similarity)
 
 
 def ngram_distance(left: str, right: str, n: int = 3) -> float:

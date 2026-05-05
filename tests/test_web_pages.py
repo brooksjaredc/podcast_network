@@ -14,7 +14,19 @@ def test_path_page_loads_real_query() -> None:
     response = Client().get("/path/", {"source": "Joe Rogan", "target": "Marc Maron"})
 
     assert response.status_code == 200
-    assert b"The Duncan Trussell Family Hour" in response.content
+    assert b"The Joe Rogan Experience" in response.content
+    assert b"path-entity-person" in response.content
+    assert b"path-entity-podcast" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_path_page_suggestion_can_be_accepted() -> None:
+    response = Client().get("/path/", {"source": "Barrack Obama", "target": "Marc Maron"})
+
+    assert response.status_code == 200
+    assert b"Yes, use this name" in response.content
+    assert b'value="President Barack Obama"' in response.content
+    assert b'value="Marc Maron"' in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])

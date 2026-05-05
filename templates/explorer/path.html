@@ -12,10 +12,29 @@
 
   {% if result %}
     <h2>Result</h2>
-    <p>{{ result.message }}</p>
+    {% if result.message_parts %}
+      <p class="path-sentence">
+        {% for part in result.message_parts %}
+          {% if part.kind == "person" or part.kind == "podcast" %}
+            <span class="path-entity path-entity-{{ part.kind }}">{{ part.text }}</span>
+          {% else %}
+            {{ part.text }}
+          {% endif %}
+        {% endfor %}
+      </p>
+    {% else %}
+      <p>{{ result.message }}</p>
+      {% if result.suggestion and result.suggested_source and result.suggested_target %}
+        <form class="suggestion-action" method="get">
+          <input type="hidden" name="source" value="{{ result.suggested_source }}">
+          <input type="hidden" name="target" value="{{ result.suggested_target }}">
+          <span>Use <strong>{{ result.suggestion }}</strong> and find the path?</span>
+          <button type="submit">Yes, use this name</button>
+        </form>
+      {% endif %}
+    {% endif %}
     {% if result.found %}
       <p class="muted">Length: {{ result.length }}</p>
     {% endif %}
   {% endif %}
 {% endblock %}
-
