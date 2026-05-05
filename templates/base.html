@@ -120,9 +120,14 @@
         padding: 2px 6px;
         border-radius: 6px;
         font-weight: 650;
+        text-decoration: none;
         white-space: normal;
         box-decoration-break: clone;
         -webkit-box-decoration-break: clone;
+      }
+      a.path-entity:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
       }
       .path-entity-person {
         color: var(--person);
@@ -131,6 +136,100 @@
       .path-entity-podcast {
         color: var(--podcast);
         background: var(--podcast-bg);
+      }
+      .path-graphic {
+        margin: 18px 0 8px;
+        overflow-x: auto;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #f8fafc;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+      }
+      .path-graphic-svg {
+        display: block;
+        min-width: 720px;
+        width: 100%;
+        height: auto;
+      }
+      .path-graphic-bg {
+        fill: url(#path-grid);
+      }
+      .path-graphic-grid {
+        fill: transparent;
+        stroke: rgba(15, 118, 110, 0.12);
+        stroke-width: 1;
+      }
+      #path-grid path {
+        fill: none;
+        stroke: rgba(100, 116, 139, 0.12);
+        stroke-width: 1;
+      }
+      .path-graphic-edge-halo {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.95);
+        stroke-linecap: round;
+        stroke-width: 9;
+      }
+      .path-graphic-edge {
+        fill: none;
+        stroke: url(#edge-gradient);
+        stroke-linecap: round;
+        stroke-width: 3;
+      }
+      #path-arrow path {
+        fill: #64748b;
+      }
+      .path-graphic-edge-label {
+        fill: #475467;
+        font-size: 12px;
+        font-weight: 650;
+        text-anchor: middle;
+        paint-order: stroke;
+        stroke: rgba(255, 255, 255, 0.94);
+        stroke-width: 6px;
+        stroke-linejoin: round;
+      }
+      .path-graphic-node circle,
+      .path-graphic-node rect {
+        filter: url(#node-shadow);
+        stroke-width: 2.25;
+      }
+      .path-graphic-node-person circle {
+        fill: url(#person-gradient);
+        stroke: var(--person);
+      }
+      .path-graphic-node-podcast rect {
+        fill: url(#podcast-gradient);
+        stroke: var(--podcast);
+      }
+      .path-graphic-node text {
+        fill: var(--ink);
+        font-size: 12px;
+        font-weight: 700;
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+      }
+      .path-graphic-node .path-graphic-node-gloss {
+        filter: none;
+        opacity: 0.55;
+        pointer-events: none;
+      }
+      .path-graphic-node-person .path-graphic-node-gloss {
+        fill: rgba(255, 255, 255, 0.7);
+        stroke: none;
+      }
+      .path-graphic-node-podcast .path-graphic-node-gloss {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.8);
+        stroke-linecap: round;
+        stroke-width: 3;
+      }
+      .path-graphic-node .path-graphic-node-badge {
+        fill: #475467;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
       }
       .suggestion-action {
         display: flex;

@@ -12,11 +12,15 @@
 
   {% if result %}
     <h2>Result</h2>
-    {% if result.message_parts %}
+    {% if path_message_parts %}
       <p class="path-sentence">
-        {% for part in result.message_parts %}
+        {% for part in path_message_parts %}
           {% if part.kind == "person" or part.kind == "podcast" %}
-            <span class="path-entity path-entity-{{ part.kind }}">{{ part.text }}</span>
+            {% if part.href %}
+              <a class="path-entity path-entity-{{ part.kind }}" href="{{ part.href }}">{{ part.text }}</a>
+            {% else %}
+              <span class="path-entity path-entity-{{ part.kind }}">{{ part.text }}</span>
+            {% endif %}
           {% else %}
             {{ part.text }}
           {% endif %}
@@ -35,6 +39,70 @@
     {% endif %}
     {% if result.found %}
       <p class="muted">Length: {{ result.length }}</p>
+      {% if path_graph %}
+        <section class="path-graphic" aria-label="Path graph">
+          <svg
+            class="path-graphic-svg"
+            viewBox="0 0 {{ path_graph.width }} {{ path_graph.height }}"
+            role="img"
+            aria-labelledby="path-graphic-title"
+          >
+            <title id="path-graphic-title">Podcast network path from {{ result.source }} to {{ result.target }}</title>
+            <defs>
+              <pattern id="path-grid" width="28" height="28" patternUnits="userSpaceOnUse">
+                <path d="M 28 0 L 0 0 0 28"></path>
+              </pattern>
+              <linearGradient id="person-gradient" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0%" stop-color="#ccfbf1"></stop>
+                <stop offset="100%" stop-color="#5eead4"></stop>
+              </linearGradient>
+              <linearGradient id="podcast-gradient" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0%" stop-color="#ffedd5"></stop>
+                <stop offset="100%" stop-color="#fdba74"></stop>
+              </linearGradient>
+              <linearGradient id="edge-gradient" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0%" stop-color="#0f766e"></stop>
+                <stop offset="50%" stop-color="#64748b"></stop>
+                <stop offset="100%" stop-color="#c2410c"></stop>
+              </linearGradient>
+              <filter id="node-shadow" x="-35%" y="-35%" width="170%" height="170%">
+                <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.18"></feDropShadow>
+              </filter>
+              <marker id="path-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z"></path>
+              </marker>
+            </defs>
+            <rect class="path-graphic-bg" x="0" y="0" width="{{ path_graph.width }}" height="{{ path_graph.height }}"></rect>
+            <rect class="path-graphic-grid" x="0" y="0" width="{{ path_graph.width }}" height="{{ path_graph.height }}"></rect>
+            {% for edge in path_graph.edges %}
+              <path class="path-graphic-edge-halo" d="{{ edge.path_d }}"></path>
+              <path class="path-graphic-edge" d="{{ edge.path_d }}" marker-end="url(#path-arrow)"></path>
+              <text class="path-graphic-edge-label" x="{{ edge.label_x }}" y="{{ edge.label_y }}">{{ edge.label }}</text>
+            {% endfor %}
+            {% for node in path_graph.nodes %}
+              <g class="path-graphic-node path-graphic-node-{{ node.kind }}" transform="translate({{ node.x }} {{ node.y }})">
+                {% if node.kind == "person" %}
+                  <circle r="38"></circle>
+                  <circle class="path-graphic-node-gloss" cx="-12" cy="-13" r="12"></circle>
+                {% else %}
+                  <rect x="-62" y="-32" width="124" height="64" rx="8"></rect>
+                  <path class="path-graphic-node-gloss" d="M -52 -20 H 52"></path>
+                {% endif %}
+                {% if forloop.first or forloop.last %}
+                  <text class="path-graphic-node-badge" x="0" y="{% if node.kind == 'person' %}52{% else %}48{% endif %}">
+                    {% if forloop.first %}START{% else %}END{% endif %}
+                  </text>
+                {% endif %}
+                <text>
+                  {% for line in node.label_lines %}
+                    <tspan x="0" dy="{% if forloop.first %}-4{% else %}16{% endif %}">{{ line }}</tspan>
+                  {% endfor %}
+                </text>
+              </g>
+            {% endfor %}
+          </svg>
+        </section>
+      {% endif %}
     {% endif %}
   {% endif %}
 {% endblock %}

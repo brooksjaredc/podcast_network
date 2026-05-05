@@ -4,8 +4,11 @@ from typing import Any
 
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
+from django.urls import reverse
 
 from podcast_network.data import Duration, LegacyRepository, Person, Podcast, Prediction
+from podcast_network.graph import SixDegreesGraph
+from podcast_network.graph.six_degrees import PathMessagePart, PathResult
 from podcast_network.web.explorer.content import advanced_pages
 from podcast_network.web.explorer.services import legacy_repository, six_degrees_graph
 
@@ -157,8 +160,14 @@ def path(request: HttpRequest) -> HttpResponse:
     source = request.GET.get("source", "").strip()
     target = request.GET.get("target", "").strip()
     result = None
+    path_graph = None
+    path_message_parts = ()
     if source and target:
-        result = six_degrees_graph().explain(source, target)
+        repo = legacy_repository()
+        graph = six_degrees_graph()
+        result = graph.explain(source, target)
+        path_message_parts = link_path_message_parts(repo, result)
+        path_graph = build_path_graph(graph, result)
     return render(
         request,
         "explorer/path.html",
@@ -166,6 +175,8 @@ def path(request: HttpRequest) -> HttpResponse:
             "source": source,
             "target": target,
             "result": result,
+            "path_message_parts": path_message_parts,
+            "path_graph": path_graph,
         },
     )
 
@@ -226,6 +237,129 @@ def parse_int(value: str | None) -> int | None:
     if value in (None, ""):
         return None
     return int(value)
+
+
+def link_path_message_parts(
+    repo: LegacyRepository,
+    result: PathResult,
+) -> tuple[dict[str, str], ...]:
+    return tuple(link_path_message_part(repo, part) for part in result.message_parts)
+
+
+def link_path_message_part(repo: LegacyRepository, part: PathMessagePart) -> dict[str, str]:
+    linked_part = {
+        "text": part.text,
+        "kind": part.kind,
+        "href": "",
+    }
+    if part.kind == "person" and part.text in repo.people_by_name:
+        linked_part["href"] = reverse(
+            "explorer:person_detail",
+            args=[repo.people_by_name[part.text].id],
+        )
+    elif part.kind == "podcast" and part.text in repo.podcasts_by_name:
+        linked_part["href"] = reverse(
+            "explorer:podcast_detail",
+            args=[repo.podcasts_by_name[part.text].id],
+        )
+    return linked_part
+
+
+def build_path_graph(graph: SixDegreesGraph, result: PathResult) -> dict[str, Any] | None:
+    if not result.found:
+        return None
+
+    horizontal_gap = 180
+    left_padding = 90
+    width = max(720, left_padding * 2 + horizontal_gap * max(len(result.path) - 1, 1))
+    nodes = []
+    for index, name in enumerate(result.path):
+        kind = "person" if name in graph.names else "podcast"
+        nodes.append(
+            {
+                "name": name,
+                "kind": kind,
+                "x": left_padding + index * horizontal_gap,
+                "y": 82 if kind == "person" else 178,
+                "label_lines": label_lines(name),
+            }
+        )
+
+    edges = []
+    for index, left in enumerate(result.path[:-1]):
+        right = result.path[index + 1]
+        left_node = nodes[index]
+        right_node = nodes[index + 1]
+        role = graph.edge_kind(left, right)
+        edges.append(
+            {
+                "x1": left_node["x"],
+                "y1": left_node["y"],
+                "x2": right_node["x"],
+                "y2": right_node["y"],
+                "path_d": curved_edge_path(
+                    left_node["x"],
+                    left_node["y"],
+                    right_node["x"],
+                    right_node["y"],
+                ),
+                "label": edge_label(role, left_node["kind"], right_node["kind"]),
+                "label_x": (left_node["x"] + right_node["x"]) / 2,
+                "label_y": (left_node["y"] + right_node["y"]) / 2 - 12,
+            }
+        )
+
+    return {
+        "width": width,
+        "height": 260,
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def edge_label(role: str, left_kind: str, right_kind: str) -> str:
+    if role == "host":
+        return "hosts" if left_kind == "person" else "hosted by"
+    if left_kind == "person" and right_kind == "podcast":
+        return "guest on"
+    return "guest"
+
+
+def curved_edge_path(x1: float, y1: float, x2: float, y2: float) -> str:
+    control_offset = abs(x2 - x1) * 0.42
+    return (
+        f"M {x1} {y1} "
+        f"C {x1 + control_offset:.1f} {y1}, {x2 - control_offset:.1f} {y2}, {x2} {y2}"
+    )
+
+
+def label_lines(value: str, max_chars: int = 18, max_lines: int = 2) -> list[str]:
+    words = value.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if len(candidate) <= max_chars:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+        current = word
+        if len(lines) == max_lines - 1:
+            break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if not lines:
+        lines = [value[:max_chars]]
+    if len(" ".join(words)) > len(" ".join(lines)):
+        lines[-1] = truncate_label(lines[-1])
+    return lines
+
+
+def truncate_label(value: str, max_chars: int = 17) -> str:
+    if len(value) <= max_chars:
+        return value
+    return f"{value[: max_chars - 1].rstrip()}..."
 
 
 def person_rows(repo: LegacyRepository, people: list[Person]) -> list[dict[str, Any]]:

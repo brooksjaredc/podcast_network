@@ -17,6 +17,12 @@ def test_path_page_loads_real_query() -> None:
     assert b"The Joe Rogan Experience" in response.content
     assert b"path-entity-person" in response.content
     assert b"path-entity-podcast" in response.content
+    assert b'href="/people/0/"' in response.content
+    assert b'href="/people/102/"' in response.content
+    assert b'href="/podcasts/0/"' in response.content
+    assert b"class=\"path-graphic-svg\"" in response.content
+    assert b"class=\"path-graphic-node path-graphic-node-person\"" in response.content
+    assert b"class=\"path-graphic-node path-graphic-node-podcast\"" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
