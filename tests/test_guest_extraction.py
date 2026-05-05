@@ -5,15 +5,20 @@ import asyncio
 from django.core.management import call_command
 from django.test import TestCase, TransactionTestCase
 
+from podcast_network.extraction.batch import build_batch_request
 from podcast_network.extraction.fake import FakeGuestExtractor
 from podcast_network.extraction.models import ExtractedGuestResult, GuestExtractionResult
 from podcast_network.extraction.pipeline import (
     extract_guest_batch,
     extract_guest_batch_async,
 )
+from podcast_network.web.catalog.management.commands.sync_guest_extraction_batch import (
+    sync_output_record,
+)
 from podcast_network.web.catalog.models import (
     Episode,
     EpisodeGuestExtraction,
+    ExtractionRun,
     Feed,
     GuestCandidate,
     Podcast,
@@ -127,6 +132,86 @@ class GuestExtractionTests(TestCase):
             model="fake-review-model",
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
         ).count() == 1
+
+    def test_batch_request_uses_responses_endpoint_and_custom_id(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+
+        request = build_batch_request(
+            episode,
+            model="gpt-5-nano",
+            reasoning_effort="minimal",
+        )
+
+        assert request["custom_id"] == f"episode:{episode.id}"
+        assert request["method"] == "POST"
+        assert request["url"] == "/v1/responses"
+        assert request["body"]["model"] == "gpt-5-nano"
+        assert request["body"]["text"]["format"]["type"] == "json_schema"
+        assert request["body"]["text"]["format"]["strict"] is True
+
+    def test_sync_batch_output_record_persists_guest_candidates(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="openai-batch",
+            prompt_version="guest-extraction-v4",
+            episodes_requested=1,
+        )
+        record = {
+            "custom_id": f"episode:{episode.id}",
+            "response": {
+                "status_code": 200,
+                "body": {
+                    "id": "resp_test",
+                    "model": "gpt-5-nano",
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": (
+                                        '{"guests":[{"name":"Jane Doe",'
+                                        '"confidence":0.91,"evidence":"with Jane Doe"}]}'
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                    "usage": {"input_tokens": 10, "output_tokens": 5},
+                },
+            },
+        }
+
+        outcome = sync_output_record(run=run, record=record)
+
+        assert outcome.succeeded is True
+        extraction = EpisodeGuestExtraction.objects.get(episode=episode, model="gpt-5-nano")
+        assert extraction.input_tokens == 10
+        assert extraction.output_tokens == 5
+        assert GuestCandidate.objects.get(extraction=extraction).name == "Jane Doe"
+
+    def test_submit_batch_dry_run_can_select_second_pass_review_band(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        first_pass_run = extract_guest_batch(
+            [episode],
+            extractor=FakeGuestExtractor(),
+            model="gpt-5-nano",
+            provider="fake",
+        )
+
+        call_command(
+            "submit_guest_extraction_batch",
+            "--review-band-run-id",
+            str(first_pass_run.id),
+            "--review-source-model",
+            "gpt-5-nano",
+            "--model",
+            "gpt-5-mini",
+            "--batch-size",
+            "10",
+            "--dry-run",
+        )
 
 
 class AsyncGuestExtractionTests(TransactionTestCase):
