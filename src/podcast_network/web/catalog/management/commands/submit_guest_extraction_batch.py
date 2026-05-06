@@ -36,6 +36,14 @@ class Command(BaseCommand):
         parser.add_argument("--review-min-confidence", type=float, default=0.75)
         parser.add_argument("--review-max-confidence", type=float, default=0.90)
         parser.add_argument(
+            "--review-allow-high-confidence",
+            action="store_true",
+            help=(
+                "Include review-band episodes even when source run has a "
+                "high-confidence candidate."
+            ),
+        )
+        parser.add_argument(
             "--output-dir",
             default="data/reports/batches",
             help="Directory for local batch input and output files.",
@@ -65,6 +73,7 @@ class Command(BaseCommand):
                 prompt_version=prompt_version,
                 review_min_confidence=float(options["review_min_confidence"]),
                 review_max_confidence=float(options["review_max_confidence"]),
+                require_no_high_confidence=not options["review_allow_high_confidence"],
             )[:batch_size]
         else:
             episodes = select_episodes(

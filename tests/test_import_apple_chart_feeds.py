@@ -7,6 +7,7 @@ from django.test import TestCase
 from podcast_network.web.catalog.management.commands.import_apple_chart_feeds import (
     AppleChartPodcast,
     collect_genre_ids,
+    contains_cjk,
     import_podcast,
     parse_chart_feed_podcast_ids,
 )
@@ -58,3 +59,21 @@ class ImportAppleChartFeedsTests(TestCase):
             "genre:1303",
         ]
         assert Feed.objects.get(podcast=db_podcast).url == "https://example.com/rss.xml"
+
+    def test_import_podcast_skips_cjk_named_podcasts(self) -> None:
+        podcast = AppleChartPodcast(
+            apple_id="12345",
+            name="下一本讀什麼？",
+            artist_name="Example Network",
+            feed_url="https://example.com/rss.xml",
+            apple_url="https://podcasts.apple.com/us/podcast/example/id12345",
+            chart_sources="genre:26",
+        )
+
+        result = import_podcast(podcast)
+
+        assert result.podcasts_created == 0
+        assert Podcast.objects.count() == 0
+        assert Feed.objects.count() == 0
+        assert contains_cjk("下一本讀什麼？") is True
+        assert contains_cjk("Example Chart Show") is False

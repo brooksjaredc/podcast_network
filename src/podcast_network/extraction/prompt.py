@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from podcast_network.web.catalog.models import Episode
 
-PROMPT_VERSION = "guest-extraction-v4"
+PROMPT_VERSION = "guest-extraction-v5"
 
 GUEST_EXTRACTION_INSTRUCTIONS = """
 Extract podcast episode guest names from episode metadata.
@@ -30,6 +30,14 @@ Rules:
   "what happens with" a topic rather than a person present on the episode.
 - If the episode appears to be a solo episode, monologue, recap, trailer, ad, or mailbag
   without named guests, return an empty guest list.
+- Treat explicit guest callouts as strong evidence, including title or description labels
+  like "Guest:", "Guests:", "Featuring:", "Joined by:", "Today's guest:", "Today's guests:",
+  "Today's cast:", "Cast:", "Panel:", "Lineup:", or "Starred:".
+- When multiple names appear in the same explicit guest/cast/panel/starred list, assign
+  similar confidence to all clearly named people in that list unless a specific name is
+  marked as host, producer, author/topic only, sponsor, or otherwise not present.
+- For "Today's cast" or "Cast" lists, return the listed people as episode participants
+  unless the metadata identifies them as regular hosts or non-person roles.
 - Prefer full human names. Preserve accents and punctuation when present.
 - Use the evidence field for the shortest phrase that proves the person is present.
 - Never invent placeholder names or return names that only appear in these instructions.
@@ -67,6 +75,18 @@ Examples:
 - Description: "The hosts discuss Trump, Cuomo, Juwan Howard, and George Floyd."
   Guests: none
   Reason: the names are discussion topics or news subjects.
+
+- Title: "Best of the Program | Guests: Harmeet Dhillon & Carol Roth"
+  Guests: Harmeet Dhillon, Carol Roth
+  Reason: the title explicitly labels both names as guests.
+
+- Description: "Today's cast: Jonathan Zaslow, Dave Dameshek, Chris Cote, Amin Elhassan."
+  Guests: Jonathan Zaslow, Dave Dameshek, Chris Cote, Amin Elhassan
+  Reason: all names are in the same explicit cast list, so they should receive similar confidence.
+
+- Description: "Starred: Vincent Price, Betty Lou Gerson, Peter Leeds."
+  Guests: Vincent Price, Betty Lou Gerson, Peter Leeds
+  Reason: all names are in the same explicit starred list.
 """.strip()
 
 
@@ -82,7 +102,6 @@ def build_episode_prompt(episode: Episode) -> EpisodePrompt:
         [
             f"Podcast: {podcast.name}",
             f"Episode title: {episode.title}",
-            f"Published: {episode.published_at.isoformat() if episode.published_at else ''}",
             "Episode description:",
             truncate(episode.description, 3500),
         ]

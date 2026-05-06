@@ -6,7 +6,10 @@ def test_home_page_loads() -> None:
     response = Client().get("/")
 
     assert response.status_code == 200
-    assert b"Podcast Network" in response.content
+    assert b"Six Degrees to Joe Rogan" in response.content
+    assert b"Find the podcast path between almost anyone." in response.content
+    assert b"home-path-form" in response.content
+    assert b"home-network" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import html
 import json
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,7 @@ from podcast_network.web.catalog.models import Feed, Podcast
 APPLE_LOOKUP_URL = "https://itunes.apple.com/lookup"
 APPLE_GENRES_URL = "https://itunes.apple.com/WebObjects/MZStoreServices.woa/ws/genres"
 USER_AGENT = "podcast-network-ingest/0.1"
+CJK_PATTERN = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
 
 # Fallback broad US Apple Podcasts chart categories. The command normally pulls
 # the live Apple genre taxonomy, but these keep it usable if that endpoint drifts.
@@ -192,14 +194,13 @@ def resolve_apple_podcasts(chart_ids: list[tuple[str, str]]) -> list[AppleChartP
         for item in payload.get("results", []):
             apple_id = str(item.get("collectionId") or item.get("trackId") or "")
             feed_url = str(item.get("feedUrl") or "")
-            if not apple_id or not feed_url:
+            name = html.unescape(str(item.get("collectionName") or item.get("trackName") or ""))
+            if not apple_id or not feed_url or contains_cjk(name):
                 continue
             resolved.append(
                 AppleChartPodcast(
                     apple_id=apple_id,
-                    name=html.unescape(
-                        str(item.get("collectionName") or item.get("trackName") or "")
-                    ),
+                    name=name,
                     artist_name=html.unescape(str(item.get("artistName") or "")),
                     feed_url=feed_url,
                     apple_url=str(item.get("collectionViewUrl") or item.get("trackViewUrl") or ""),
@@ -218,6 +219,9 @@ def lookup_apple_ids(apple_ids: list[str]) -> dict:
 
 
 def import_podcast(podcast: AppleChartPodcast) -> ImportAppleChartResult:
+    if contains_cjk(podcast.name):
+        return ImportAppleChartResult()
+
     db_podcast, podcast_created = Podcast.objects.get_or_create(
         name=podcast.name,
         defaults={
@@ -298,3 +302,7 @@ def unique_ints(values: list[int]) -> list[int]:
             seen.add(value)
             output.append(value)
     return output
+
+
+def contains_cjk(value: str) -> bool:
+    return bool(CJK_PATTERN.search(value))

@@ -5,6 +5,7 @@ import time
 from datetime import UTC, datetime
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
+from django.db.models import Exists, OuterRef
 
 from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL, MissingOpenAIKeyError
 from podcast_network.extraction.pipeline import extract_guest_batch, extract_guest_batch_async
@@ -13,7 +14,7 @@ from podcast_network.web.catalog.management.commands.extract_guests import (
     build_extractor,
     select_episodes,
 )
-from podcast_network.web.catalog.models import Episode, EpisodeGuestExtraction
+from podcast_network.web.catalog.models import Episode, EpisodeGuestExtraction, GuestCandidate
 
 
 class Command(BaseCommand):
@@ -44,6 +45,14 @@ class Command(BaseCommand):
         )
         parser.add_argument("--review-min-confidence", type=float, default=0.75)
         parser.add_argument("--review-max-confidence", type=float, default=0.90)
+        parser.add_argument(
+            "--review-allow-high-confidence",
+            action="store_true",
+            help=(
+                "Include review-band episodes even when first pass has a "
+                "high-confidence candidate."
+            ),
+        )
         parser.add_argument("--second-pass-model", default="gpt-5-mini")
         parser.add_argument("--second-pass-provider", choices=["openai", "fake"], default="openai")
         parser.add_argument("--second-pass-reasoning-effort", default="medium")
@@ -186,6 +195,7 @@ class Command(BaseCommand):
                     prompt_version=prompt_version,
                     review_min_confidence=review_min_confidence,
                     review_max_confidence=review_max_confidence,
+                    require_no_high_confidence=not options["review_allow_high_confidence"],
                 )
                 if not second_pass_episodes:
                     self.stdout.write(
@@ -283,25 +293,46 @@ def select_second_pass_review_episodes(
     prompt_version: str,
     review_min_confidence: float,
     review_max_confidence: float,
+    require_no_high_confidence: bool = True,
 ) -> list[Episode]:
+    first_pass_extractions = EpisodeGuestExtraction.objects.filter(
+        episode=OuterRef("pk"),
+        extraction_run=first_pass_run,
+        model=first_pass_model,
+        prompt_version=prompt_version,
+        status=EpisodeGuestExtraction.Status.SUCCEEDED,
+    )
+    review_candidates = GuestCandidate.objects.filter(
+        extraction__episode=OuterRef("pk"),
+        extraction__extraction_run=first_pass_run,
+        extraction__model=first_pass_model,
+        extraction__prompt_version=prompt_version,
+        extraction__status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        confidence__gte=review_min_confidence,
+        confidence__lt=review_max_confidence,
+    )
+    high_confidence_candidates = GuestCandidate.objects.filter(
+        extraction__episode=OuterRef("pk"),
+        extraction__extraction_run=first_pass_run,
+        extraction__model=first_pass_model,
+        extraction__prompt_version=prompt_version,
+        extraction__status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        confidence__gte=review_max_confidence,
+    )
+    second_pass_extractions = EpisodeGuestExtraction.objects.filter(
+        episode=OuterRef("pk"),
+        model=second_pass_model,
+        prompt_version=prompt_version,
+        status=EpisodeGuestExtraction.Status.SUCCEEDED,
+    )
     queryset = (
         Episode.objects.select_related("podcast")
-        .filter(
-            guest_extractions__extraction_run=first_pass_run,
-            guest_extractions__model=first_pass_model,
-            guest_extractions__prompt_version=prompt_version,
-            guest_extractions__status=EpisodeGuestExtraction.Status.SUCCEEDED,
-            guest_extractions__guest_candidates__confidence__gte=review_min_confidence,
-            guest_extractions__guest_candidates__confidence__lt=review_max_confidence,
-        )
-        .exclude(
-            guest_extractions__model=second_pass_model,
-            guest_extractions__prompt_version=prompt_version,
-            guest_extractions__status=EpisodeGuestExtraction.Status.SUCCEEDED,
-        )
-        .distinct()
+        .filter(Exists(first_pass_extractions), Exists(review_candidates))
+        .exclude(Exists(second_pass_extractions))
         .order_by("-published_at", "id")
     )
+    if require_no_high_confidence:
+        queryset = queryset.exclude(Exists(high_confidence_candidates))
     return list(queryset)
 
 

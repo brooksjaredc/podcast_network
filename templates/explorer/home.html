@@ -1,19 +1,103 @@
 {% extends "base.html" %}
 
-{% block title %}Podcast Network{% endblock %}
+{% block title %}Six Degrees to Joe Rogan{% endblock %}
 
 {% block content %}
-  <h1>Podcast Network</h1>
-  <p class="muted">A fresh combined app for exploring podcast hosts, guests, rankings, and paths.</p>
+  <section class="home-hero">
+    <div class="home-hero-copy">
+      <p class="eyebrow">Six Degrees to Joe Rogan</p>
+      <h1>Find the podcast path between almost anyone.</h1>
+      <p class="home-lede">
+        Explore the host and guest network around Joe Rogan: who appeared where,
+        which podcasts bridge different worlds, and how public figures connect
+        through conversations.
+      </p>
+      <form class="home-path-form" method="get" action="{% url 'explorer:path' %}">
+        <input name="source" value="Joe Rogan" aria-label="First person">
+        <input name="target" value="Marc Maron" aria-label="Second person">
+        <button type="submit">Find Path</button>
+      </form>
+      <div class="home-examples" aria-label="Example paths">
+        <a href="{% url 'explorer:path' %}?source=Joe%20Rogan&target=Marc%20Maron">Joe Rogan to Marc Maron</a>
+        <a href="{% url 'explorer:path' %}?source=Barrack%20Obama&target=Joe%20Rogan">Obama to Joe Rogan</a>
+        <a href="{% url 'explorer:path' %}?source=Ezra%20Klein&target=Ta-Nehisi%20Coates">Ezra Klein to Ta-Nehisi Coates</a>
+      </div>
+    </div>
 
-  <section class="stats">
-    <div class="stat"><strong>{{ podcast_count }}</strong><span>podcasts</span></div>
-    <div class="stat"><strong>{{ person_count }}</strong><span>people</span></div>
-    <div class="stat"><strong>{{ duration_count }}</strong><span>guest appearances</span></div>
+    <div class="home-network" aria-label="Podcast network preview">
+      <svg viewBox="0 0 560 390" role="img" aria-labelledby="home-network-title">
+        <title id="home-network-title">Preview of people and podcasts connected through appearances</title>
+        <defs>
+          <linearGradient id="home-person-gradient" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stop-color="#ccfbf1"></stop>
+            <stop offset="100%" stop-color="#2dd4bf"></stop>
+          </linearGradient>
+          <linearGradient id="home-podcast-gradient" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stop-color="#ffedd5"></stop>
+            <stop offset="100%" stop-color="#fb923c"></stop>
+          </linearGradient>
+          <filter id="home-node-shadow" x="-35%" y="-35%" width="170%" height="170%">
+            <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.20"></feDropShadow>
+          </filter>
+        </defs>
+        <path class="home-network-edge strong" d="M 280 190 C 220 120, 150 125, 105 84"></path>
+        <path class="home-network-edge" d="M 280 190 C 370 108, 435 122, 478 76"></path>
+        <path class="home-network-edge" d="M 280 190 C 375 205, 430 260, 492 300"></path>
+        <path class="home-network-edge" d="M 280 190 C 205 245, 162 300, 86 310"></path>
+        <path class="home-network-edge strong" d="M 280 190 C 270 250, 278 304, 285 348"></path>
+        <path class="home-network-edge faint" d="M 105 84 C 170 162, 248 250, 285 348"></path>
+        <path class="home-network-edge faint" d="M 478 76 C 432 170, 365 266, 285 348"></path>
+
+        <g class="home-network-node home-network-person center" transform="translate(280 190)">
+          <circle r="56"></circle>
+          <text>Joe<tspan x="0" dy="17">Rogan</tspan></text>
+        </g>
+        <g class="home-network-node home-network-podcast" transform="translate(105 84)">
+          <rect x="-58" y="-30" width="116" height="60" rx="8"></rect>
+          <text>JRE</text>
+        </g>
+        <g class="home-network-node home-network-person" transform="translate(478 76)">
+          <circle r="38"></circle>
+          <text>Guests</text>
+        </g>
+        <g class="home-network-node home-network-podcast" transform="translate(492 300)">
+          <rect x="-64" y="-30" width="128" height="60" rx="8"></rect>
+          <text>Comedy<tspan x="0" dy="16">Pods</tspan></text>
+        </g>
+        <g class="home-network-node home-network-person" transform="translate(86 310)">
+          <circle r="38"></circle>
+          <text>Hosts</text>
+        </g>
+        <g class="home-network-node home-network-podcast" transform="translate(285 348)">
+          <rect x="-72" y="-30" width="144" height="60" rx="8"></rect>
+          <text>Interview<tspan x="0" dy="16">Shows</tspan></text>
+        </g>
+      </svg>
+    </div>
   </section>
 
-  <p>
-    <a class="button" href="{% url 'explorer:path' %}?source=Joe%20Rogan&target=Marc%20Maron">Try a path</a>
-  </p>
-{% endblock %}
+  <section class="home-stats" aria-label="Network size">
+    <div><strong>{{ podcast_count }}</strong><span>podcasts</span></div>
+    <div><strong>{{ person_count }}</strong><span>people</span></div>
+    <div><strong>{{ duration_count }}</strong><span>guest appearances</span></div>
+  </section>
 
+  <section class="home-actions" aria-label="Things to explore">
+    <a href="{% url 'explorer:path' %}">
+      <strong>Trace a path</strong>
+      <span>Find the shortest chain from one person to another through podcast appearances.</span>
+    </a>
+    <a href="{% url 'explorer:rankings' %}">
+      <strong>Browse rankings</strong>
+      <span>See the people with the highest PageRank, authority, hub, and centrality scores.</span>
+    </a>
+    <a href="{% url 'explorer:common' %}">
+      <strong>Compare podcasts</strong>
+      <span>Look for guests shared by two shows and spot audience overlap.</span>
+    </a>
+    <a href="{% url 'explorer:advanced' %}">
+      <strong>Open the lab</strong>
+      <span>Explore category mixing, prediction charts, network plots, and model outputs.</span>
+    </a>
+  </section>
+{% endblock %}

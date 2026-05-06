@@ -12,6 +12,7 @@ from podcast_network.extraction.pipeline import (
     extract_guest_batch,
     extract_guest_batch_async,
 )
+from podcast_network.extraction.prompt import build_episode_prompt
 from podcast_network.web.catalog.management.commands.sync_guest_extraction_batch import (
     sync_output_record,
 )
@@ -149,6 +150,14 @@ class GuestExtractionTests(TestCase):
         assert request["body"]["text"]["format"]["type"] == "json_schema"
         assert request["body"]["text"]["format"]["strict"] is True
 
+    def test_episode_prompt_excludes_published_date(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+
+        prompt = build_episode_prompt(episode)
+
+        assert "Published:" not in prompt.input_text
+        assert "Episode title: Episode with Jane Doe" in prompt.input_text
+
     def test_sync_batch_output_record_persists_guest_candidates(self) -> None:
         episode = create_episode(title="Episode with Jane Doe")
         run = ExtractionRun.objects.create(
@@ -212,6 +221,126 @@ class GuestExtractionTests(TestCase):
             "10",
             "--dry-run",
         )
+
+    def test_second_pass_review_selector_excludes_high_confidence_by_default(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe and John Smith")
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v5",
+            episodes_requested=1,
+        )
+        extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v5",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Jane Doe",
+            normalized_name="jane doe",
+            confidence=0.95,
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="John Smith",
+            normalized_name="john smith",
+            confidence=0.82,
+        )
+
+        from podcast_network.web.catalog.management.commands.backfill_guest_extractions import (
+            select_second_pass_review_episodes,
+        )
+
+        selected = select_second_pass_review_episodes(
+            first_pass_run=run,
+            first_pass_model="gpt-5-nano",
+            second_pass_model="gpt-5-mini",
+            prompt_version="guest-extraction-v5",
+            review_min_confidence=0.75,
+            review_max_confidence=0.90,
+        )
+        selected_with_high = select_second_pass_review_episodes(
+            first_pass_run=run,
+            first_pass_model="gpt-5-nano",
+            second_pass_model="gpt-5-mini",
+            prompt_version="guest-extraction-v5",
+            review_min_confidence=0.75,
+            review_max_confidence=0.90,
+            require_no_high_confidence=False,
+        )
+
+        assert selected == []
+        assert selected_with_high == [episode]
+
+    def test_second_pass_review_selector_ignores_other_prompt_versions(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        old_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v4",
+            episodes_requested=1,
+        )
+        old_extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=old_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v4",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=old_extraction,
+            name="Jane Doe",
+            normalized_name="jane doe",
+            confidence=0.95,
+        )
+        EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=old_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v4",
+            model="gpt-5-mini",
+            input_text="",
+        )
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v5",
+            episodes_requested=1,
+        )
+        extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v5",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Jane Doe",
+            normalized_name="jane doe",
+            confidence=0.82,
+        )
+
+        from podcast_network.web.catalog.management.commands.backfill_guest_extractions import (
+            select_second_pass_review_episodes,
+        )
+
+        selected = select_second_pass_review_episodes(
+            first_pass_run=run,
+            first_pass_model="gpt-5-nano",
+            second_pass_model="gpt-5-mini",
+            prompt_version="guest-extraction-v5",
+            review_min_confidence=0.75,
+            review_max_confidence=0.90,
+        )
+
+        assert selected == [episode]
 
 
 class AsyncGuestExtractionTests(TransactionTestCase):

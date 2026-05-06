@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Podcast Network{% endblock %}</title>
+    <title>{% block title %}Six Degrees to Joe Rogan{% endblock %}</title>
     <style>
       :root {
         color-scheme: light;
@@ -109,6 +109,173 @@
       }
       .muted {
         color: var(--muted);
+      }
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .home-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.04fr) minmax(360px, 0.96fr);
+        gap: 34px;
+        align-items: center;
+        min-height: 560px;
+        padding: 32px 0 26px;
+      }
+      .home-hero h1 {
+        max-width: 780px;
+        margin: 0;
+        font-size: 64px;
+        line-height: 0.98;
+      }
+      .home-lede {
+        max-width: 650px;
+        margin: 20px 0 0;
+        color: #475467;
+        font-size: 19px;
+      }
+      .home-path-form {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 28px 0 0;
+      }
+      .home-path-form input {
+        min-width: 210px;
+        background: #fff;
+      }
+      .home-examples {
+        display: flex;
+        gap: 9px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .home-examples a {
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: #344054;
+        background: #fff;
+        font-size: 14px;
+        text-decoration: none;
+      }
+      .home-examples a:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .home-network {
+        overflow: hidden;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.86)),
+          repeating-linear-gradient(0deg, rgba(100, 116, 139, 0.11) 0 1px, transparent 1px 28px),
+          repeating-linear-gradient(90deg, rgba(100, 116, 139, 0.11) 0 1px, transparent 1px 28px);
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+      }
+      .home-network svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .home-network-edge {
+        fill: none;
+        stroke: #64748b;
+        stroke-linecap: round;
+        stroke-width: 3;
+        opacity: 0.58;
+      }
+      .home-network-edge.strong {
+        stroke: var(--accent);
+        stroke-width: 4;
+        opacity: 0.75;
+      }
+      .home-network-edge.faint {
+        stroke-dasharray: 6 8;
+        opacity: 0.32;
+      }
+      .home-network-node circle,
+      .home-network-node rect {
+        filter: url(#home-node-shadow);
+        stroke-width: 2.5;
+      }
+      .home-network-person circle {
+        fill: url(#home-person-gradient);
+        stroke: var(--person);
+      }
+      .home-network-podcast rect {
+        fill: url(#home-podcast-gradient);
+        stroke: var(--podcast);
+      }
+      .home-network-node.center circle {
+        stroke-width: 3.5;
+      }
+      .home-network-node text {
+        fill: var(--ink);
+        font-size: 13px;
+        font-weight: 800;
+        text-anchor: middle;
+        dominant-baseline: middle;
+      }
+      .home-network-node.center text {
+        font-size: 16px;
+      }
+      .home-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        overflow: hidden;
+        margin: 0 0 24px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--line);
+      }
+      .home-stats div {
+        padding: 18px 20px;
+        background: #fff;
+      }
+      .home-stats strong {
+        display: block;
+        font-size: 32px;
+        line-height: 1;
+      }
+      .home-stats span {
+        color: var(--muted);
+      }
+      .home-actions {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin: 18px 0 34px;
+      }
+      .home-actions a {
+        min-height: 136px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        background: #fff;
+        text-decoration: none;
+        transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+      }
+      .home-actions a:hover {
+        border-color: rgba(15, 118, 110, 0.45);
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+        transform: translateY(-1px);
+      }
+      .home-actions strong {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 17px;
+      }
+      .home-actions span {
+        color: var(--muted);
+        font-size: 14px;
       }
       .path-sentence {
         max-width: 860px;
@@ -312,13 +479,27 @@
         table {
           font-size: 14px;
         }
+        .home-hero {
+          grid-template-columns: 1fr;
+          min-height: 0;
+        }
+        .home-hero h1 {
+          font-size: 46px;
+        }
+        .home-network {
+          max-width: 620px;
+        }
+        .home-stats,
+        .home-actions {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
   <body>
     <header>
       <nav>
-        <a href="{% url 'explorer:home' %}">Podcast Network</a>
+        <a href="{% url 'explorer:home' %}">Six Degrees to Joe Rogan</a>
         <a href="{% url 'explorer:podcasts' %}">Podcasts</a>
         <a href="{% url 'explorer:people' %}">People</a>
         <a href="{% url 'explorer:rankings' %}">Rankings</a>
