@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
+from django.db.models import Exists, OuterRef
 
 from podcast_network.extraction.fake import FakeGuestExtractor
 from podcast_network.extraction.openai_client import (
@@ -139,11 +140,13 @@ def select_episodes(
         queryset = queryset.filter(id__in=episode_ids)
         limit = max(limit, len(episode_ids))
     elif not force:
-        queryset = queryset.exclude(
-            guest_extractions__model=model,
-            guest_extractions__prompt_version=prompt_version,
-            guest_extractions__status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        successful_extraction = EpisodeGuestExtraction.objects.filter(
+            episode=OuterRef("pk"),
+            model=model,
+            prompt_version=prompt_version,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
         )
+        queryset = queryset.exclude(Exists(successful_extraction))
     return list(queryset[:limit])
 
 

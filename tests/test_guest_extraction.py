@@ -89,6 +89,53 @@ class GuestExtractionTests(TestCase):
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
         ).count() == 3
 
+    def test_select_episodes_excludes_existing_success_with_other_rows(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        other_episode = create_episode(title="Episode with John Smith")
+        old_run = ExtractionRun.objects.create(
+            model="old-model",
+            provider="fake",
+            prompt_version="old-prompt",
+            episodes_requested=1,
+        )
+        target_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v5",
+            episodes_requested=1,
+        )
+        EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=old_run,
+            status=EpisodeGuestExtraction.Status.FAILED,
+            prompt_version="old-prompt",
+            model="old-model",
+            input_text="",
+        )
+        EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=target_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v5",
+            model="gpt-5-nano",
+            input_text="",
+        )
+
+        from podcast_network.web.catalog.management.commands.extract_guests import (
+            select_episodes,
+        )
+
+        selected = select_episodes(
+            episode_ids=[],
+            limit=10,
+            model="gpt-5-nano",
+            prompt_version="guest-extraction-v5",
+            force=False,
+        )
+
+        assert episode not in selected
+        assert other_episode in selected
+
     def test_backfill_dry_run_does_not_create_extractions(self) -> None:
         create_episode(title="Episode with Jane Doe")
 

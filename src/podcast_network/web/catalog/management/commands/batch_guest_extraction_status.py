@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
+from django.utils import timezone
 from openai import OpenAI
 
 from podcast_network.web.catalog.models import ExtractionRun
@@ -20,6 +21,16 @@ class Command(BaseCommand):
 
         batch = OpenAI().batches.retrieve(str(batch_id))
         counts = getattr(batch, "request_counts", None)
+        errors = getattr(batch, "errors", None)
+        if batch.status == "failed" and run.status != ExtractionRun.Status.FAILED:
+            run.status = ExtractionRun.Status.FAILED
+            run.finished_at = timezone.now()
+            run.metadata = {
+                **run.metadata,
+                "batch_status": batch.status,
+                "batch_errors": errors.model_dump(mode="json") if errors else None,
+            }
+            run.save(update_fields=["status", "finished_at", "metadata"])
         self.stdout.write(
             self.style.SUCCESS(
                 f"Run {run.id} batch {batch.id}: {batch.status}. "
@@ -28,3 +39,10 @@ class Command(BaseCommand):
                 f"error_file_id={batch.error_file_id or ''}"
             )
         )
+        if errors:
+            for error in errors.data:
+                self.stdout.write(
+                    self.style.ERROR(
+                        f"{error.code}: {error.message}"
+                    )
+                )
