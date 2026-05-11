@@ -8,12 +8,7 @@
   <form class="toolbar" method="get">
     <input name="q" value="{{ query }}" placeholder="Search people">
     <select name="rank">
-      <option value="pr" {% if rank == "pr" %}selected{% endif %}>PageRank</option>
-      <option value="hub" {% if rank == "hub" %}selected{% endif %}>Hub</option>
-      <option value="auth" {% if rank == "auth" %}selected{% endif %}>Authority</option>
-      <option value="degree" {% if rank == "degree" %}selected{% endif %}>Degree</option>
-      <option value="bt" {% if rank == "bt" %}selected{% endif %}>Betweenness</option>
-      <option value="close" {% if rank == "close" %}selected{% endif %}>Closeness</option>
+      <option value="appearances" selected>Guest appearances</option>
     </select>
     <button type="submit">Apply</button>
   </form>
@@ -29,31 +24,19 @@
       <tr>
         <th>Rank</th>
         <th>Name</th>
-        <th>Top Category</th>
-        <th>Host Of</th>
-        <th>Guest On</th>
+        <th>Appearances</th>
+        <th>Podcasts</th>
+        <th>Latest</th>
       </tr>
     </thead>
     <tbody>
-      {% for row in people %}
+      {% for person in people %}
         <tr>
           <td>{{ forloop.counter }}</td>
-          <td><a href="{% url 'explorer:person_detail' row.person.id %}">{{ row.person.name }}</a></td>
-          <td>{{ row.person.top_category }}</td>
-          <td>
-            {% if row.host_podcast.podcast %}
-              <a href="{% url 'explorer:podcast_detail' row.host_podcast.podcast.id %}">{{ row.host_podcast.name }}</a>
-            {% elif row.host_podcast %}
-              {{ row.host_podcast.name }}
-            {% endif %}
-          </td>
-          <td>
-            {% if row.guest_podcast.podcast %}
-              <a href="{% url 'explorer:podcast_detail' row.guest_podcast.podcast.id %}">{{ row.guest_podcast.name }}</a>
-            {% elif row.guest_podcast %}
-              {{ row.guest_podcast.name }}
-            {% endif %}
-          </td>
+          <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
+          <td>{{ person.appearances_count }}</td>
+          <td>{{ person.podcast_count }}</td>
+          <td>{{ person.latest|date:"Y-m-d" }}</td>
         </tr>
       {% endfor %}
     </tbody>

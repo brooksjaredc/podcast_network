@@ -6,8 +6,8 @@ from django.db import models
 class Podcast(models.Model):
     name = models.CharField(max_length=500, unique=True)
     description = models.TextField(blank=True)
-    website_url = models.URLField(blank=True)
-    image_url = models.URLField(blank=True)
+    website_url = models.URLField(max_length=1000, blank=True)
+    image_url = models.URLField(max_length=1000, blank=True)
     external_id = models.CharField(max_length=255, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -22,7 +22,7 @@ class Podcast(models.Model):
 
 class Feed(models.Model):
     podcast = models.ForeignKey(Podcast, on_delete=models.CASCADE, related_name="feeds")
-    url = models.URLField(unique=True)
+    url = models.URLField(max_length=1000, unique=True)
     active = models.BooleanField(default=True)
     parser_hint = models.CharField(max_length=100, blank=True)
     etag = models.CharField(max_length=500, blank=True)
@@ -98,8 +98,8 @@ class Episode(models.Model):
     title = models.CharField(max_length=1000)
     description = models.TextField(blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
-    episode_url = models.URLField(blank=True)
-    enclosure_url = models.URLField(blank=True)
+    episode_url = models.URLField(max_length=1000, blank=True)
+    enclosure_url = models.URLField(max_length=1000, blank=True)
     duration_raw = models.CharField(max_length=100, blank=True)
     explicit = models.BooleanField(null=True, blank=True)
     raw_data = models.JSONField(default=dict, blank=True)
@@ -122,6 +122,7 @@ class Episode(models.Model):
 
 class Person(models.Model):
     name = models.CharField(max_length=500, unique=True)
+    normalized_name = models.CharField(max_length=500, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

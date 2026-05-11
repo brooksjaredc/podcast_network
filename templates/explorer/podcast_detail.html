@@ -4,13 +4,13 @@
 
 {% block content %}
   <h1>{{ podcast.name }}</h1>
-  <p class="muted">{{ podcast.hosts|join:", " }} · {{ podcast.categories|join:", " }}</p>
+  <p class="muted">{{ podcast.website_url }}</p>
   <p>{{ podcast.description|striptags }}</p>
 
   <section class="stats">
-    <div class="stat"><strong>{{ podcast.num_guests }}</strong><span>guest appearances</span></div>
-    <div class="stat"><strong>{{ podcast.num_unique }}</strong><span>unique guests</span></div>
-    <div class="stat"><strong>{{ podcast.avg_ep_lengths }}</strong><span>average episode length</span></div>
+    <div class="stat"><strong>{{ episode_count }}</strong><span>episodes</span></div>
+    <div class="stat"><strong>{{ guest_appearance_count }}</strong><span>guest appearances</span></div>
+    <div class="stat"><strong>{{ unique_guest_count }}</strong><span>unique guests shown</span></div>
   </section>
 
   <h2>Frequent Guests</h2>
@@ -19,12 +19,12 @@
       <tr><th>Guest</th><th>Appearances</th><th>Hours</th><th>Most Recent</th></tr>
     </thead>
     <tbody>
-      {% for row in durations %}
+      {% for row in guest_rows %}
         <tr>
-          <td><a href="{% url 'explorer:person_detail' row.guest.person_id %}">{{ row.guest.name }}</a></td>
-          <td>{{ row.duration.count }}</td>
-          <td>{{ row.duration.hours }}</td>
-          <td>{{ row.duration.recent }}</td>
+          <td><a href="{% url 'explorer:person_detail' row.id %}">{{ row.name }}</a></td>
+          <td>{{ row.appearances_count }}</td>
+          <td></td>
+          <td>{{ row.latest|date:"Y-m-d" }}</td>
         </tr>
       {% endfor %}
     </tbody>
@@ -36,14 +36,7 @@
       <tr><th>Guest</th><th>Probability</th></tr>
     </thead>
     <tbody>
-      {% for row in predictions %}
-        <tr>
-          <td><a href="{% url 'explorer:person_detail' row.guest.person_id %}">{{ row.guest.name }}</a></td>
-          <td>{{ row.prediction.prob|floatformat:3 }}</td>
-        </tr>
-      {% empty %}
         <tr><td colspan="2">No predictions loaded.</td></tr>
-      {% endfor %}
     </tbody>
   </table>
 {% endblock %}

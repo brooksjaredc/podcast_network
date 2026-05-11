@@ -31,13 +31,13 @@
         </tr>
       </thead>
       <tbody>
-        {% for first, second in pairs %}
+        {% for person in common_people %}
           <tr>
-            <td><a href="{% url 'explorer:person_detail' first.person_id %}">{{ first.guests }}</a></td>
-            <td>{{ first.hours }}</td>
-            <td>{{ first.count }}</td>
-            <td>{{ second.hours }}</td>
-            <td>{{ second.count }}</td>
+            <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
           </tr>
         {% empty %}
           <tr><td colspan="5">No common guests found.</td></tr>
@@ -46,4 +46,3 @@
     </table>
   {% endif %}
 {% endblock %}
-

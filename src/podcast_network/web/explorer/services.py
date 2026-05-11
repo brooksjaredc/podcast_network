@@ -2,6 +2,8 @@ from functools import lru_cache
 
 from podcast_network.data import LegacyRepository
 from podcast_network.graph import SixDegreesGraph
+from podcast_network.graph.six_degrees import Edge
+from podcast_network.web.catalog.models import Appearance
 
 
 @lru_cache(maxsize=1)
@@ -13,3 +15,29 @@ def legacy_repository() -> LegacyRepository:
 def six_degrees_graph() -> SixDegreesGraph:
     return SixDegreesGraph.from_legacy_dir()
 
+
+@lru_cache(maxsize=1)
+def database_six_degrees_graph() -> SixDegreesGraph:
+    edges: list[Edge] = []
+    names: set[str] = set()
+    person_ids: dict[str, int] = {}
+    podcast_ids: dict[str, int] = {}
+
+    rows = (
+        Appearance.objects.filter(role=Appearance.Role.GUEST)
+        .select_related("person", "episode__podcast")
+        .values_list(
+            "person__name",
+            "person_id",
+            "episode__podcast__name",
+            "episode__podcast_id",
+        )
+        .iterator(chunk_size=10_000)
+    )
+    for person_name, person_id, podcast_name, podcast_id in rows:
+        names.add(person_name)
+        person_ids.setdefault(person_name, person_id)
+        podcast_ids.setdefault(podcast_name, podcast_id)
+        edges.append(Edge(left=person_name, right=podcast_name, kind="guest"))
+
+    return SixDegreesGraph(edges=edges, names=names, podcast_ids=podcast_ids, person_ids=person_ids)

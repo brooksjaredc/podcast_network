@@ -9,27 +9,19 @@
       <tr>
         <th>Rank</th>
         <th>Name</th>
-        <th>Hosts</th>
-        <th>Guests</th>
-        <th>Unique</th>
+        <th>Guest Appearances</th>
+        <th>Unique Guests</th>
+        <th>Latest Episode</th>
       </tr>
     </thead>
     <tbody>
       {% for row in podcast_rows %}
         <tr>
-          <td>{{ row.podcast.degree_rank }}</td>
-          <td><a href="{% url 'explorer:podcast_detail' row.podcast.id %}">{{ row.podcast.name }}</a></td>
-          <td>
-            {% for host in row.hosts %}
-              {% if host.person %}
-                <a href="{% url 'explorer:person_detail' host.person.id %}">{{ host.name }}</a>{% if not forloop.last %}, {% endif %}
-              {% else %}
-                {{ host.name }}{% if not forloop.last %}, {% endif %}
-              {% endif %}
-            {% endfor %}
-          </td>
-          <td>{{ row.podcast.num_guests }}</td>
-          <td>{{ row.podcast.percent_unique }}%</td>
+          <td>{{ forloop.counter }}</td>
+          <td><a href="{% url 'explorer:podcast_detail' row.id %}">{{ row.name }}</a></td>
+          <td>{{ row.guest_appearances }}</td>
+          <td>{{ row.unique_guests }}</td>
+          <td>{{ row.latest_episode|date:"Y-m-d" }}</td>
         </tr>
       {% endfor %}
     </tbody>

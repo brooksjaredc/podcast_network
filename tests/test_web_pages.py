@@ -1,4 +1,74 @@
 from django.test import Client, override_settings
+from django.utils import timezone
+
+from podcast_network.web.catalog.models import Appearance, Episode, Person, Podcast
+from podcast_network.web.explorer.services import database_six_degrees_graph
+
+
+def make_db_graph() -> tuple[Podcast, Podcast, Person, Person]:
+    first_podcast = Podcast.objects.create(
+        name="The Joe Rogan Experience",
+        description="Long-form conversations.",
+        website_url="https://example.com/rogan",
+    )
+    second_podcast = Podcast.objects.create(
+        name="WTF with Marc Maron",
+        description="Interview podcast.",
+        website_url="https://example.com/wtf",
+    )
+    joe = Person.objects.create(name="Joe Rogan", normalized_name="joe rogan")
+    marc = Person.objects.create(name="Marc Maron", normalized_name="marc maron")
+    barack = Person.objects.create(
+        name="President Barack Obama",
+        normalized_name="president barack obama",
+    )
+    shared_guest = Person.objects.create(name="Common Guest", normalized_name="common guest")
+    first_episode = Episode.objects.create(
+        podcast=first_podcast,
+        guid="jre-1",
+        title="Joe Rogan Experience with Marc Maron",
+        description="Marc Maron joins Joe Rogan.",
+        published_at=timezone.now(),
+    )
+    second_episode = Episode.objects.create(
+        podcast=second_podcast,
+        guid="wtf-1",
+        title="WTF with Common Guest",
+        description="A conversation with Common Guest.",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=first_episode,
+        person=joe,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    Appearance.objects.create(
+        episode=first_episode,
+        person=marc,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    Appearance.objects.create(
+        episode=first_episode,
+        person=shared_guest,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    Appearance.objects.create(
+        episode=second_episode,
+        person=barack,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    Appearance.objects.create(
+        episode=second_episode,
+        person=shared_guest,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    database_six_degrees_graph.cache_clear()
+    return first_podcast, second_podcast, joe, marc
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -14,15 +84,16 @@ def test_home_page_loads() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_path_page_loads_real_query() -> None:
+    first_podcast, _, joe, marc = make_db_graph()
     response = Client().get("/path/", {"source": "Joe Rogan", "target": "Marc Maron"})
 
     assert response.status_code == 200
     assert b"The Joe Rogan Experience" in response.content
     assert b"path-entity-person" in response.content
     assert b"path-entity-podcast" in response.content
-    assert b'href="/people/0/"' in response.content
-    assert b'href="/people/102/"' in response.content
-    assert b'href="/podcasts/0/"' in response.content
+    assert f'href="/people/{joe.id}/"'.encode() in response.content
+    assert f'href="/people/{marc.id}/"'.encode() in response.content
+    assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
     assert b"class=\"path-graphic-svg\"" in response.content
     assert b"class=\"path-graphic-node path-graphic-node-person\"" in response.content
     assert b"class=\"path-graphic-node path-graphic-node-podcast\"" in response.content
@@ -30,6 +101,7 @@ def test_path_page_loads_real_query() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_path_page_suggestion_can_be_accepted() -> None:
+    make_db_graph()
     response = Client().get("/path/", {"source": "Barrack Obama", "target": "Marc Maron"})
 
     assert response.status_code == 200
@@ -40,51 +112,56 @@ def test_path_page_suggestion_can_be_accepted() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_rankings_page_loads() -> None:
+    make_db_graph()
     response = Client().get("/rankings/", {"rank": "hub"})
 
     assert response.status_code == 200
-    assert b"Hub Rankings" in response.content
+    assert b"Guest Appearance Rankings" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_rankings_page_links_people_and_podcasts() -> None:
+    _, _, joe, _ = make_db_graph()
     response = Client().get("/rankings/", {"q": "Joe Rogan"})
 
     assert response.status_code == 200
-    assert b'href="/people/0/"' in response.content
-    assert b'href="/podcasts/0/"' in response.content
+    assert f'href="/people/{joe.id}/"'.encode() in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_people_page_links_people_and_podcasts() -> None:
+    _, _, joe, _ = make_db_graph()
     response = Client().get("/people/", {"q": "Joe Rogan"})
 
     assert response.status_code == 200
-    assert b'href="/people/0/"' in response.content
-    assert b'href="/podcasts/0/"' in response.content
+    assert f'href="/people/{joe.id}/"'.encode() in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_podcast_page_links_podcasts_and_hosts() -> None:
+    first_podcast, _, joe, _ = make_db_graph()
     response = Client().get("/podcasts/")
 
     assert response.status_code == 200
-    assert b'href="/podcasts/0/"' in response.content
-    assert b'href="/people/0/"' in response.content
+    assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
+    assert b"The Joe Rogan Experience" in response.content
+    assert b"Guest Appearances" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_podcast_detail_links_guests() -> None:
-    response = Client().get("/podcasts/0/")
+    first_podcast, _, joe, _ = make_db_graph()
+    response = Client().get(f"/podcasts/{first_podcast.id}/")
 
     assert response.status_code == 200
     assert b"Frequent Guests" in response.content
-    assert b'href="/people/' in response.content
+    assert f'href="/people/{joe.id}/"'.encode() in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_person_detail_loads() -> None:
-    response = Client().get("/people/0/")
+    _, _, joe, _ = make_db_graph()
+    response = Client().get(f"/people/{joe.id}/")
 
     assert response.status_code == 200
     assert b"Joe Rogan" in response.content
@@ -92,10 +169,15 @@ def test_person_detail_loads() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_common_guests_loads() -> None:
-    response = Client().get("/common/", {"first": "0", "second": "1"})
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    response = Client().get(
+        "/common/",
+        {"first": str(first_podcast.id), "second": str(second_podcast.id)},
+    )
 
     assert response.status_code == 200
     assert b"The Joe Rogan Experience" in response.content
+    assert b"Common Guest" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
