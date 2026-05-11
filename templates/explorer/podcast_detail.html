@@ -13,6 +13,17 @@
     <div class="stat"><strong>{{ unique_guest_count }}</strong><span>unique guests shown</span></div>
   </section>
 
+  <h2>Hosts</h2>
+  {% if hosts %}
+    <ul>
+      {% for host in hosts %}
+        <li><a href="{% url 'explorer:person_detail' host.id %}">{{ host.name }}</a></li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">No host metadata loaded.</p>
+  {% endif %}
+
   <h2>Frequent Guests</h2>
   <table>
     <thead>

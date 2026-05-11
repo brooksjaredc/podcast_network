@@ -39,6 +39,11 @@ Rules:
 - For "Today's cast" or "Cast" lists, return the listed people as episode participants
   unless the metadata identifies them as regular hosts or non-person roles.
 - Prefer full human names. Preserve accents and punctuation when present.
+- If a guest is written as a social handle, normalize it to a readable human name when
+  the handle clearly encodes one, for example "@AutoPritts" should become "Auto Pritts".
+  Do not return bare handles as names.
+- Use normal display casing for human names. Do not return all-caps names unless the
+  capitalization is clearly part of the person's actual public name.
 - Use the evidence field for the shortest phrase that proves the person is present.
 - Never invent placeholder names or return names that only appear in these instructions.
 - Use high confidence only when the evidence includes a presence cue such as "guest",

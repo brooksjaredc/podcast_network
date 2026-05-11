@@ -24,4 +24,5 @@ class ParsedFeed:
     description: str = ""
     website_url: str = ""
     image_url: str = ""
+    language: str = ""
     episodes: list[ParsedEpisode] = field(default_factory=list)

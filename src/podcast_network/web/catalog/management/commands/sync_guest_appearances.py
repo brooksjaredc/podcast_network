@@ -5,12 +5,15 @@ from dataclasses import dataclass
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
+from podcast_network.cleaning import clean_person_display_name, is_single_token_person_name
 from podcast_network.extraction.pipeline import normalize_name
 from podcast_network.web.catalog.models import (
     Appearance,
+    Episode,
     EpisodeGuestExtraction,
     GuestCandidate,
     Person,
+    Podcast,
 )
 
 
@@ -19,8 +22,13 @@ class SyncStats:
     episodes_seen: int = 0
     candidates_seen: int = 0
     people_created: int = 0
+    hosts_created: int = 0
     appearances_created: int = 0
     appearances_updated: int = 0
+    host_appearances_created: int = 0
+    skipped_host_candidates: int = 0
+    skipped_single_name_candidates: int = 0
+    single_name_people_pruned: int = 0
 
 
 class Command(BaseCommand):
@@ -35,16 +43,25 @@ class Command(BaseCommand):
         parser.add_argument(
             "--clear",
             action="store_true",
-            help="Delete existing LLM guest appearances before syncing.",
+            help="Delete existing materialized LLM guest and metadata host appearances first.",
+        )
+        parser.add_argument(
+            "--skip-host-sync",
+            action="store_true",
+            help="Do not create host appearances from podcast metadata.",
+        )
+        parser.add_argument(
+            "--keep-single-name-people",
+            action="store_true",
+            help="Do not prune materialized people whose display name is a single token.",
         )
 
     def handle(self, *args: object, **options: object) -> None:
         if options["clear"]:
             deleted, _ = Appearance.objects.filter(
-                role=Appearance.Role.GUEST,
-                source="llm-guest-extraction",
+                source__in=["llm-guest-extraction", "podcast-metadata"],
             ).delete()
-            self.stdout.write(f"Deleted {deleted} existing LLM guest appearance rows.")
+            self.stdout.write(f"Deleted {deleted} existing materialized appearance rows.")
 
         stats = sync_guest_appearances(
             prompt_version=str(options["prompt_version"]),
@@ -52,6 +69,8 @@ class Command(BaseCommand):
             second_pass_model=str(options["second_pass_model"]),
             min_confidence=float(options["min_confidence"]),
             limit=int(options["limit"]),
+            sync_hosts=not bool(options["skip_host_sync"]),
+            prune_single_name_people=not bool(options["keep_single_name_people"]),
         )
         self.stdout.write(
             self.style.SUCCESS(
@@ -59,8 +78,13 @@ class Command(BaseCommand):
                 f"{stats.episodes_seen} episodes, "
                 f"{stats.candidates_seen} candidates, "
                 f"{stats.people_created} people created, "
+                f"{stats.hosts_created} hosts created, "
                 f"{stats.appearances_created} appearances created, "
-                f"{stats.appearances_updated} appearances updated."
+                f"{stats.appearances_updated} appearances updated, "
+                f"{stats.host_appearances_created} host appearances created, "
+                f"{stats.skipped_host_candidates} host guest candidates skipped, "
+                f"{stats.skipped_single_name_candidates} single-name candidates skipped, "
+                f"{stats.single_name_people_pruned} single-name people pruned."
             )
         )
 
@@ -72,8 +96,24 @@ def sync_guest_appearances(
     second_pass_model: str,
     min_confidence: float,
     limit: int = 0,
+    sync_hosts: bool = True,
+    prune_single_name_people: bool = True,
 ) -> SyncStats:
     stats = SyncStats()
+    people_by_normalized = {
+        person.normalized_name: person
+        for person in Person.objects.only("id", "name", "normalized_name")
+    }
+    people_by_name = {person.name: person for person in people_by_normalized.values()}
+    host_normalized_by_podcast = podcast_host_index()
+    if sync_hosts:
+        sync_host_appearances(
+            people_by_normalized=people_by_normalized,
+            people_by_name=people_by_name,
+            host_normalized_by_podcast=host_normalized_by_podcast,
+            stats=stats,
+        )
+
     episode_ids = (
         EpisodeGuestExtraction.objects.filter(
             prompt_version=prompt_version,
@@ -86,10 +126,6 @@ def sync_guest_appearances(
     if limit:
         episode_ids = episode_ids[:limit]
 
-    people_by_normalized = {
-        person.normalized_name: person
-        for person in Person.objects.only("id", "name", "normalized_name")
-    }
     for episode_id in episode_ids.iterator(chunk_size=2000):
         stats.episodes_seen += 1
         extraction = preferred_extraction(
@@ -100,23 +136,37 @@ def sync_guest_appearances(
         )
         if extraction is None:
             continue
+        host_names = host_normalized_by_podcast.get(extraction.episode.podcast_id, set())
         candidates = GuestCandidate.objects.filter(
             extraction=extraction,
             confidence__gte=min_confidence,
         ).order_by("normalized_name", "-confidence")
         with transaction.atomic():
             for candidate in candidates:
-                normalized = candidate.normalized_name or normalize_name(candidate.name)
+                display_name = clean_person_display_name(candidate.name)
+                normalized = normalize_name(display_name)
                 if not normalized:
                     continue
-                person = people_by_normalized.get(normalized)
-                if person is None:
-                    person = Person.objects.create(
-                        name=candidate.name.strip(),
-                        normalized_name=normalized,
-                    )
-                    people_by_normalized[normalized] = person
+                if is_single_token_person_name(display_name):
+                    stats.skipped_single_name_candidates += 1
+                    continue
+                if normalized in host_names:
+                    stats.skipped_host_candidates += 1
+                    continue
+                person, created = get_or_create_person(
+                    display_name=display_name,
+                    normalized=normalized,
+                    people_by_normalized=people_by_normalized,
+                    people_by_name=people_by_name,
+                )
+                if created:
                     stats.people_created += 1
+                if person.name != display_name and should_replace_display_name(
+                    person.name,
+                    display_name,
+                ):
+                    person.name = display_name
+                    person.save(update_fields=["name", "updated_at"])
                 appearance, created = Appearance.objects.update_or_create(
                     episode_id=episode_id,
                     person=person,
@@ -131,7 +181,110 @@ def sync_guest_appearances(
                     stats.appearances_created += 1
                 else:
                     stats.appearances_updated += 1
+    if prune_single_name_people:
+        stats.single_name_people_pruned = prune_single_name_people_rows()
     return stats
+
+
+def sync_host_appearances(
+    *,
+    people_by_normalized: dict[str, Person],
+    people_by_name: dict[str, Person],
+    host_normalized_by_podcast: dict[int, set[str]],
+    stats: SyncStats,
+) -> None:
+    for podcast in Podcast.objects.only("id", "metadata").iterator(chunk_size=1000):
+        host_names = explicit_host_names(podcast)
+        if not host_names:
+            continue
+        episode_ids = list(
+            Episode.objects.filter(podcast=podcast).values_list("id", flat=True)
+        )
+        for host_name in host_names:
+            display_name = clean_person_display_name(host_name)
+            normalized = normalize_name(display_name)
+            if not normalized:
+                continue
+            host_normalized_by_podcast.setdefault(podcast.id, set()).add(normalized)
+            person, created = get_or_create_person(
+                display_name=display_name,
+                normalized=normalized,
+                people_by_normalized=people_by_normalized,
+                people_by_name=people_by_name,
+            )
+            if created:
+                stats.hosts_created += 1
+            appearances = [
+                Appearance(
+                    episode_id=episode_id,
+                    person=person,
+                    role=Appearance.Role.HOST,
+                    source="podcast-metadata",
+                    confidence=1.0,
+                )
+                for episode_id in episode_ids
+            ]
+            created = Appearance.objects.bulk_create(appearances, ignore_conflicts=True)
+            stats.host_appearances_created += len(created)
+
+
+def podcast_host_index() -> dict[int, set[str]]:
+    output: dict[int, set[str]] = {}
+    for podcast in Podcast.objects.only("id", "metadata"):
+        hosts = {
+            normalize_name(clean_person_display_name(host))
+            for host in explicit_host_names(podcast)
+        }
+        hosts.discard("")
+        if hosts:
+            output[podcast.id] = hosts
+    return output
+
+
+def explicit_host_names(podcast: Podcast) -> list[str]:
+    legacy = podcast.metadata.get("legacy") or {}
+    hosts = legacy.get("hosts") or []
+    if isinstance(hosts, list):
+        return [str(host).strip() for host in hosts if str(host).strip()]
+    return []
+
+
+def should_replace_display_name(current: str, candidate: str) -> bool:
+    if current.startswith("@") and not candidate.startswith("@"):
+        return True
+    return current.isupper() and not candidate.isupper()
+
+
+def get_or_create_person(
+    *,
+    display_name: str,
+    normalized: str,
+    people_by_normalized: dict[str, Person],
+    people_by_name: dict[str, Person],
+) -> tuple[Person, bool]:
+    person = people_by_normalized.get(normalized) or people_by_name.get(display_name)
+    if person is not None:
+        people_by_normalized.setdefault(normalized, person)
+        people_by_name.setdefault(display_name, person)
+        return person, False
+
+    person = Person.objects.create(name=display_name, normalized_name=normalized)
+    people_by_normalized[normalized] = person
+    people_by_name[display_name] = person
+    return person, True
+
+
+def prune_single_name_people_rows() -> int:
+    person_ids = [
+        person.id
+        for person in Person.objects.only("id", "name").iterator(chunk_size=5000)
+        if is_single_token_person_name(person.name)
+    ]
+    if not person_ids:
+        return 0
+    people_count = len(person_ids)
+    deleted, _ = Person.objects.filter(id__in=person_ids).delete()
+    return people_count
 
 
 def preferred_extraction(

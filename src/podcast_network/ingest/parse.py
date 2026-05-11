@@ -19,6 +19,7 @@ def parse_feed(content: bytes) -> ParsedFeed:
         description=string_value(feed.get("description") or feed.get("subtitle")),
         website_url=string_value(feed.get("link")),
         image_url=feed_image_url(feed),
+        language=string_value(feed.get("language")),
         episodes=episodes,
     )
 

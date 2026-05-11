@@ -17,11 +17,13 @@ from podcast_network.web.catalog.management.commands.sync_guest_extraction_batch
     sync_output_record,
 )
 from podcast_network.web.catalog.models import (
+    Appearance,
     Episode,
     EpisodeGuestExtraction,
     ExtractionRun,
     Feed,
     GuestCandidate,
+    Person,
     Podcast,
 )
 
@@ -388,6 +390,67 @@ class GuestExtractionTests(TestCase):
         )
 
         assert selected == [episode]
+
+    def test_sync_guest_appearances_cleans_names_and_skips_hosts(self) -> None:
+        podcast = Podcast.objects.create(
+            name="Hostful",
+            metadata={"legacy": {"hosts": ["Jane Host"]}},
+        )
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid="hostful-1",
+            title="Guest list",
+            description="A test episode.",
+        )
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v5",
+            episodes_requested=1,
+        )
+        extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v5",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Jane Host",
+            normalized_name="jane host",
+            confidence=0.99,
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="@AutoPritts",
+            normalized_name="autopritts",
+            confidence=0.99,
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="JOHN SMITH",
+            normalized_name="john smith",
+            confidence=0.99,
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Mike",
+            normalized_name="mike",
+            confidence=0.99,
+        )
+
+        call_command("sync_guest_appearances", "--min-confidence", "0.90")
+
+        assert Appearance.objects.filter(role=Appearance.Role.HOST).count() == 1
+        assert not Appearance.objects.filter(
+            role=Appearance.Role.GUEST,
+            person__normalized_name="jane host",
+        ).exists()
+        assert Person.objects.filter(name="Auto Pritts", normalized_name="auto pritts").exists()
+        assert Person.objects.filter(name="John Smith", normalized_name="john smith").exists()
+        assert not Person.objects.filter(normalized_name="mike").exists()
 
 
 class AsyncGuestExtractionTests(TransactionTestCase):

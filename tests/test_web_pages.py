@@ -67,6 +67,12 @@ def make_db_graph() -> tuple[Podcast, Podcast, Person, Person]:
         role=Appearance.Role.GUEST,
         source="test",
     )
+    Appearance.objects.create(
+        episode=first_episode,
+        person=joe,
+        role=Appearance.Role.HOST,
+        source="test",
+    )
     database_six_degrees_graph.cache_clear()
     return first_podcast, second_podcast, joe, marc
 
@@ -145,6 +151,7 @@ def test_podcast_page_links_podcasts_and_hosts() -> None:
     assert response.status_code == 200
     assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
     assert b"The Joe Rogan Experience" in response.content
+    assert b"Joe Rogan" in response.content
     assert b"Guest Appearances" in response.content
 
 
@@ -154,8 +161,9 @@ def test_podcast_detail_links_guests() -> None:
     response = Client().get(f"/podcasts/{first_podcast.id}/")
 
     assert response.status_code == 200
+    assert b"Hosts" in response.content
     assert b"Frequent Guests" in response.content
-    assert f'href="/people/{joe.id}/"'.encode() in response.content
+    assert response.content.count(f'href="/people/{joe.id}/"'.encode()) == 1
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])

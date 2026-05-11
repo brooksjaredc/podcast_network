@@ -5,6 +5,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
 
+from podcast_network.cleaning import is_likely_english_podcast_name
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import PathMessagePart
 from podcast_network.web.catalog.models import Appearance, Episode, Person, Podcast
@@ -24,7 +25,7 @@ def home(request: HttpRequest) -> HttpResponse:
 
 
 def podcasts(request: HttpRequest) -> HttpResponse:
-    rows = (
+    podcasts = list(
         Podcast.objects.annotate(
             guest_appearances=Count(
                 "episodes__appearances",
@@ -40,6 +41,15 @@ def podcasts(request: HttpRequest) -> HttpResponse:
         .filter(guest_appearances__gt=0)
         .order_by("-guest_appearances", "name")[:1000]
     )
+    podcasts = english_podcasts(podcasts)
+    hosts_by_podcast = host_people_by_podcast([podcast.id for podcast in podcasts])
+    rows = [
+        {
+            "podcast": podcast,
+            "hosts": hosts_by_podcast.get(podcast.id, []),
+        }
+        for podcast in podcasts
+    ]
     return render(request, "explorer/podcasts.html", {"podcast_rows": rows})
 
 
@@ -49,14 +59,29 @@ def podcast_detail(request: HttpRequest, podcast_id: int) -> HttpResponse:
     except Podcast.DoesNotExist as exc:
         raise Http404("Podcast not found") from exc
 
+    hosts = host_people_by_podcast([podcast.id]).get(podcast.id, [])
+    host_ids = [host.id for host in hosts]
     guest_rows = (
-        Person.objects.filter(appearances__episode__podcast=podcast)
+        Person.objects.filter(
+            appearances__role=Appearance.Role.GUEST,
+            appearances__episode__podcast=podcast,
+        )
+        .exclude(id__in=host_ids)
         .annotate(
             appearances_count=Count(
                 "appearances",
-                filter=guest_filter("appearances"),
+                filter=Q(
+                    appearances__role=Appearance.Role.GUEST,
+                    appearances__episode__podcast=podcast,
+                ),
             ),
-            latest=Max("appearances__episode__published_at"),
+            latest=Max(
+                "appearances__episode__published_at",
+                filter=Q(
+                    appearances__role=Appearance.Role.GUEST,
+                    appearances__episode__podcast=podcast,
+                ),
+            ),
         )
         .order_by("-appearances_count", "name")[:100]
     )
@@ -65,6 +90,7 @@ def podcast_detail(request: HttpRequest, podcast_id: int) -> HttpResponse:
         "explorer/podcast_detail.html",
         {
             "podcast": podcast,
+            "hosts": hosts,
             "guest_rows": guest_rows,
             "episode_count": podcast.episodes.count(),
             "guest_appearance_count": Appearance.objects.filter(
@@ -75,6 +101,7 @@ def podcast_detail(request: HttpRequest, podcast_id: int) -> HttpResponse:
                 appearances__role=Appearance.Role.GUEST,
                 appearances__episode__podcast=podcast,
             )
+            .exclude(id__in=host_ids)
             .distinct()
             .count(),
         },
@@ -145,17 +172,21 @@ def person_detail(request: HttpRequest, person_id: int) -> HttpResponse:
 
 
 def common(request: HttpRequest) -> HttpResponse:
-    podcasts = Podcast.objects.order_by("name")
+    podcasts = english_podcasts(Podcast.objects.order_by("name"))
     first_id = parse_int(request.GET.get("first"))
     second_id = parse_int(request.GET.get("second"))
     first_podcast = podcast_or_none(first_id)
     second_podcast = podcast_or_none(second_id)
     common_people = []
     if first_podcast and second_podcast:
-        first_people = Person.objects.filter(appearances__episode__podcast=first_podcast)
+        first_people = Person.objects.filter(
+            appearances__role=Appearance.Role.GUEST,
+            appearances__episode__podcast=first_podcast,
+        )
         common_people = (
             Person.objects.filter(
                 id__in=first_people.values("id"),
+                appearances__role=Appearance.Role.GUEST,
                 appearances__episode__podcast=second_podcast,
             )
             .annotate(
@@ -224,6 +255,34 @@ def people_queryset() -> QuerySet[Person]:
         .filter(appearances_count__gt=0)
         .order_by("-appearances_count", "name")
     )
+
+
+def host_people_by_podcast(podcast_ids: list[int]) -> dict[int, list[Person]]:
+    rows = (
+        Appearance.objects.filter(
+            role=Appearance.Role.HOST,
+            episode__podcast_id__in=podcast_ids,
+        )
+        .select_related("person")
+        .order_by("episode__podcast_id", "person__name")
+        .values_list("episode__podcast_id", "person_id", "person__name")
+        .distinct()
+    )
+    people_by_podcast: dict[int, list[Person]] = {}
+    seen: set[tuple[int, int]] = set()
+    for podcast_id, person_id, person_name in rows:
+        key = (podcast_id, person_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        people_by_podcast.setdefault(podcast_id, []).append(
+            Person(id=person_id, name=person_name)
+        )
+    return people_by_podcast
+
+
+def english_podcasts(podcasts) -> list[Podcast]:
+    return [podcast for podcast in podcasts if is_likely_english_podcast_name(podcast.name)]
 
 
 def guest_filter(prefix: str):

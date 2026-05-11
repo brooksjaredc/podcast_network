@@ -9,6 +9,7 @@
       <tr>
         <th>Rank</th>
         <th>Name</th>
+        <th>Hosts</th>
         <th>Guest Appearances</th>
         <th>Unique Guests</th>
         <th>Latest Episode</th>
@@ -18,10 +19,17 @@
       {% for row in podcast_rows %}
         <tr>
           <td>{{ forloop.counter }}</td>
-          <td><a href="{% url 'explorer:podcast_detail' row.id %}">{{ row.name }}</a></td>
-          <td>{{ row.guest_appearances }}</td>
-          <td>{{ row.unique_guests }}</td>
-          <td>{{ row.latest_episode|date:"Y-m-d" }}</td>
+          <td><a href="{% url 'explorer:podcast_detail' row.podcast.id %}">{{ row.podcast.name }}</a></td>
+          <td>
+            {% for host in row.hosts %}
+              <a href="{% url 'explorer:person_detail' host.id %}">{{ host.name }}</a>{% if not forloop.last %}, {% endif %}
+            {% empty %}
+              <span class="muted">Unknown</span>
+            {% endfor %}
+          </td>
+          <td>{{ row.podcast.guest_appearances }}</td>
+          <td>{{ row.podcast.unique_guests }}</td>
+          <td>{{ row.podcast.latest_episode|date:"Y-m-d" }}</td>
         </tr>
       {% endfor %}
     </tbody>

@@ -6,6 +6,7 @@ from urllib.error import HTTPError, URLError
 from django.db import transaction
 from django.utils import timezone
 
+from podcast_network.cleaning import is_english_language_code, is_likely_english_podcast_name
 from podcast_network.ingest.fetch import FetchResult, fetch_feed
 from podcast_network.ingest.models import ParsedEpisode, ParsedFeed
 from podcast_network.ingest.parse import parse_feed
@@ -167,6 +168,13 @@ def ingest_feed(
 def sync_podcast_metadata(feed: Feed, parsed: ParsedFeed) -> None:
     podcast = feed.podcast
     changed_fields = []
+    metadata = dict(podcast.metadata)
+    rss_metadata = dict(metadata.get("rss") or {})
+    if parsed.language and rss_metadata.get("language") != parsed.language:
+        rss_metadata["language"] = parsed.language
+        metadata["rss"] = rss_metadata
+        podcast.metadata = metadata
+        changed_fields.append("metadata")
     for field_name, value in {
         "description": parsed.description,
         "website_url": parsed.website_url,
@@ -180,6 +188,12 @@ def sync_podcast_metadata(feed: Feed, parsed: ParsedFeed) -> None:
         changed_fields.append("name")
     if changed_fields:
         podcast.save(update_fields=[*changed_fields, "updated_at"])
+
+    if not is_english_language_code(parsed.language) or not is_likely_english_podcast_name(
+        podcast.name
+    ):
+        feed.active = False
+        feed.save(update_fields=["active", "updated_at"])
 
 
 def upsert_episodes(feed: Feed, episodes: list[ParsedEpisode]) -> tuple[int, int]:
