@@ -23,6 +23,11 @@ CATALOG_TABLES = [
     "catalog_podcasthostextraction",
     "catalog_hostcandidate",
     "catalog_appearance",
+    "catalog_personobservation",
+    "catalog_canonicalpersonentity",
+    "catalog_personentitylink",
+    "catalog_personentitycandidatepair",
+    "catalog_personentitypairlabel",
 ]
 
 BOOLEAN_COLUMNS = {
@@ -104,7 +109,7 @@ def copy_table(source: sqlite3.Connection, cursor, table: str, columns: list[str
 
 def select_all_sql(table: str, columns: list[str]) -> str:
     quoted_columns = ", ".join(f'"{column}"' for column in columns)
-    return f'SELECT {quoted_columns} FROM "{table}" ORDER BY "id"'
+    return f'SELECT {quoted_columns} FROM "{table}" ORDER BY "{columns[0]}"'
 
 
 def normalize_value(column: str, value: Any, bool_columns: set[str]) -> Any:

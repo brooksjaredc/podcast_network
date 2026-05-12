@@ -4,6 +4,7 @@ from django.contrib import admin
 
 from podcast_network.web.catalog.models import (
     Appearance,
+    CanonicalPersonEntity,
     Episode,
     EpisodeGuestExtraction,
     ExtractionRun,
@@ -11,6 +12,10 @@ from podcast_network.web.catalog.models import (
     GuestCandidate,
     HostCandidate,
     Person,
+    PersonEntityCandidatePair,
+    PersonEntityLink,
+    PersonEntityPairLabel,
+    PersonObservation,
     Podcast,
     PodcastHostExtraction,
     RawFeedSnapshot,
@@ -50,6 +55,45 @@ class AppearanceAdmin(admin.ModelAdmin):
     search_fields = ["person__name", "episode__title"]
     list_display = ["person", "role", "episode", "confidence"]
     list_filter = ["role"]
+
+
+@admin.register(PersonObservation)
+class PersonObservationAdmin(admin.ModelAdmin):
+    search_fields = ["observed_name", "normalized_name", "podcast__name", "episode__title"]
+    list_display = ["observation_id", "observed_name", "role", "podcast", "source"]
+    list_filter = ["role", "provider", "source"]
+    raw_id_fields = ["appearance", "person", "episode", "podcast"]
+
+
+@admin.register(CanonicalPersonEntity)
+class CanonicalPersonEntityAdmin(admin.ModelAdmin):
+    search_fields = ["am_entity_id", "display_name", "normalized_name"]
+    list_display = ["am_entity_id", "display_name", "observation_count", "resolution_method"]
+    list_filter = ["resolution_method"]
+
+
+@admin.register(PersonEntityLink)
+class PersonEntityLinkAdmin(admin.ModelAdmin):
+    search_fields = ["observation__observed_name", "canonical__display_name"]
+    list_display = ["observation", "canonical", "match_method", "match_probability"]
+    list_filter = ["match_method"]
+    raw_id_fields = ["observation", "canonical"]
+
+
+@admin.register(PersonEntityCandidatePair)
+class PersonEntityCandidatePairAdmin(admin.ModelAdmin):
+    search_fields = ["left__display_name", "right__display_name", "pair_id"]
+    list_display = ["left", "right", "status", "match_probability", "model_name"]
+    list_filter = ["status", "model_name"]
+    raw_id_fields = ["left", "right"]
+
+
+@admin.register(PersonEntityPairLabel)
+class PersonEntityPairLabelAdmin(admin.ModelAdmin):
+    search_fields = ["pair__left__display_name", "pair__right__display_name", "notes"]
+    list_display = ["pair", "label", "source", "model_name", "match_probability", "created_at"]
+    list_filter = ["label", "source", "model_name"]
+    raw_id_fields = ["pair"]
 
 
 @admin.register(ScrapeRun)

@@ -157,6 +157,190 @@ class Appearance(models.Model):
         return f"{self.person} {self.role} on {self.episode}"
 
 
+class PersonObservation(models.Model):
+    class Provider(models.TextChoices):
+        APPEARANCE = "appearance", "Appearance"
+
+    observation_id = models.CharField(max_length=64, primary_key=True)
+    provider = models.CharField(
+        max_length=50,
+        choices=Provider.choices,
+        default=Provider.APPEARANCE,
+    )
+    record_id = models.CharField(max_length=64)
+    appearance = models.OneToOneField(
+        Appearance,
+        on_delete=models.CASCADE,
+        related_name="person_observation",
+    )
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="observations")
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.CASCADE,
+        related_name="person_observations",
+    )
+    podcast = models.ForeignKey(
+        Podcast,
+        on_delete=models.CASCADE,
+        related_name="person_observations",
+    )
+    role = models.CharField(max_length=20, choices=Appearance.Role.choices)
+    observed_name = models.CharField(max_length=500)
+    normalized_name = models.CharField(max_length=500)
+    source = models.CharField(max_length=100, blank=True)
+    confidence = models.FloatField(default=1.0)
+    context = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["record_id"]),
+            models.Index(fields=["normalized_name", "role"]),
+            models.Index(fields=["podcast", "role"]),
+        ]
+        ordering = ["normalized_name", "observation_id"]
+
+    def __str__(self) -> str:
+        return f"{self.observed_name} {self.role} observation"
+
+
+class CanonicalPersonEntity(models.Model):
+    am_entity_id = models.CharField(max_length=64, primary_key=True)
+    display_name = models.CharField(max_length=500)
+    normalized_name = models.CharField(max_length=500, unique=True)
+    aliases = models.JSONField(default=list, blank=True)
+    roles = models.JSONField(default=list, blank=True)
+    observation_count = models.PositiveIntegerField(default=0)
+    first_seen_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    resolution_method = models.CharField(max_length=100, default="exact_normalized_name")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["normalized_name"]),
+            models.Index(fields=["display_name"]),
+        ]
+        ordering = ["display_name"]
+
+    def __str__(self) -> str:
+        return self.display_name
+
+
+class PersonEntityLink(models.Model):
+    observation = models.OneToOneField(
+        PersonObservation,
+        on_delete=models.CASCADE,
+        related_name="entity_link",
+        primary_key=True,
+    )
+    canonical = models.ForeignKey(
+        CanonicalPersonEntity,
+        on_delete=models.CASCADE,
+        related_name="linked_observations",
+    )
+    match_method = models.CharField(max_length=100)
+    match_probability = models.FloatField(default=1.0)
+    dbt_updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["canonical"]),
+            models.Index(fields=["match_method"]),
+            models.Index(fields=["dbt_updated_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.observation_id} -> {self.canonical_id}"
+
+
+class PersonEntityCandidatePair(models.Model):
+    class Status(models.TextChoices):
+        CANDIDATE = "candidate", "Candidate"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+
+    pair_id = models.CharField(max_length=64, primary_key=True)
+    left = models.ForeignKey(
+        CanonicalPersonEntity,
+        on_delete=models.CASCADE,
+        related_name="left_candidate_pairs",
+    )
+    right = models.ForeignKey(
+        CanonicalPersonEntity,
+        on_delete=models.CASCADE,
+        related_name="right_candidate_pairs",
+    )
+    blocking_keys = models.JSONField(default=list, blank=True)
+    features = models.JSONField(default=dict, blank=True)
+    model_name = models.CharField(max_length=100, blank=True)
+    match_probability = models.FloatField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.CANDIDATE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["left", "right"],
+                name="unique_person_entity_candidate_pair",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(left__lt=models.F("right")),
+                name="person_entity_candidate_pair_ordered",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["match_probability"]),
+        ]
+        ordering = ["-match_probability", "left_id", "right_id"]
+
+    def __str__(self) -> str:
+        return f"{self.left_id} ? {self.right_id}"
+
+
+class PersonEntityPairLabel(models.Model):
+    class Label(models.TextChoices):
+        MATCH = "match", "Match"
+        NOT_MATCH = "not_match", "Not match"
+        SKIP = "skip", "Skip"
+
+    pair = models.ForeignKey(
+        PersonEntityCandidatePair,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="labels",
+    )
+    pair_id_snapshot = models.CharField(max_length=64, blank=True)
+    label = models.CharField(max_length=20, choices=Label.choices)
+    source = models.CharField(max_length=100, default="human_active_learning")
+    model_name = models.CharField(max_length=100, blank=True)
+    match_probability = models.FloatField(null=True, blank=True)
+    features = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["label"]),
+            models.Index(fields=["source"]),
+            models.Index(fields=["created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.pair_id_snapshot}: {self.label}"
+
+
 class ScrapeError(models.Model):
     class Stage(models.TextChoices):
         FETCH = "fetch", "Fetch"
