@@ -35,7 +35,7 @@ class Command(BaseCommand):
             default="",
             help="Path to a trained sklearn entity model artifact. Defaults to heuristic scoring.",
         )
-        parser.add_argument("--accept-threshold", type=float, default=0.97)
+        parser.add_argument("--accept-threshold", type=float, default=0.5)
         parser.add_argument("--reject-threshold", type=float, default=0.35)
         parser.add_argument(
             "--auto-status",
@@ -83,7 +83,7 @@ def score_person_entity_candidates(
     chunk_size: int = 5000,
     model_name: str = HEURISTIC_MODEL_NAME,
     trained_model_path: str = "",
-    accept_threshold: float = 0.97,
+    accept_threshold: float = 0.5,
     reject_threshold: float = 0.35,
     auto_status: bool = False,
     dry_run: bool = False,

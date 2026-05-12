@@ -24,7 +24,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--model-name", default="person-entity-xgboost-namefreq-groups-v1")
-        parser.add_argument("--min-score", type=float, default=0.97)
+        parser.add_argument("--min-score", type=float, default=0.5)
         parser.add_argument("--limit", type=int, default=0)
         parser.add_argument("--dry-run", action="store_true")
 
@@ -47,7 +47,7 @@ class Command(BaseCommand):
 def apply_person_entity_matches(
     *,
     model_name: str = "person-entity-xgboost-namefreq-groups-v1",
-    min_score: float = 0.97,
+    min_score: float = 0.5,
     limit: int = 0,
     dry_run: bool = False,
 ) -> ApplyEntityMatchStats:

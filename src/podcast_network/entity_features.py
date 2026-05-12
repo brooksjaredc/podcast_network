@@ -131,6 +131,7 @@ def blocking_keys_for_profile(profile: EntityProfile) -> set[str]:
     if len(clean_tokens) >= 2:
         keys.add(f"clean-first-last:{clean_tokens[0]}:{clean_tokens[-1]}")
         keys.add(f"clean-first-two:{clean_tokens[0]}:{clean_tokens[1]}")
+        keys.add(f"clean-first-last-prefix:{clean_tokens[0]}:{clean_tokens[-1][:4]}")
     return keys
 
 
@@ -151,6 +152,12 @@ def person_pair_features(
     right_nickname_stripped_tokens = nickname_stripped_name_tokens(
         right.display_name,
         fallback=right.normalized_name,
+    )
+    left_alias_suffix_stripped_tokens = repeated_first_name_suffix_stripped_tokens(
+        left_clean_tokens
+    )
+    right_alias_suffix_stripped_tokens = repeated_first_name_suffix_stripped_tokens(
+        right_clean_tokens
     )
     left_clean_token_set = set(left_clean_tokens)
     right_clean_token_set = set(right_clean_tokens)
@@ -183,6 +190,10 @@ def person_pair_features(
     nickname_stripped_union_tokens = (
         left_nickname_stripped_token_set | right_nickname_stripped_token_set
     )
+    alias_suffix_stripped_left_set = set(left_alias_suffix_stripped_tokens)
+    alias_suffix_stripped_right_set = set(right_alias_suffix_stripped_tokens)
+    alias_suffix_stripped_shared = alias_suffix_stripped_left_set & alias_suffix_stripped_right_set
+    alias_suffix_stripped_union = alias_suffix_stripped_left_set | alias_suffix_stripped_right_set
     shared_podcasts = left.podcast_ids & right.podcast_ids
     podcast_union = left.podcast_ids | right.podcast_ids
     shared_genres = left.genres & right.genres
@@ -206,6 +217,18 @@ def person_pair_features(
     right_is_group_name = is_group_name(right_clean_tokens)
     group_shared_tokens = set(left_group_tokens) & set(right_group_tokens)
     group_union_tokens = set(left_group_tokens) | set(right_group_tokens)
+    cleaned_last_name_damerau_similarity = damerau_similarity(
+        last_or_empty(left_clean_tokens),
+        last_or_empty(right_clean_tokens),
+    )
+    cleaned_last_name_damerau_distance = damerau_distance(
+        last_or_empty(left_clean_tokens),
+        last_or_empty(right_clean_tokens),
+    )
+    cleaned_full_name_damerau_similarity = damerau_similarity(
+        " ".join(left_clean_tokens),
+        " ".join(right_clean_tokens),
+    )
     return {
         "name_sequence_ratio": round(
             SequenceMatcher(None, left.normalized_name, right.normalized_name).ratio(),
@@ -228,6 +251,10 @@ def person_pair_features(
         == first_or_empty(right_clean_tokens),
         "same_cleaned_last_token": last_or_empty(left_clean_tokens)
         == last_or_empty(right_clean_tokens),
+        "cleaned_last_name_damerau_similarity": cleaned_last_name_damerau_similarity,
+        "cleaned_full_name_damerau_similarity": cleaned_full_name_damerau_similarity,
+        "cleaned_last_names_within_one_edit": 0 < cleaned_last_name_damerau_distance <= 1,
+        "cleaned_last_names_within_two_edits": 0 < cleaned_last_name_damerau_distance <= 2,
         "same_cleaned_first_and_last_token": (
             first_or_empty(left_clean_tokens) == first_or_empty(right_clean_tokens)
             and last_or_empty(left_clean_tokens) == last_or_empty(right_clean_tokens)
@@ -246,6 +273,15 @@ def person_pair_features(
         "nickname_stripped_token_overlap_count": len(nickname_stripped_shared_tokens),
         "same_nickname_stripped_token_set": (
             left_nickname_stripped_token_set == right_nickname_stripped_token_set
+        ),
+        "alias_suffix_stripped_token_jaccard": round(
+            len(alias_suffix_stripped_shared) / len(alias_suffix_stripped_union),
+            6,
+        )
+        if alias_suffix_stripped_union
+        else 0.0,
+        "same_alias_suffix_stripped_token_set": (
+            alias_suffix_stripped_left_set == alias_suffix_stripped_right_set
         ),
         "one_name_has_quoted_nickname": has_quoted_or_parenthetical_name_part(
             left.display_name
@@ -384,6 +420,16 @@ def group_name_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(token for token in tokens if token not in LEADING_GROUP_ARTICLES)
 
 
+def repeated_first_name_suffix_stripped_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    if len(tokens) < 2:
+        return tokens
+    first = tokens[0]
+    last = tokens[-1]
+    if last.endswith(first) and len(last) > len(first) + 2:
+        return (*tokens[:-1], last[: -len(first)])
+    return tokens
+
+
 def nickname_stripped_name_tokens(value: str, *, fallback: str = "") -> tuple[str, ...]:
     stripped = QUOTED_OR_PARENTHETICAL_RE.sub(" ", value)
     tokens = cleaned_name_tokens(stripped)
@@ -398,6 +444,46 @@ def has_quoted_or_parenthetical_name_part(value: str) -> bool:
 
 def cleaned_sequence_ratio(left_tokens: tuple[str, ...], right_tokens: tuple[str, ...]) -> float:
     return round(SequenceMatcher(None, " ".join(left_tokens), " ".join(right_tokens)).ratio(), 6)
+
+
+def damerau_similarity(left: str, right: str) -> float:
+    if not left and not right:
+        return 1.0
+    if not left or not right:
+        return 0.0
+    distance = damerau_distance(left, right)
+    return round(1 - (distance / max(len(left), len(right))), 6)
+
+
+def damerau_distance(left: str, right: str) -> int:
+    if left == right:
+        return 0
+    rows = len(left) + 1
+    columns = len(right) + 1
+    matrix = [[0] * columns for _ in range(rows)]
+    for row in range(rows):
+        matrix[row][0] = row
+    for column in range(columns):
+        matrix[0][column] = column
+    for row in range(1, rows):
+        for column in range(1, columns):
+            substitution_cost = int(left[row - 1] != right[column - 1])
+            matrix[row][column] = min(
+                matrix[row - 1][column] + 1,
+                matrix[row][column - 1] + 1,
+                matrix[row - 1][column - 1] + substitution_cost,
+            )
+            if (
+                row > 1
+                and column > 1
+                and left[row - 1] == right[column - 2]
+                and left[row - 2] == right[column - 1]
+            ):
+                matrix[row][column] = min(
+                    matrix[row][column],
+                    matrix[row - 2][column - 2] + 1,
+                )
+    return matrix[-1][-1]
 
 
 def podcast_genres(podcast: Podcast) -> set[str]:

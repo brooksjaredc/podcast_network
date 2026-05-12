@@ -5,6 +5,7 @@ import asyncio
 from django.core.management import call_command
 from django.test import TestCase, TransactionTestCase
 
+from podcast_network.cleaning import clean_person_display_name
 from podcast_network.extraction.batch import build_batch_request
 from podcast_network.extraction.fake import FakeGuestExtractor
 from podcast_network.extraction.models import ExtractedGuestResult, GuestExtractionResult
@@ -31,6 +32,11 @@ from podcast_network.web.catalog.models import (
 
 
 class GuestExtractionTests(TestCase):
+    def test_person_display_cleaning_strips_only_terminal_here_tokens(self) -> None:
+        assert clean_person_display_name("Tim Andrews Here") == "Tim Andrews"
+        assert clean_person_display_name("Shereene Idriss") == "Shereene Idriss"
+        assert clean_person_display_name("John Here") == "John Here"
+
     def test_fake_extraction_persists_guest_candidates(self) -> None:
         episode = create_episode(title="A Conversation with Jane Doe")
 
@@ -520,6 +526,18 @@ class GuestExtractionTests(TestCase):
         )
         GuestCandidate.objects.create(
             extraction=extraction,
+            name="Autopritts",
+            normalized_name="autopritts",
+            confidence=0.99,
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Tim Andrews Here",
+            normalized_name="tim andrews here",
+            confidence=0.99,
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
             name="JOHN SMITH",
             normalized_name="john smith",
             confidence=0.99,
@@ -539,6 +557,8 @@ class GuestExtractionTests(TestCase):
             person__normalized_name="jane host",
         ).exists()
         assert Person.objects.filter(name="Auto Pritts", normalized_name="auto pritts").exists()
+        assert Person.objects.filter(name="Tim Andrews", normalized_name="tim andrews").exists()
+        assert not Person.objects.filter(normalized_name="tim andrews here").exists()
         assert Person.objects.filter(name="John Smith", normalized_name="john smith").exists()
         assert not Person.objects.filter(normalized_name="mike").exists()
 

@@ -167,12 +167,77 @@ def test_podcast_detail_links_guests() -> None:
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
+def test_frequent_guest_is_listed_as_cohost_and_removed_from_guest_list() -> None:
+    podcast = Podcast.objects.create(name="Daily Panel")
+    regular = Person.objects.create(name="Regular Panelist", normalized_name="regular panelist")
+    for index in range(101):
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid=f"daily-panel-{index}",
+            title=f"Episode {index}",
+            published_at=timezone.now(),
+        )
+        Appearance.objects.create(
+            episode=episode,
+            person=regular,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+
+    response = Client().get(f"/podcasts/{podcast.id}/")
+
+    assert response.status_code == 200
+    hosts_section = response.content.split(b"<h2>Frequent Guests</h2>")[0]
+    guests_section = response.content.split(b"<h2>Frequent Guests</h2>")[1]
+    assert b"Regular Panelist" in hosts_section
+    assert b"Regular Panelist" not in guests_section
+
+
+def test_database_graph_treats_frequent_guest_as_host_and_keeps_single_names() -> None:
+    podcast = Podcast.objects.create(name="Daily Panel")
+    regular = Person.objects.create(name="Regular Panelist", normalized_name="regular panelist")
+    prince = Person.objects.create(name="Prince", normalized_name="prince")
+    for index in range(101):
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid=f"daily-panel-graph-{index}",
+            title=f"Episode {index}",
+        )
+        Appearance.objects.create(
+            episode=episode,
+            person=regular,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+    single_episode = Episode.objects.create(
+        podcast=podcast,
+        guid="daily-panel-single",
+        title="Single Name Episode",
+    )
+    Appearance.objects.create(
+        episode=single_episode,
+        person=prince,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    database_six_degrees_graph.cache_clear()
+
+    graph = database_six_degrees_graph()
+
+    assert graph._adjacency["Regular Panelist"]["Daily Panel"] == Appearance.Role.HOST
+    assert "Prince" in graph.names
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
 def test_person_detail_loads() -> None:
-    _, _, joe, _ = make_db_graph()
+    first_podcast, _, joe, _ = make_db_graph()
     response = Client().get(f"/people/{joe.id}/")
 
     assert response.status_code == 200
     assert b"Joe Rogan" in response.content
+    assert b"Hosts or Co-hosts" in response.content
+    assert b"The Joe Rogan Experience" in response.content
+    assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])

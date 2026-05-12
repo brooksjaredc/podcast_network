@@ -5,6 +5,24 @@
 {% block content %}
   <h1>{{ person.name }}</h1>
 
+  <h2>Hosts or Co-hosts</h2>
+  <table>
+    <thead>
+      <tr><th>Podcast</th><th>Host Episodes</th><th>Most Recent</th></tr>
+    </thead>
+    <tbody>
+      {% for podcast in host_podcast_rows %}
+        <tr>
+          <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
+          <td>{{ podcast.appearances_count }}</td>
+          <td>{{ podcast.latest|date:"Y-m-d" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3">No host or co-host podcasts loaded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
   <div class="grid">
     <section class="panel">
       <h2>Guest On</h2>
@@ -33,19 +51,21 @@
     </section>
   </div>
 
-  <h2>Guest Appearances</h2>
+  <h2>Podcast Appearance Summary</h2>
   <table>
     <thead>
       <tr><th>Podcast</th><th>Duration</th><th>Appearances</th><th>Most Recent</th></tr>
     </thead>
     <tbody>
-      {% for episode in recent_episodes %}
+      {% for podcast in podcast_rows %}
         <tr>
-          <td><a href="{% url 'explorer:podcast_detail' episode.podcast_id %}">{{ episode.podcast.name }}</a></td>
+          <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
           <td></td>
-          <td>1</td>
-          <td>{{ episode.published_at|date:"Y-m-d" }}</td>
+          <td>{{ podcast.appearances_count }}</td>
+          <td>{{ podcast.latest|date:"Y-m-d" }}</td>
         </tr>
+      {% empty %}
+        <tr><td colspan="4">No guest podcast summaries loaded.</td></tr>
       {% endfor %}
     </tbody>
   </table>

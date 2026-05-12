@@ -14,9 +14,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--model", default=str(CURRENT_ENTITY_MODEL))
-        parser.add_argument("--min-score", type=float, default=0.97)
+        parser.add_argument("--min-score", type=float, default=0.5)
         parser.add_argument("--limit-pairs", type=int, default=10000)
-        parser.add_argument("--min-observations", type=int, default=2)
+        parser.add_argument("--min-observations", type=int, default=1)
         parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args: object, **options: object) -> None:

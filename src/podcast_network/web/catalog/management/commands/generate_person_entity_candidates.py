@@ -10,8 +10,10 @@ from podcast_network.entity_features import (
     EntityProfile,
     blocking_keys_for_profile,
     cleaned_name_tokens,
+    damerau_distance,
     person_pair_features,
     profile_for_entity,
+    repeated_first_name_suffix_stripped_tokens,
 )
 from podcast_network.entity_resolution import person_candidate_pair_id
 from podcast_network.web.catalog.models import (
@@ -32,7 +34,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--limit-pairs", type=int, default=10000)
-        parser.add_argument("--min-observations", type=int, default=2)
+        parser.add_argument("--min-observations", type=int, default=1)
         parser.add_argument("--max-block-size", type=int, default=200)
         parser.add_argument("--chunk-size", type=int, default=5000)
         parser.add_argument("--clear", action="store_true")
@@ -59,7 +61,7 @@ class Command(BaseCommand):
 def generate_person_entity_candidates(
     *,
     limit_pairs: int = 10000,
-    min_observations: int = 2,
+    min_observations: int = 1,
     max_block_size: int = 200,
     chunk_size: int = 5000,
     clear: bool = False,
@@ -147,12 +149,30 @@ def candidate_sort_key(
 
 
 def viable_candidate_pair(left: EntityProfile, right: EntityProfile) -> bool:
-    left_clean_tokens = set(cleaned_name_tokens(left.normalized_name))
-    right_clean_tokens = set(cleaned_name_tokens(right.normalized_name))
-    shared_clean_tokens = left_clean_tokens & right_clean_tokens
-    if not left_clean_tokens or not right_clean_tokens:
+    left_clean_tokens = cleaned_name_tokens(left.normalized_name)
+    right_clean_tokens = cleaned_name_tokens(right.normalized_name)
+    left_clean_token_set = set(left_clean_tokens)
+    right_clean_token_set = set(right_clean_tokens)
+    shared_clean_tokens = left_clean_token_set & right_clean_token_set
+    if not left_clean_token_set or not right_clean_token_set:
         return False
-    if left_clean_tokens == right_clean_tokens:
+    if left_clean_token_set == right_clean_token_set:
+        return True
+    if set(repeated_first_name_suffix_stripped_tokens(left_clean_tokens)) == set(
+        repeated_first_name_suffix_stripped_tokens(right_clean_tokens)
+    ):
+        return True
+    if (
+        len(left_clean_tokens) >= 2
+        and len(right_clean_tokens) >= 2
+        and left_clean_tokens[0] == right_clean_tokens[0]
+        and 0
+        < damerau_distance(
+            left_clean_tokens[-1],
+            right_clean_tokens[-1],
+        )
+        <= 2
+    ):
         return True
     return len(shared_clean_tokens) >= 2
 

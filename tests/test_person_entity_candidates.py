@@ -7,10 +7,12 @@ from podcast_network.entity_features import (
     EntityProfile,
     apply_entity_score_guards,
     cleaned_name_tokens,
+    damerau_distance,
     heuristic_person_match_score,
     nickname_stripped_name_tokens,
     person_pair_features,
     profile_for_entity,
+    repeated_first_name_suffix_stripped_tokens,
 )
 from podcast_network.web.catalog.models import (
     Appearance,
@@ -127,6 +129,14 @@ class PersonEntityCandidateTests(TestCase):
         assert features["same_group_name_tokens"] is False
         assert guarded_score == 0.2
         assert "distinct group names are not person matches" in reasons
+
+    def test_name_cleanup_features_cover_alias_suffixes_and_typo_edits(self) -> None:
+        assert repeated_first_name_suffix_stripped_tokens(("nick", "englishnick")) == (
+            "nick",
+            "english",
+        )
+        assert damerau_distance("caiaccio", "caiacio") == 1
+        assert damerau_distance("caiaccio", "caiaicio") <= 2
 
     def test_pair_features_include_string_podcast_genre_and_graph_signals(self) -> None:
         podcast = Podcast.objects.create(

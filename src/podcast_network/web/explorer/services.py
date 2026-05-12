@@ -1,6 +1,8 @@
 from functools import lru_cache
 
-from podcast_network.cleaning import is_likely_english_podcast_name, is_single_token_person_name
+from django.db.models import Count
+
+from podcast_network.cleaning import is_likely_english_podcast_name
 from podcast_network.data import LegacyRepository
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import Edge
@@ -24,15 +26,14 @@ def database_six_degrees_graph() -> SixDegreesGraph:
     person_ids: dict[str, int] = {}
     podcast_ids: dict[str, int] = {}
 
-    if PersonEntityLink.objects.exists():
-        rows = canonical_graph_rows()
-    else:
-        rows = raw_appearance_graph_rows()
-    for person_name, person_id, podcast_name, podcast_id, role in rows:
-        if is_single_token_person_name(person_name) or not is_likely_english_podcast_name(
-            podcast_name
-        ):
+    use_canonical_links = PersonEntityLink.objects.exists()
+    cohost_keys = frequent_guest_cohost_keys(use_canonical_links=use_canonical_links)
+    rows = canonical_graph_rows() if use_canonical_links else raw_appearance_graph_rows()
+    for person_name, person_id, podcast_name, podcast_id, role, entity_id in rows:
+        if not is_likely_english_podcast_name(podcast_name):
             continue
+        if (entity_id or person_id, podcast_id) in cohost_keys:
+            role = Appearance.Role.HOST
         names.add(person_name)
         person_ids.setdefault(person_name, person_id)
         podcast_ids.setdefault(podcast_name, podcast_id)
@@ -57,6 +58,7 @@ def canonical_graph_rows():
             "observation__episode__podcast__name",
             "observation__episode__podcast_id",
             "observation__role",
+            "canonical_id",
         )
         .iterator(chunk_size=10_000)
     )
@@ -72,6 +74,27 @@ def raw_appearance_graph_rows():
             "episode__podcast__name",
             "episode__podcast_id",
             "role",
+            "person_id",
         )
         .iterator(chunk_size=10_000)
     )
+
+
+def frequent_guest_cohost_keys(*, use_canonical_links: bool) -> set[tuple[str | int, int]]:
+    if use_canonical_links:
+        rows = (
+            PersonEntityLink.objects.filter(observation__role=Appearance.Role.GUEST)
+            .values("canonical_id", "observation__episode__podcast_id")
+            .annotate(guest_episode_count=Count("observation__episode_id", distinct=True))
+            .filter(guest_episode_count__gt=100)
+            .values_list("canonical_id", "observation__episode__podcast_id")
+        )
+    else:
+        rows = (
+            Appearance.objects.filter(role=Appearance.Role.GUEST)
+            .values("person_id", "episode__podcast_id")
+            .annotate(guest_episode_count=Count("episode_id", distinct=True))
+            .filter(guest_episode_count__gt=100)
+            .values_list("person_id", "episode__podcast_id")
+        )
+    return set(rows)
