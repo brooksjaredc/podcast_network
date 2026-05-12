@@ -141,3 +141,95 @@ class PersonEntityResolutionTests(TestCase):
 
         assert "Tim Andrews Here" in graph.names
         assert "Tim Andrews" not in graph.names
+
+    def test_known_person_aliases_can_be_scoped_by_podcast(self) -> None:
+        startalk = Podcast.objects.create(name="StarTalk Radio")
+        other_show = Podcast.objects.create(name="Other Science Show")
+        startalk_episode = Episode.objects.create(
+            podcast=startalk,
+            guid="startalk-1",
+            title="Episode 1",
+        )
+        other_episode = Episode.objects.create(
+            podcast=other_show,
+            guid="other-science-1",
+            title="Episode 1",
+        )
+        neil_full = Person.objects.create(
+            name="Neil deGrasse Tyson",
+            normalized_name="neil degrasse tyson",
+        )
+        neil_short = Person.objects.create(name="Neil Tyson", normalized_name="neil tyson")
+        Appearance.objects.create(
+            episode=startalk_episode,
+            person=neil_full,
+            role=Appearance.Role.HOST,
+        )
+        Appearance.objects.create(
+            episode=startalk_episode,
+            person=neil_short,
+            role=Appearance.Role.GUEST,
+        )
+        Appearance.objects.create(
+            episode=other_episode,
+            person=neil_short,
+            role=Appearance.Role.GUEST,
+        )
+
+        call_command("sync_person_entities")
+        call_command("apply_known_person_entity_aliases")
+
+        target = CanonicalPersonEntity.objects.get(normalized_name="neil degrasse tyson")
+        assert PersonEntityLink.objects.filter(
+            observation__podcast=startalk,
+            observation__person=neil_short,
+            canonical=target,
+            match_method="known_person_alias",
+        ).exists()
+        assert PersonEntityLink.objects.filter(
+            observation__podcast=other_show,
+            observation__person=neil_short,
+            canonical__normalized_name="neil tyson",
+        ).exists()
+
+    def test_known_person_aliases_merge_global_and_podcast_specific_aliases(self) -> None:
+        startalk = Podcast.objects.create(name="StarTalk Radio")
+        von = Podcast.objects.create(name="The Von Haessler Doctrine")
+        science_episode = Episode.objects.create(
+            podcast=startalk,
+            guid="science-guy-1",
+            title="Episode 1",
+        )
+        von_episode = Episode.objects.create(
+            podcast=von,
+            guid="dr-joe-1",
+            title="Episode 1",
+        )
+        bill = Person.objects.create(name="Bill Nye", normalized_name="bill nye")
+        bill_long = Person.objects.create(
+            name="Bill Nye the Science Guy",
+            normalized_name="bill nye the science guy",
+        )
+        dr_joe = Person.objects.create(name="Dr Joe", normalized_name="dr joe")
+        dr_joe_full = Person.objects.create(
+            name="Dr Joe Esposito",
+            normalized_name="dr joe esposito",
+        )
+        for person in [bill, bill_long]:
+            Appearance.objects.create(episode=science_episode, person=person, role="guest")
+        for person in [dr_joe, dr_joe_full]:
+            Appearance.objects.create(episode=von_episode, person=person, role="guest")
+
+        call_command("sync_person_entities")
+        call_command("apply_known_person_entity_aliases")
+
+        assert PersonEntityLink.objects.filter(
+            observation__person=bill_long,
+            canonical__normalized_name="bill nye",
+            match_method="known_person_alias",
+        ).exists()
+        assert PersonEntityLink.objects.filter(
+            observation__person=dr_joe,
+            canonical__normalized_name="dr joe esposito",
+            match_method="known_person_alias",
+        ).exists()

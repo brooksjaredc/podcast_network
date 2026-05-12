@@ -34,6 +34,9 @@ from podcast_network.web.catalog.models import (
 class GuestExtractionTests(TestCase):
     def test_person_display_cleaning_strips_only_terminal_here_tokens(self) -> None:
         assert clean_person_display_name("Tim Andrews Here") == "Tim Andrews"
+        assert clean_person_display_name("Tim AndrewsHere") == "Tim Andrews"
+        assert clean_person_display_name("EnglishNick67") == "English Nick"
+        assert clean_person_display_name("@EnglishNick67") == "English Nick"
         assert clean_person_display_name("Shereene Idriss") == "Shereene Idriss"
         assert clean_person_display_name("John Here") == "John Here"
 
@@ -538,6 +541,12 @@ class GuestExtractionTests(TestCase):
         )
         GuestCandidate.objects.create(
             extraction=extraction,
+            name="EnglishNick67",
+            normalized_name="english nick67",
+            confidence=0.99,
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
             name="JOHN SMITH",
             normalized_name="john smith",
             confidence=0.99,
@@ -549,7 +558,13 @@ class GuestExtractionTests(TestCase):
             confidence=0.99,
         )
 
-        call_command("sync_guest_appearances", "--min-confidence", "0.90")
+        call_command(
+            "sync_guest_appearances",
+            "--prompt-version",
+            "guest-extraction-v6",
+            "--min-confidence",
+            "0.90",
+        )
 
         assert Appearance.objects.filter(role=Appearance.Role.HOST).count() == 1
         assert not Appearance.objects.filter(
@@ -559,6 +574,8 @@ class GuestExtractionTests(TestCase):
         assert Person.objects.filter(name="Auto Pritts", normalized_name="auto pritts").exists()
         assert Person.objects.filter(name="Tim Andrews", normalized_name="tim andrews").exists()
         assert not Person.objects.filter(normalized_name="tim andrews here").exists()
+        assert Person.objects.filter(name="English Nick", normalized_name="english nick").exists()
+        assert not Person.objects.filter(normalized_name="english nick67").exists()
         assert Person.objects.filter(name="John Smith", normalized_name="john smith").exists()
         assert not Person.objects.filter(normalized_name="mike").exists()
 

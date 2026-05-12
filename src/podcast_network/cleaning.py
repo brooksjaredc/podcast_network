@@ -22,9 +22,11 @@ def clean_person_display_name(value: str) -> str:
     name = value.strip()
     handle = TWITTER_HANDLE_RE.match(name)
     if handle:
-        name = split_compact_name(handle.group(1).replace("_", " "))
+        name = handle.group(1).replace("_", " ")
+    name = split_compact_name(name)
     name = KNOWN_COMPACT_PERSON_NAMES.get(name.casefold(), name)
     name = strip_terminal_here_token(name)
+    name = strip_trailing_handle_digits(name)
 
     if is_all_caps_name(name):
         name = name.title()
@@ -41,6 +43,16 @@ def strip_terminal_here_token(value: str) -> str:
     tokens = value.split()
     if len(tokens) >= 3 and tokens[-1].casefold() == "here":
         return " ".join(tokens[:-1])
+    return value
+
+
+def strip_trailing_handle_digits(value: str) -> str:
+    tokens = value.split()
+    if len(tokens) < 2:
+        return value
+    cleaned_last = re.sub(r"(?<=[A-Za-z])\d{1,4}$", "", tokens[-1])
+    if cleaned_last and cleaned_last != tokens[-1]:
+        return " ".join([*tokens[:-1], cleaned_last])
     return value
 
 

@@ -42,6 +42,7 @@ class Command(BaseCommand):
             model_name=CURRENT_ENTITY_MODEL_NAME,
             min_score=float(options["min_score"]),
         )
+        call_command("apply_known_person_entity_aliases")
         self.stdout.write(
             self.style.SUCCESS(
                 f"Refreshed person entity resolution with {CURRENT_ENTITY_MODEL_NAME}."

@@ -6,7 +6,7 @@ from django.db.models import Q
 
 from podcast_network.web.catalog.models import Episode, HostCandidate, PodcastHostExtraction
 
-PROMPT_VERSION = "guest-extraction-v6"
+PROMPT_VERSION = "guest-extraction-v7"
 
 GUEST_EXTRACTION_INSTRUCTIONS = """
 Extract podcast episode guest names from episode metadata.
@@ -19,6 +19,10 @@ Rules:
 - Do not return people who are only topics of discussion, historical figures, authors,
   politicians, celebrities, or news subjects unless the metadata says they are actually
   present as a guest, caller, interviewee, featured guest, or panelist.
+- When a person is mentioned because the hosts are discussing their work, news, politics,
+  sports performance, death, scandal, book, movie, article, tweet, post, quote, or public
+  behavior, treat that person as a topic of conversation and exclude them unless there is
+  a direct presence cue for this episode.
 - Do not return hosts, co-hosts, producers, regular cast members, or recurring show
   participants unless the metadata explicitly frames them as guests for this episode.
 - If the input includes known podcast hosts, do not return those people as guests unless
@@ -64,6 +68,14 @@ Examples:
 - Title: "The Thunder Are Champions. What Is Houston's Ceiling With KD?"
   Guests: none
   Reason: KD is a topic of discussion, not identified as present.
+
+- Description: "We react to Elon Musk's latest tweets and the White House response."
+  Guests: none
+  Reason: Elon Musk is a topic of discussion, not identified as present.
+
+- Description: "The hosts break down Taylor Swift's new album and tour rumors."
+  Guests: none
+  Reason: Taylor Swift is an entertainment topic, not identified as present.
 
 - Title: "How to Lead and Command Ultimate Respect. With the Armed Forces Officer Manual"
   Guests: none
