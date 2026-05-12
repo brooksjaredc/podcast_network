@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
 from sklearn.model_selection import train_test_split
 
+from podcast_network.entity_features import apply_entity_score_guards
 from podcast_network.entity_model import (
     FEATURE_NAMES,
     build_pipeline,
@@ -172,7 +173,16 @@ def write_diagnostics(
         model_options=model_options,
     )
     pipeline.fit(x[train_indexes], y[train_indexes])
-    probabilities = pipeline.predict_proba(x[test_indexes])[:, 1]
+    raw_probabilities = pipeline.predict_proba(x[test_indexes])[:, 1]
+    probabilities = np.array(
+        [
+            apply_entity_score_guards(
+                float(probability),
+                training_features(labels[int(position)]),
+            )[0]
+            for position, probability in zip(test_indexes, raw_probabilities, strict=True)
+        ]
+    )
     predictions = (probabilities >= 0.5).astype(int)
     precision, recall, f1, _ = precision_recall_fscore_support(
         y[test_indexes],
@@ -278,6 +288,15 @@ def key_feature_summary(features: dict) -> str:
         "extra_cleaned_tokens_are_initials",
         "cleaned_token_containment_with_same_first_last",
         "cleaned_token_containment_with_different_last",
+        "both_group_names",
+        "one_group_name",
+        "group_name_token_jaccard",
+        "same_group_name_tokens",
+        "shared_group_designator",
+        "shared_first_name_per_million",
+        "shared_last_name_per_million",
+        "shared_name_commonness_score",
+        "same_common_first_and_last_name",
         "shared_podcast_count",
         "genre_jaccard",
         "role_jaccard",

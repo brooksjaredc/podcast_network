@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from podcast_network.entity_features import (
     EntityProfile,
+    apply_entity_score_guards,
     cleaned_name_tokens,
     heuristic_person_match_score,
     nickname_stripped_name_tokens,
@@ -93,6 +94,39 @@ class PersonEntityCandidateTests(TestCase):
         assert features["nickname_stripped_token_jaccard"] == 1.0
         assert score >= 0.95
         assert "same name after stripping quoted nickname" in reasons
+
+    def test_group_name_features_and_guard_prevent_distinct_group_matches(self) -> None:
+        left = EntityProfile(
+            entity_id="left",
+            display_name="The Lucas Brothers",
+            normalized_name="the lucas brothers",
+            tokens=("the", "lucas", "brothers"),
+            alpha_tokens=("the", "lucas", "brothers"),
+            observation_count=2,
+            roles=("guest",),
+            podcast_ids=frozenset({1}),
+            genres=frozenset({"comedy"}),
+        )
+        right = EntityProfile(
+            entity_id="right",
+            display_name="The Sklar Brothers",
+            normalized_name="the sklar brothers",
+            tokens=("the", "sklar", "brothers"),
+            alpha_tokens=("the", "sklar", "brothers"),
+            observation_count=2,
+            roles=("guest",),
+            podcast_ids=frozenset({1}),
+            genres=frozenset({"comedy"}),
+        )
+
+        features = person_pair_features(left, right)
+        guarded_score, reasons = apply_entity_score_guards(0.91, features)
+
+        assert features["both_group_names"] is True
+        assert features["shared_group_designator"] is True
+        assert features["same_group_name_tokens"] is False
+        assert guarded_score == 0.2
+        assert "distinct group names are not person matches" in reasons
 
     def test_pair_features_include_string_podcast_genre_and_graph_signals(self) -> None:
         podcast = Podcast.objects.create(

@@ -87,15 +87,23 @@ def sync_person_entities(
     bulk_upsert_observations(observations, chunk_size=chunk_size)
     canonicals = canonical_entities_for_observations(observations)
     bulk_upsert_canonicals(canonicals, chunk_size=chunk_size)
-    links = [
-        PersonEntityLink(
-            observation_id=observation.observation_id,
-            canonical_id=canonical_person_id(observation.normalized_name),
-            match_method="exact_normalized_name",
-            match_probability=1.0,
+    preserved_links = existing_non_exact_links(
+        observation_ids=[observation.observation_id for observation in observations],
+    )
+    links = []
+    for observation in observations:
+        preserved = preserved_links.get(observation.observation_id)
+        if preserved is not None:
+            links.append(preserved)
+            continue
+        links.append(
+            PersonEntityLink(
+                observation_id=observation.observation_id,
+                canonical_id=canonical_person_id(observation.normalized_name),
+                match_method="exact_normalized_name",
+                match_probability=1.0,
+            )
         )
-        for observation in observations
-    ]
     bulk_upsert_links(links, chunk_size=chunk_size)
     return EntitySyncStats(
         appearances_seen=appearances_seen,
@@ -103,6 +111,23 @@ def sync_person_entities(
         canonicals_upserted=len(canonicals),
         links_upserted=len(links),
     )
+
+
+def existing_non_exact_links(observation_ids: list[str]) -> dict[str, PersonEntityLink]:
+    if not observation_ids:
+        return {}
+    rows = PersonEntityLink.objects.filter(
+        observation_id__in=observation_ids,
+    ).exclude(match_method="exact_normalized_name")
+    return {
+        row.observation_id: PersonEntityLink(
+            observation_id=row.observation_id,
+            canonical_id=row.canonical_id,
+            match_method=row.match_method,
+            match_probability=row.match_probability,
+        )
+        for row in rows
+    }
 
 
 def observation_from_appearance(appearance: Appearance) -> PersonObservation:

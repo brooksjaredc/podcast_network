@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand, CommandParser
 
 from podcast_network.entity_features import (
     HEURISTIC_MODEL_NAME,
+    apply_entity_score_guards,
     heuristic_person_match_score,
 )
 from podcast_network.entity_model import load_entity_model, predict_match_probability
@@ -104,9 +105,10 @@ def score_person_entity_candidates(
             score, reasons = heuristic_person_match_score(pair.features)
         else:
             score = predict_match_probability(trained_model, pair.features)
+            score, reasons = apply_entity_score_guards(score, pair.features)
         pair.match_probability = score
         pair.model_name = model_name
-        if trained_model is None:
+        if trained_model is None or reasons:
             pair.features = {**pair.features, "heuristic_reasons": reasons}
         if auto_status and score >= accept_threshold:
             pair.status = PersonEntityCandidatePair.Status.ACCEPTED

@@ -4,6 +4,10 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
+from podcast_network.name_frequency import (
+    shared_name_frequency_features,
+    token_name_frequency_features,
+)
 from podcast_network.web.catalog.models import CanonicalPersonEntity, PersonObservation, Podcast
 
 TOKEN_RE = re.compile(r"[a-z]+|\d+")
@@ -11,6 +15,25 @@ QUOTED_OR_PARENTHETICAL_RE = re.compile(
     r'"[^"]+"|“[^”]+”|‘[^’]+’|\'[^\']+\'|\([^)]*\)'
 )
 HEURISTIC_MODEL_NAME = "person-entity-heuristic-v1"
+LEADING_GROUP_ARTICLES = {"a", "an", "the"}
+GROUP_NAME_TOKENS = {
+    "band",
+    "boys",
+    "brother",
+    "brothers",
+    "crew",
+    "duo",
+    "family",
+    "girls",
+    "group",
+    "sister",
+    "sisters",
+    "sketch",
+    "squad",
+    "team",
+    "trio",
+    "twins",
+}
 NAME_NOISE_TOKENS = {
     "dr",
     "doctor",
@@ -171,6 +194,18 @@ def person_pair_features(
         shared_podcasts=shared_podcasts,
         shared_neighbors=left_neighbors & right_neighbors,
     )
+    left_frequency_features = token_name_frequency_features(left_clean_tokens)
+    right_frequency_features = token_name_frequency_features(right_clean_tokens)
+    shared_frequency_features = shared_name_frequency_features(
+        left_clean_tokens,
+        right_clean_tokens,
+    )
+    left_group_tokens = group_name_tokens(left_clean_tokens)
+    right_group_tokens = group_name_tokens(right_clean_tokens)
+    left_is_group_name = is_group_name(left_clean_tokens)
+    right_is_group_name = is_group_name(right_clean_tokens)
+    group_shared_tokens = set(left_group_tokens) & set(right_group_tokens)
+    group_union_tokens = set(left_group_tokens) | set(right_group_tokens)
     return {
         "name_sequence_ratio": round(
             SequenceMatcher(None, left.normalized_name, right.normalized_name).ratio(),
@@ -241,6 +276,50 @@ def person_pair_features(
         ),
         "left_observation_count": left.observation_count,
         "right_observation_count": right.observation_count,
+        "left_is_group_name": left_is_group_name,
+        "right_is_group_name": right_is_group_name,
+        "one_group_name": left_is_group_name != right_is_group_name,
+        "both_group_names": left_is_group_name and right_is_group_name,
+        "group_name_token_jaccard": round(len(group_shared_tokens) / len(group_union_tokens), 6)
+        if group_union_tokens
+        else 0.0,
+        "same_group_name_tokens": bool(group_union_tokens)
+        and set(left_group_tokens) == set(right_group_tokens),
+        "shared_group_designator": bool(
+            set(left_group_tokens)
+            & set(right_group_tokens)
+            & GROUP_NAME_TOKENS
+        ),
+        "left_first_name_per_million": left_frequency_features["first_name_per_million"],
+        "right_first_name_per_million": right_frequency_features["first_name_per_million"],
+        "max_first_name_per_million": max(
+            left_frequency_features["first_name_per_million"],
+            right_frequency_features["first_name_per_million"],
+        ),
+        "left_last_name_per_million": left_frequency_features["last_name_per_million"],
+        "right_last_name_per_million": right_frequency_features["last_name_per_million"],
+        "max_last_name_per_million": max(
+            left_frequency_features["last_name_per_million"],
+            right_frequency_features["last_name_per_million"],
+        ),
+        "left_name_commonness_score": left_frequency_features["name_commonness_score"],
+        "right_name_commonness_score": right_frequency_features["name_commonness_score"],
+        "max_name_commonness_score": max(
+            left_frequency_features["name_commonness_score"],
+            right_frequency_features["name_commonness_score"],
+        ),
+        "shared_first_name_per_million": shared_frequency_features[
+            "shared_first_name_per_million"
+        ],
+        "shared_last_name_per_million": shared_frequency_features["shared_last_name_per_million"],
+        "shared_name_commonness_score": shared_frequency_features[
+            "shared_name_commonness_score"
+        ],
+        "same_common_first_name": shared_frequency_features["same_common_first_name"],
+        "same_common_last_name": shared_frequency_features["same_common_last_name"],
+        "same_common_first_and_last_name": shared_frequency_features[
+            "same_common_first_and_last_name"
+        ],
         "shared_podcast_count": len(shared_podcasts),
         "podcast_jaccard": round(len(shared_podcasts) / len(podcast_union), 6)
         if podcast_union
@@ -295,6 +374,14 @@ def cleaned_name_tokens(value: str) -> tuple[str, ...]:
             continue
         output.append(token)
     return tuple(output)
+
+
+def is_group_name(tokens: tuple[str, ...]) -> bool:
+    return bool(set(tokens) & GROUP_NAME_TOKENS)
+
+
+def group_name_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(token for token in tokens if token not in LEADING_GROUP_ARTICLES)
 
 
 def nickname_stripped_name_tokens(value: str, *, fallback: str = "") -> tuple[str, ...]:
@@ -413,4 +500,20 @@ def heuristic_person_match_score(features: dict) -> tuple[float, list[str]]:
         score -= 0.05
         reasons.append("no graph proximity")
 
-    return round(max(0.0, min(score, 0.999)), 6), reasons
+    score, guard_reasons = apply_entity_score_guards(score, features)
+    return round(max(0.0, min(score, 0.999)), 6), reasons + guard_reasons
+
+
+def apply_entity_score_guards(score: float, features: dict) -> tuple[float, list[str]]:
+    reasons = []
+    if (
+        features.get("both_group_names")
+        and not features.get("same_group_name_tokens")
+        and score > 0.2
+    ):
+        score = 0.2
+        reasons.append("distinct group names are not person matches")
+    elif features.get("one_group_name") and score > 0.3:
+        score = 0.3
+        reasons.append("group name compared with person name")
+    return score, reasons
