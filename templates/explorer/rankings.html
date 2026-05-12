@@ -5,10 +5,26 @@
 {% block content %}
   <h1>{{ rank_label }}</h1>
 
+  <section class="panel">
+    <h2>Metric Guide</h2>
+    <dl>
+      {% for item in ranking_definitions %}
+        <dt>{{ item.name }}</dt>
+        <dd>{{ item.description }}</dd>
+      {% endfor %}
+    </dl>
+  </section>
+
   <form class="toolbar" method="get">
     <input name="q" value="{{ query }}" placeholder="Search people">
     <select name="rank">
-      <option value="appearances" selected>Guest appearances</option>
+      <option value="appearances" {% if rank == "appearances" %}selected{% endif %}>Guest appearances</option>
+      <option value="pr" {% if rank == "pr" %}selected{% endif %}>PageRank</option>
+      <option value="hub" {% if rank == "hub" %}selected{% endif %}>Hub</option>
+      <option value="auth" {% if rank == "auth" %}selected{% endif %}>Authority</option>
+      <option value="degree" {% if rank == "degree" %}selected{% endif %}>Degree</option>
+      <option value="bt" {% if rank == "bt" %}selected{% endif %}>Betweenness</option>
+      <option value="close" {% if rank == "close" %}selected{% endif %}>Closeness</option>
     </select>
     <button type="submit">Apply</button>
   </form>
@@ -33,10 +49,21 @@
       {% for person in people %}
         <tr>
           <td>{{ forloop.counter }}</td>
-          <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-          <td>{{ person.appearances_count }}</td>
+          {% if person.representative_person_id %}
+            <td><a href="{% url 'explorer:person_detail' person.representative_person_id %}">{{ person.display_name }}</a></td>
+            <td>{{ person.guest_appearances }}</td>
+          {% else %}
+            <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
+            <td>{{ person.appearances_count }}</td>
+          {% endif %}
           <td>{{ person.podcast_count }}</td>
-          <td>{{ person.latest|date:"Y-m-d" }}</td>
+          <td>
+            {% if person.latest_episode_at %}
+              {{ person.latest_episode_at|date:"Y-m-d" }}
+            {% else %}
+              {{ person.latest|date:"Y-m-d" }}
+            {% endif %}
+          </td>
         </tr>
       {% endfor %}
     </tbody>

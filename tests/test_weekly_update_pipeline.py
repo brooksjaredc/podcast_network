@@ -17,10 +17,14 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
         "sync_guest_appearances",
         "promote_frequent_guests_to_cohosts",
         "refresh_person_entity_resolution",
+        "calculate_network_metrics",
     ]
     batch_step = steps[1]
     assert batch_step.options["new_episodes_only"] is True
     assert batch_step.options["prompt_version"] == "guest-extraction-v7"
+    promotion_step = steps[3]
+    assert promotion_step.options["threshold"] == 100
+    assert promotion_step.options["episode_share_threshold"] == 0.20
 
 
 def test_weekly_update_plan_can_reprocess_current_prompt() -> None:
@@ -55,10 +59,12 @@ def default_options() -> dict[str, object]:
         "review_max_confidence": 0.90,
         "min_guest_confidence": 0.90,
         "cohost_threshold": 100,
+        "cohost_episode_share_threshold": 0.20,
         "entity_limit_pairs": 20000,
         "reprocess_current_prompt": False,
         "skip_scrape": False,
         "skip_llm": False,
         "skip_processing": False,
         "skip_entity_resolution": False,
+        "skip_network_metrics": False,
     }

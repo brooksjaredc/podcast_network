@@ -341,6 +341,127 @@ class PersonEntityPairLabel(models.Model):
         return f"{self.pair_id_snapshot}: {self.label}"
 
 
+class NetworkMetricRun(models.Model):
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RUNNING)
+    graph_version = models.CharField(max_length=50, default="network-metrics-v1")
+    person_nodes = models.PositiveIntegerField(default=0)
+    person_edges = models.PositiveIntegerField(default=0)
+    podcast_nodes = models.PositiveIntegerField(default=0)
+    podcast_edges = models.PositiveIntegerField(default=0)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        return f"NetworkMetricRun #{self.pk or 'new'} {self.status}"
+
+
+class PersonNetworkMetric(models.Model):
+    run = models.ForeignKey(
+        NetworkMetricRun,
+        on_delete=models.CASCADE,
+        related_name="person_metrics",
+    )
+    canonical = models.ForeignKey(
+        CanonicalPersonEntity,
+        on_delete=models.CASCADE,
+        related_name="network_metrics",
+    )
+    display_name = models.CharField(max_length=500)
+    representative_person = models.ForeignKey(
+        Person,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="represented_network_metrics",
+    )
+    pagerank = models.FloatField(default=0.0)
+    hub = models.FloatField(default=0.0)
+    authority = models.FloatField(default=0.0)
+    closeness = models.FloatField(default=0.0)
+    betweenness = models.FloatField(default=0.0)
+    degree_centrality = models.FloatField(default=0.0)
+    pagerank_rank = models.PositiveIntegerField(default=0)
+    hub_rank = models.PositiveIntegerField(default=0)
+    authority_rank = models.PositiveIntegerField(default=0)
+    closeness_rank = models.PositiveIntegerField(default=0)
+    betweenness_rank = models.PositiveIntegerField(default=0)
+    degree_rank = models.PositiveIntegerField(default=0)
+    guest_appearances = models.PositiveIntegerField(default=0)
+    host_appearances = models.PositiveIntegerField(default=0)
+    podcast_count = models.PositiveIntegerField(default=0)
+    latest_episode_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "canonical"],
+                name="unique_person_network_metric_per_run",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "pagerank_rank"]),
+            models.Index(fields=["run", "hub_rank"]),
+            models.Index(fields=["run", "authority_rank"]),
+            models.Index(fields=["run", "closeness_rank"]),
+            models.Index(fields=["run", "betweenness_rank"]),
+            models.Index(fields=["run", "degree_rank"]),
+            models.Index(fields=["canonical"]),
+        ]
+        ordering = ["pagerank_rank", "display_name"]
+
+    def __str__(self) -> str:
+        return f"{self.display_name} metrics for run {self.run_id}"
+
+
+class PodcastNetworkMetric(models.Model):
+    run = models.ForeignKey(
+        NetworkMetricRun,
+        on_delete=models.CASCADE,
+        related_name="podcast_metrics",
+    )
+    podcast = models.ForeignKey(
+        Podcast,
+        on_delete=models.CASCADE,
+        related_name="network_metrics",
+    )
+    closeness = models.FloatField(default=0.0)
+    betweenness = models.FloatField(default=0.0)
+    degree_centrality = models.FloatField(default=0.0)
+    closeness_rank = models.PositiveIntegerField(default=0)
+    betweenness_rank = models.PositiveIntegerField(default=0)
+    degree_rank = models.PositiveIntegerField(default=0)
+    shared_guest_edges = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "podcast"],
+                name="unique_podcast_network_metric_per_run",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "closeness_rank"]),
+            models.Index(fields=["run", "betweenness_rank"]),
+            models.Index(fields=["run", "degree_rank"]),
+            models.Index(fields=["podcast"]),
+        ]
+        ordering = ["degree_rank", "podcast__name"]
+
+    def __str__(self) -> str:
+        return f"{self.podcast} metrics for run {self.run_id}"
+
+
 class ScrapeError(models.Model):
     class Stage(models.TextChoices):
         FETCH = "fetch", "Fetch"

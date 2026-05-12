@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.db.models import Count, Max, Q, QuerySet
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Max, Q, QuerySet, Value
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -8,8 +8,66 @@ from django.urls import reverse
 from podcast_network.cleaning import is_likely_english_podcast_name
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import PathMessagePart
-from podcast_network.web.catalog.models import Appearance, Person, Podcast
-from podcast_network.web.explorer.services import database_six_degrees_graph
+from podcast_network.network_metrics import latest_succeeded_metric_run
+from podcast_network.web.catalog.models import (
+    Appearance,
+    Person,
+    PersonEntityLink,
+    PersonNetworkMetric,
+    Podcast,
+)
+from podcast_network.web.explorer.services import (
+    COHOST_EPISODE_SHARE,
+    COHOST_EPISODE_THRESHOLD,
+    database_six_degrees_graph,
+)
+
+RANKING_FIELDS = {
+    "pr": ("pagerank_rank", "PageRank Rankings"),
+    "hub": ("hub_rank", "Hub Rankings"),
+    "auth": ("authority_rank", "Authority Rankings"),
+    "degree": ("degree_rank", "Degree Centrality Rankings"),
+    "bt": ("betweenness_rank", "Betweenness Centrality Rankings"),
+    "close": ("closeness_rank", "Closeness Centrality Rankings"),
+    "appearances": ("appearances_count", "Guest Appearance Rankings"),
+}
+
+RANKING_DEFINITIONS = [
+    {
+        "name": "Guest appearances",
+        "description": "Counts how many times a person appears as a guest.",
+    },
+    {
+        "name": "PageRank",
+        "description": "Highlights people connected to other important people in the network.",
+    },
+    {
+        "name": "Hub",
+        "description": "Highlights guests who point toward many prominent hosts.",
+    },
+    {
+        "name": "Authority",
+        "description": "Highlights hosts who receive links from prominent guests.",
+    },
+    {
+        "name": "Degree",
+        "description": "Counts how directly connected a person is to the rest of the network.",
+    },
+    {
+        "name": "Betweenness",
+        "description": (
+            "Highlights people who sit on paths between otherwise separate parts "
+            "of the network."
+        ),
+    },
+    {
+        "name": "Closeness",
+        "description": (
+            "Highlights people who are, on average, a short network distance "
+            "from everyone else."
+        ),
+    },
+]
 
 
 def home(request: HttpRequest) -> HttpResponse:
@@ -122,16 +180,23 @@ def people(request: HttpRequest) -> HttpResponse:
 
 def rankings(request: HttpRequest) -> HttpResponse:
     query = request.GET.get("q", "").strip()
-    rows = people_queryset()
-    if query:
-        rows = rows.filter(name__icontains=query)
+    rank_key = request.GET.get("rank", "appearances")
+    _, label = RANKING_FIELDS.get(rank_key, RANKING_FIELDS["appearances"])
+    if rank_key == "appearances":
+        rows = people_queryset()
+        if query:
+            rows = rows.filter(name__icontains=query)
+        rows = rows[:250]
+    else:
+        rows = metric_people_queryset(rank_key=rank_key, query=query)[:250]
     return render(
         request,
         "explorer/rankings.html",
         {
-            "people": rows[:250],
-            "rank": "appearances",
-            "rank_label": "Guest Appearance Rankings",
+            "people": rows,
+            "rank": rank_key,
+            "rank_label": label,
+            "ranking_definitions": RANKING_DEFINITIONS,
             "query": query,
             "suggestion": None,
         },
@@ -146,6 +211,7 @@ def person_detail(request: HttpRequest, person_id: int) -> HttpResponse:
 
     host_podcast_rows = person_podcast_rows(person=person, role=Appearance.Role.HOST)
     podcast_rows = person_podcast_rows(person=person, role=Appearance.Role.GUEST)
+    network_metric = person_network_metric(person)
     return render(
         request,
         "explorer/person_detail.html",
@@ -153,8 +219,77 @@ def person_detail(request: HttpRequest, person_id: int) -> HttpResponse:
             "person": person,
             "host_podcast_rows": host_podcast_rows,
             "podcast_rows": podcast_rows,
+            "network_metric": network_metric,
+            "network_rank_rows": person_network_rank_rows(network_metric),
         },
     )
+
+
+def person_network_metric(person: Person) -> PersonNetworkMetric | None:
+    run = latest_succeeded_metric_run()
+    if run is None:
+        return None
+
+    canonical_id = (
+        PersonEntityLink.objects.filter(observation__person=person)
+        .values_list("canonical_id", flat=True)
+        .first()
+    )
+    if canonical_id:
+        return (
+            PersonNetworkMetric.objects.filter(run=run, canonical_id=canonical_id)
+            .select_related("canonical", "representative_person")
+            .first()
+        )
+
+    return (
+        PersonNetworkMetric.objects.filter(run=run, representative_person=person)
+        .select_related("canonical", "representative_person")
+        .first()
+    )
+
+
+def person_network_rank_rows(metric: PersonNetworkMetric | None) -> list[dict[str, object]]:
+    if metric is None:
+        return []
+    return [
+        {
+            "label": "PageRank",
+            "rank_key": "pr",
+            "rank": metric.pagerank_rank,
+            "score": metric.pagerank,
+        },
+        {
+            "label": "Hub",
+            "rank_key": "hub",
+            "rank": metric.hub_rank,
+            "score": metric.hub,
+        },
+        {
+            "label": "Authority",
+            "rank_key": "auth",
+            "rank": metric.authority_rank,
+            "score": metric.authority,
+        },
+        {
+            "label": "Degree centrality",
+            "rank_key": "degree",
+            "rank": metric.degree_rank,
+            "score": metric.degree_centrality,
+        },
+        {
+            "label": "Betweenness centrality",
+            "rank_key": "bt",
+            "rank": metric.betweenness_rank,
+            "score": metric.betweenness,
+        },
+        {
+            "label": "Closeness centrality",
+            "rank_key": "close",
+            "rank": metric.closeness_rank,
+            "score": metric.closeness,
+        },
+    ]
 
 
 def person_podcast_rows(*, person: Person, role: str):
@@ -267,6 +402,21 @@ def people_queryset() -> QuerySet[Person]:
     )
 
 
+def metric_people_queryset(*, rank_key: str, query: str) -> QuerySet[PersonNetworkMetric]:
+    field_name, _ = RANKING_FIELDS.get(rank_key, RANKING_FIELDS["pr"])
+    run = latest_succeeded_metric_run()
+    rows = PersonNetworkMetric.objects.none()
+    if run is not None:
+        rows = (
+            PersonNetworkMetric.objects.filter(run=run, representative_person_id__isnull=False)
+            .select_related("representative_person")
+            .order_by(field_name, "display_name")
+        )
+        if query:
+            rows = rows.filter(display_name__icontains=query)
+    return rows
+
+
 def host_people_by_podcast(podcast_ids: list[int]) -> dict[int, list[Person]]:
     rows = (
         Appearance.objects.filter(
@@ -302,14 +452,24 @@ def host_people_by_podcast(podcast_ids: list[int]) -> dict[int, list[Person]]:
 def frequent_guest_cohost_rows(podcast_ids: list[int]):
     if not podcast_ids:
         return []
+    episode_share_cutoff = ExpressionWrapper(
+        F("podcast_episode_count") * Value(COHOST_EPISODE_SHARE),
+        output_field=FloatField(),
+    )
     return (
         Appearance.objects.filter(
             role=Appearance.Role.GUEST,
             episode__podcast_id__in=podcast_ids,
         )
         .values("episode__podcast_id", "person_id", "person__name")
-        .annotate(guest_episode_count=Count("episode_id", distinct=True))
-        .filter(guest_episode_count__gt=100)
+        .annotate(
+            guest_episode_count=Count("episode_id", distinct=True),
+            podcast_episode_count=Count("episode__podcast__episodes", distinct=True),
+        )
+        .filter(
+            Q(guest_episode_count__gt=COHOST_EPISODE_THRESHOLD)
+            | Q(guest_episode_count__gt=episode_share_cutoff)
+        )
         .order_by("episode__podcast_id", "person__name")
         .values_list("episode__podcast_id", "person_id", "person__name")
     )

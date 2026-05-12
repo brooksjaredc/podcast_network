@@ -4,11 +4,13 @@ from dataclasses import dataclass
 
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Q, Value
 
 from podcast_network.web.catalog.models import Appearance
 
 DERIVED_COHOST_SOURCE = "derived-frequent-guest-cohost"
+DEFAULT_COHOST_EPISODE_THRESHOLD = 100
+DEFAULT_COHOST_EPISODE_SHARE = 0.20
 
 
 @dataclass(frozen=True)
@@ -23,7 +25,13 @@ class Command(BaseCommand):
     help = "Promote recurring guest/podcast pairs to co-host-equivalent host appearances."
 
     def add_arguments(self, parser: CommandParser) -> None:
-        parser.add_argument("--threshold", type=int, default=100)
+        parser.add_argument("--threshold", type=int, default=DEFAULT_COHOST_EPISODE_THRESHOLD)
+        parser.add_argument(
+            "--episode-share-threshold",
+            type=float,
+            default=DEFAULT_COHOST_EPISODE_SHARE,
+            help="Also promote people who guest on more than this share of a podcast's episodes.",
+        )
         parser.add_argument(
             "--clear-existing",
             action="store_true",
@@ -34,6 +42,7 @@ class Command(BaseCommand):
     def handle(self, *args: object, **options: object) -> None:
         stats = promote_frequent_guests_to_cohosts(
             threshold=int(options["threshold"]),
+            episode_share_threshold=float(options["episode_share_threshold"]),
             clear_existing=bool(options["clear_existing"]),
             dry_run=bool(options["dry_run"]),
         )
@@ -50,15 +59,26 @@ class Command(BaseCommand):
 
 def promote_frequent_guests_to_cohosts(
     *,
-    threshold: int = 100,
+    threshold: int = DEFAULT_COHOST_EPISODE_THRESHOLD,
+    episode_share_threshold: float = DEFAULT_COHOST_EPISODE_SHARE,
     clear_existing: bool = False,
     dry_run: bool = False,
 ) -> PromotionStats:
+    episode_share_cutoff = ExpressionWrapper(
+        F("podcast_episode_count") * Value(episode_share_threshold),
+        output_field=FloatField(),
+    )
     rows = list(
         Appearance.objects.filter(role=Appearance.Role.GUEST)
         .values("episode__podcast_id", "person_id")
-        .annotate(guest_episode_count=Count("episode_id", distinct=True))
-        .filter(guest_episode_count__gt=threshold)
+        .annotate(
+            guest_episode_count=Count("episode_id", distinct=True),
+            podcast_episode_count=Count("episode__podcast__episodes", distinct=True),
+        )
+        .filter(
+            Q(guest_episode_count__gt=threshold)
+            | Q(guest_episode_count__gt=episode_share_cutoff)
+        )
         .order_by("-guest_episode_count", "episode__podcast_id", "person_id")
     )
     host_appearances_created = 0

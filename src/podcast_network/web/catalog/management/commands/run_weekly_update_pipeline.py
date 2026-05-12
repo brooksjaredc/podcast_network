@@ -7,6 +7,10 @@ from django.core.management.base import BaseCommand, CommandParser
 
 from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL
 from podcast_network.extraction.prompt import PROMPT_VERSION
+from podcast_network.web.catalog.management.commands.promote_frequent_guests_to_cohosts import (
+    DEFAULT_COHOST_EPISODE_SHARE,
+    DEFAULT_COHOST_EPISODE_THRESHOLD,
+)
 from podcast_network.web.explorer.services import database_six_degrees_graph
 
 
@@ -22,7 +26,8 @@ TODO_NOTES = (
     "Add scheduled host/co-host extraction refresh for newly discovered podcasts.",
     "Add single-name resolution once the cheaper/contextual strategy is settled.",
     "Add entity-resolution active-learning sampling for new uncertain pairs.",
-    "Add optional plot/static artifact regeneration once plots read from Postgres.",
+    "Add network metric evolution snapshots and leader-score calculations.",
+    "Add optional plot/static artifact regeneration once plots read from Postgres metrics.",
 )
 
 
@@ -44,7 +49,16 @@ class Command(BaseCommand):
         parser.add_argument("--review-min-confidence", type=float, default=0.75)
         parser.add_argument("--review-max-confidence", type=float, default=0.90)
         parser.add_argument("--min-guest-confidence", type=float, default=0.90)
-        parser.add_argument("--cohost-threshold", type=int, default=100)
+        parser.add_argument(
+            "--cohost-threshold",
+            type=int,
+            default=DEFAULT_COHOST_EPISODE_THRESHOLD,
+        )
+        parser.add_argument(
+            "--cohost-episode-share-threshold",
+            type=float,
+            default=DEFAULT_COHOST_EPISODE_SHARE,
+        )
         parser.add_argument("--entity-limit-pairs", type=int, default=20000)
         parser.add_argument(
             "--reprocess-current-prompt",
@@ -58,6 +72,7 @@ class Command(BaseCommand):
         parser.add_argument("--skip-llm", action="store_true")
         parser.add_argument("--skip-processing", action="store_true")
         parser.add_argument("--skip-entity-resolution", action="store_true")
+        parser.add_argument("--skip-network-metrics", action="store_true")
         parser.add_argument("--skip-graph-warm", action="store_true")
         parser.add_argument(
             "--dry-run",
@@ -156,6 +171,9 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     command="promote_frequent_guests_to_cohosts",
                     options={
                         "threshold": int(options["cohost_threshold"]),
+                        "episode_share_threshold": float(
+                            options["cohost_episode_share_threshold"]
+                        ),
                         "clear_existing": True,
                     },
                 ),
@@ -167,6 +185,14 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 name="Refresh person entity resolution",
                 command="refresh_person_entity_resolution",
                 options={"limit_pairs": int(options["entity_limit_pairs"])},
+            )
+        )
+    if not options["skip_network_metrics"]:
+        steps.append(
+            PipelineStep(
+                name="Calculate network metrics",
+                command="calculate_network_metrics",
+                options={},
             )
         )
     return steps

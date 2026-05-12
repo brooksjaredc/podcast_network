@@ -46,10 +46,31 @@
         <tbody>
           <tr><td>Normalized name</td><td>{{ person.normalized_name }}</td></tr>
           <tr><td>People table ID</td><td>{{ person.id }}</td></tr>
+          {% if network_metric %}
+            <tr><td>Canonical name</td><td>{{ network_metric.display_name }}</td></tr>
+          {% endif %}
         </tbody>
       </table>
     </section>
   </div>
+
+  <h2>Network Rankings</h2>
+  <table>
+    <thead>
+      <tr><th>Metric</th><th>Rank</th><th>Score</th></tr>
+    </thead>
+    <tbody>
+      {% for row in network_rank_rows %}
+        <tr>
+          <td><a href="{% url 'explorer:rankings' %}?rank={{ row.rank_key }}">{{ row.label }}</a></td>
+          <td>#{{ row.rank }}</td>
+          <td>{{ row.score|floatformat:6 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3">No network rankings loaded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
   <h2>Podcast Appearance Summary</h2>
   <table>

@@ -25,4 +25,16 @@ KNOWN_PERSON_ALIASES = (
         target_normalized_name="dr joe esposito",
         podcast_name="The Von Haessler Doctrine",
     ),
+    KnownPersonAlias(
+        alias_normalized_name="dr drew",
+        target_normalized_name="dr drew pinsky",
+    ),
+    KnownPersonAlias(
+        alias_normalized_name="christina p",
+        target_normalized_name="christina pazsitzky",
+    ),
+    KnownPersonAlias(
+        alias_normalized_name="joey coco diaz",
+        target_normalized_name="joey diaz",
+    ),
 )

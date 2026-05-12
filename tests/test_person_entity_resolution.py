@@ -233,3 +233,64 @@ class PersonEntityResolutionTests(TestCase):
             canonical__normalized_name="dr joe esposito",
             match_method="known_person_alias",
         ).exists()
+
+    def test_known_person_aliases_merge_dr_drew_and_christina_p(self) -> None:
+        podcast = Podcast.objects.create(name="Comedy Podcast")
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid="known-aliases-1",
+            title="Episode 1",
+        )
+        dr_drew = Person.objects.create(name="Dr. Drew", normalized_name="dr drew")
+        dr_drew_full = Person.objects.create(
+            name="Dr. Drew Pinsky",
+            normalized_name="dr drew pinsky",
+        )
+        christina_short = Person.objects.create(
+            name="Christina P",
+            normalized_name="christina p",
+        )
+        christina_full = Person.objects.create(
+            name="Christina Pazsitzky",
+            normalized_name="christina pazsitzky",
+        )
+        for person in [dr_drew, dr_drew_full, christina_short, christina_full]:
+            Appearance.objects.create(episode=episode, person=person, role="guest")
+
+        call_command("sync_person_entities")
+        call_command("apply_known_person_entity_aliases")
+
+        assert PersonEntityLink.objects.filter(
+            observation__person=dr_drew,
+            canonical__normalized_name="dr drew pinsky",
+            match_method="known_person_alias",
+        ).exists()
+        assert PersonEntityLink.objects.filter(
+            observation__person=christina_short,
+            canonical__normalized_name="christina pazsitzky",
+            match_method="known_person_alias",
+        ).exists()
+
+    def test_known_person_aliases_merge_quoted_middle_nickname(self) -> None:
+        podcast = Podcast.objects.create(name="Comedy Podcast")
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid="joey-diaz-alias-1",
+            title="Episode 1",
+        )
+        joey = Person.objects.create(name="Joey Diaz", normalized_name="joey diaz")
+        joey_nickname = Person.objects.create(
+            name='Joey "Coco" Diaz',
+            normalized_name="joey coco diaz",
+        )
+        for person in [joey, joey_nickname]:
+            Appearance.objects.create(episode=episode, person=person, role="guest")
+
+        call_command("sync_person_entities")
+        call_command("apply_known_person_entity_aliases")
+
+        assert PersonEntityLink.objects.filter(
+            observation__person=joey_nickname,
+            canonical__normalized_name="joey diaz",
+            match_method="known_person_alias",
+        ).exists()

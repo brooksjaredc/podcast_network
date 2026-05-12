@@ -2,13 +2,16 @@ from functools import lru_cache
 from time import monotonic
 
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Q, Value
 
 from podcast_network.cleaning import is_likely_english_podcast_name
 from podcast_network.data import LegacyRepository
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import Edge
 from podcast_network.web.catalog.models import Appearance, PersonEntityLink
+
+COHOST_EPISODE_THRESHOLD = 100
+COHOST_EPISODE_SHARE = 0.20
 
 _DATABASE_GRAPH_CACHE: tuple[float, SixDegreesGraph] | None = None
 
@@ -108,20 +111,39 @@ def raw_appearance_graph_rows():
 
 
 def frequent_guest_cohost_keys(*, use_canonical_links: bool) -> set[tuple[str | int, int]]:
+    episode_share_cutoff = ExpressionWrapper(
+        F("podcast_episode_count") * Value(COHOST_EPISODE_SHARE),
+        output_field=FloatField(),
+    )
     if use_canonical_links:
         rows = (
             PersonEntityLink.objects.filter(observation__role=Appearance.Role.GUEST)
             .values("canonical_id", "observation__episode__podcast_id")
-            .annotate(guest_episode_count=Count("observation__episode_id", distinct=True))
-            .filter(guest_episode_count__gt=100)
+            .annotate(
+                guest_episode_count=Count("observation__episode_id", distinct=True),
+                podcast_episode_count=Count(
+                    "observation__episode__podcast__episodes",
+                    distinct=True,
+                ),
+            )
+            .filter(
+                Q(guest_episode_count__gt=COHOST_EPISODE_THRESHOLD)
+                | Q(guest_episode_count__gt=episode_share_cutoff)
+            )
             .values_list("canonical_id", "observation__episode__podcast_id")
         )
     else:
         rows = (
             Appearance.objects.filter(role=Appearance.Role.GUEST)
             .values("person_id", "episode__podcast_id")
-            .annotate(guest_episode_count=Count("episode_id", distinct=True))
-            .filter(guest_episode_count__gt=100)
+            .annotate(
+                guest_episode_count=Count("episode_id", distinct=True),
+                podcast_episode_count=Count("episode__podcast__episodes", distinct=True),
+            )
+            .filter(
+                Q(guest_episode_count__gt=COHOST_EPISODE_THRESHOLD)
+                | Q(guest_episode_count__gt=episode_share_cutoff)
+            )
             .values_list("person_id", "episode__podcast_id")
         )
     return set(rows)

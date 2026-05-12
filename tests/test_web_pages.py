@@ -1,6 +1,8 @@
+from django.core.management import call_command
 from django.test import Client, override_settings
 from django.utils import timezone
 
+from podcast_network.network_metrics import calculate_and_store_network_metrics
 from podcast_network.web.catalog.models import Appearance, Episode, Person, Podcast
 from podcast_network.web.explorer.services import database_six_degrees_graph
 
@@ -122,7 +124,10 @@ def test_rankings_page_loads() -> None:
     response = Client().get("/rankings/", {"rank": "hub"})
 
     assert response.status_code == 200
-    assert b"Guest Appearance Rankings" in response.content
+    assert b"Hub Rankings" in response.content
+    assert b"Metric Guide" in response.content
+    assert b"Highlights people connected to other important people" in response.content
+    assert b"Highlights hosts who receive links from prominent guests" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -193,6 +198,34 @@ def test_frequent_guest_is_listed_as_cohost_and_removed_from_guest_list() -> Non
     assert b"Regular Panelist" not in guests_section
 
 
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_guest_on_more_than_twenty_percent_of_episodes_is_listed_as_cohost() -> None:
+    podcast = Podcast.objects.create(name="Small Regular Show")
+    regular = Person.objects.create(name="Small Show Regular", normalized_name="small show regular")
+    for index in range(10):
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid=f"small-regular-show-{index}",
+            title=f"Episode {index}",
+            published_at=timezone.now(),
+        )
+        if index < 3:
+            Appearance.objects.create(
+                episode=episode,
+                person=regular,
+                role=Appearance.Role.GUEST,
+                source="test",
+            )
+
+    response = Client().get(f"/podcasts/{podcast.id}/")
+
+    assert response.status_code == 200
+    hosts_section = response.content.split(b"<h2>Frequent Guests</h2>")[0]
+    guests_section = response.content.split(b"<h2>Frequent Guests</h2>")[1]
+    assert b"Small Show Regular" in hosts_section
+    assert b"Small Show Regular" not in guests_section
+
+
 def test_database_graph_treats_frequent_guest_as_host_and_keeps_single_names() -> None:
     podcast = Podcast.objects.create(name="Daily Panel")
     regular = Person.objects.create(name="Regular Panelist", normalized_name="regular panelist")
@@ -238,6 +271,24 @@ def test_person_detail_loads() -> None:
     assert b"Hosts or Co-hosts" in response.content
     assert b"The Joe Rogan Experience" in response.content
     assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_person_detail_shows_network_rankings() -> None:
+    _, _, _, marc = make_db_graph()
+    call_command("sync_person_entities")
+    calculate_and_store_network_metrics()
+
+    response = Client().get(f"/people/{marc.id}/")
+
+    assert response.status_code == 200
+    assert b"Network Rankings" in response.content
+    assert b"PageRank" in response.content
+    assert b"Hub" in response.content
+    assert b"Authority" in response.content
+    assert b"Betweenness centrality" in response.content
+    assert b'href="/rankings/?rank=pr"' in response.content
+    assert b"#" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
