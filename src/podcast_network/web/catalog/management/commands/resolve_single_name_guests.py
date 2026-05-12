@@ -18,6 +18,7 @@ from podcast_network.extraction.pipeline import (
     persist_failed_extraction,
     persist_successful_extraction,
 )
+from podcast_network.extraction.prompt import PROMPT_VERSION as FIRST_PASS_PROMPT_VERSION
 from podcast_network.extraction.single_name_prompt import (
     PROMPT_VERSION,
     SingleNameCandidate,
@@ -31,7 +32,6 @@ from podcast_network.web.catalog.models import (
     GuestCandidate,
 )
 
-FIRST_PASS_PROMPT_VERSION = "guest-extraction-v5"
 FIRST_PASS_MODEL = "gpt-5-nano"
 
 

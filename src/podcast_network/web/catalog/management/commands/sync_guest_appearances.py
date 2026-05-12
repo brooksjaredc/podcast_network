@@ -7,6 +7,7 @@ from django.db import transaction
 
 from podcast_network.cleaning import clean_person_display_name, is_single_token_person_name
 from podcast_network.extraction.pipeline import normalize_name
+from podcast_network.extraction.prompt import PROMPT_VERSION
 from podcast_network.web.catalog.models import (
     Appearance,
     Episode,
@@ -37,7 +38,7 @@ class Command(BaseCommand):
     help = "Materialize accepted guest candidates into Person and Appearance rows."
 
     def add_arguments(self, parser: CommandParser) -> None:
-        parser.add_argument("--prompt-version", default="guest-extraction-v5")
+        parser.add_argument("--prompt-version", default=PROMPT_VERSION)
         parser.add_argument("--first-pass-model", default="gpt-5-nano")
         parser.add_argument("--second-pass-model", default="gpt-5-mini")
         parser.add_argument("--min-confidence", type=float, default=0.90)
@@ -195,7 +196,7 @@ def sync_host_appearances(
     host_normalized_by_podcast: dict[int, set[str]],
     stats: SyncStats,
 ) -> None:
-    for podcast in Podcast.objects.only("id", "metadata").iterator(chunk_size=1000):
+    for podcast in Podcast.objects.only("id").iterator(chunk_size=1000):
         host_names = explicit_host_names(podcast)
         if not host_names:
             continue
@@ -232,7 +233,7 @@ def sync_host_appearances(
 
 def podcast_host_index() -> dict[int, set[str]]:
     output: dict[int, set[str]] = {}
-    for podcast in Podcast.objects.only("id", "metadata"):
+    for podcast in Podcast.objects.only("id"):
         hosts = {
             normalize_name(clean_person_display_name(host))
             for host in explicit_host_names(podcast)
@@ -246,16 +247,6 @@ def podcast_host_index() -> dict[int, set[str]]:
 def explicit_host_names(podcast: Podcast) -> list[str]:
     names = []
     seen = set()
-    legacy = podcast.metadata.get("legacy") or {}
-    hosts = legacy.get("hosts") or []
-    if isinstance(hosts, list):
-        for host in hosts:
-            name = str(host).strip()
-            normalized = normalize_name(clean_person_display_name(name))
-            if name and normalized not in seen:
-                names.append(name)
-                seen.add(normalized)
-
     candidates = HostCandidate.objects.filter(
         extraction__podcast=podcast,
         extraction__status=PodcastHostExtraction.Status.SUCCEEDED,

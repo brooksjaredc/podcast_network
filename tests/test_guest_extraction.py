@@ -105,7 +105,7 @@ class GuestExtractionTests(TestCase):
         target_run = ExtractionRun.objects.create(
             model="gpt-5-nano",
             provider="fake",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             episodes_requested=1,
         )
         EpisodeGuestExtraction.objects.create(
@@ -120,7 +120,7 @@ class GuestExtractionTests(TestCase):
             episode=episode,
             extraction_run=target_run,
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             model="gpt-5-nano",
             input_text="",
         )
@@ -133,7 +133,7 @@ class GuestExtractionTests(TestCase):
             episode_ids=[],
             limit=10,
             model="gpt-5-nano",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             force=False,
         )
 
@@ -209,6 +209,76 @@ class GuestExtractionTests(TestCase):
         assert "Published:" not in prompt.input_text
         assert "Episode title: Episode with Jane Doe" in prompt.input_text
 
+    def test_episode_prompt_includes_known_podcast_hosts(self) -> None:
+        podcast = Podcast.objects.create(name="Host-Aware Show")
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid="host-aware-1",
+            title="Episode with Jane Doe",
+            description="A test episode.",
+        )
+        run = ExtractionRun.objects.create(
+            model="legacy-metadata",
+            provider="legacy",
+            prompt_version="legacy-host-import-v1",
+            episodes_requested=1,
+        )
+        extraction = PodcastHostExtraction.objects.create(
+            podcast=podcast,
+            extraction_run=run,
+            status=PodcastHostExtraction.Status.SUCCEEDED,
+            prompt_version="legacy-host-import-v1",
+            model="legacy-metadata",
+            input_text="Alex Host",
+        )
+        HostCandidate.objects.create(
+            extraction=extraction,
+            name="Alex Host",
+            normalized_name="alex host",
+            kind=HostCandidate.Kind.HOST,
+            confidence=1.0,
+        )
+
+        prompt = build_episode_prompt(episode)
+
+        assert "Known podcast hosts: Alex Host" in prompt.input_text
+
+    def test_episode_prompt_ignores_rejected_known_podcast_hosts(self) -> None:
+        podcast = Podcast.objects.create(name="Host-Aware Show")
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid="host-aware-rejected-1",
+            title="Episode with Jane Doe",
+            description="A test episode.",
+        )
+        run = ExtractionRun.objects.create(
+            model="gpt-5-mini",
+            provider="openai",
+            prompt_version="podcast-host-extraction-v1",
+            episodes_requested=1,
+        )
+        extraction = PodcastHostExtraction.objects.create(
+            podcast=podcast,
+            extraction_run=run,
+            status=PodcastHostExtraction.Status.SUCCEEDED,
+            prompt_version="podcast-host-extraction-v1",
+            model="gpt-5-mini",
+            input_text="",
+        )
+        HostCandidate.objects.create(
+            extraction=extraction,
+            name="Rejected Host",
+            normalized_name="rejected host",
+            kind=HostCandidate.Kind.HOST,
+            confidence=0.95,
+            accepted=False,
+        )
+
+        prompt = build_episode_prompt(episode)
+
+        assert "Known podcast hosts: none known" in prompt.input_text
+        assert "Rejected Host" not in prompt.input_text
+
     def test_sync_batch_output_record_persists_guest_candidates(self) -> None:
         episode = create_episode(title="Episode with Jane Doe")
         run = ExtractionRun.objects.create(
@@ -278,14 +348,14 @@ class GuestExtractionTests(TestCase):
         run = ExtractionRun.objects.create(
             model="gpt-5-nano",
             provider="fake",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             episodes_requested=1,
         )
         extraction = EpisodeGuestExtraction.objects.create(
             episode=episode,
             extraction_run=run,
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             model="gpt-5-nano",
             input_text="",
         )
@@ -310,7 +380,7 @@ class GuestExtractionTests(TestCase):
             first_pass_run=run,
             first_pass_model="gpt-5-nano",
             second_pass_model="gpt-5-mini",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             review_min_confidence=0.75,
             review_max_confidence=0.90,
         )
@@ -318,7 +388,7 @@ class GuestExtractionTests(TestCase):
             first_pass_run=run,
             first_pass_model="gpt-5-nano",
             second_pass_model="gpt-5-mini",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             review_min_confidence=0.75,
             review_max_confidence=0.90,
             require_no_high_confidence=False,
@@ -360,14 +430,14 @@ class GuestExtractionTests(TestCase):
         run = ExtractionRun.objects.create(
             model="gpt-5-nano",
             provider="fake",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             episodes_requested=1,
         )
         extraction = EpisodeGuestExtraction.objects.create(
             episode=episode,
             extraction_run=run,
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             model="gpt-5-nano",
             input_text="",
         )
@@ -386,7 +456,7 @@ class GuestExtractionTests(TestCase):
             first_pass_run=run,
             first_pass_model="gpt-5-nano",
             second_pass_model="gpt-5-mini",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             review_min_confidence=0.75,
             review_max_confidence=0.90,
         )
@@ -394,27 +464,45 @@ class GuestExtractionTests(TestCase):
         assert selected == [episode]
 
     def test_sync_guest_appearances_cleans_names_and_skips_hosts(self) -> None:
-        podcast = Podcast.objects.create(
-            name="Hostful",
-            metadata={"legacy": {"hosts": ["Jane Host"]}},
-        )
+        podcast = Podcast.objects.create(name="Hostful")
         episode = Episode.objects.create(
             podcast=podcast,
             guid="hostful-1",
             title="Guest list",
             description="A test episode.",
         )
+        host_run = ExtractionRun.objects.create(
+            model="legacy-metadata",
+            provider="legacy",
+            prompt_version="legacy-host-import-v1",
+            episodes_requested=1,
+        )
+        host_extraction = PodcastHostExtraction.objects.create(
+            podcast=podcast,
+            extraction_run=host_run,
+            status=PodcastHostExtraction.Status.SUCCEEDED,
+            prompt_version="legacy-host-import-v1",
+            model="legacy-metadata",
+            input_text="Jane Host",
+        )
+        HostCandidate.objects.create(
+            extraction=host_extraction,
+            name="Jane Host",
+            normalized_name="jane host",
+            kind=HostCandidate.Kind.HOST,
+            confidence=1.0,
+        )
         run = ExtractionRun.objects.create(
             model="gpt-5-nano",
             provider="fake",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             episodes_requested=1,
         )
         extraction = EpisodeGuestExtraction.objects.create(
             episode=episode,
             extraction_run=run,
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             model="gpt-5-nano",
             input_text="",
         )
@@ -486,14 +574,14 @@ class GuestExtractionTests(TestCase):
         guest_run = ExtractionRun.objects.create(
             model="gpt-5-nano",
             provider="fake",
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             episodes_requested=1,
         )
         extraction = EpisodeGuestExtraction.objects.create(
             episode=episode,
             extraction_run=guest_run,
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
-            prompt_version="guest-extraction-v5",
+            prompt_version="guest-extraction-v6",
             model="gpt-5-nano",
             input_text="",
         )

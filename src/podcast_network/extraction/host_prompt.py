@@ -56,14 +56,12 @@ class PodcastHostPrompt:
 def build_podcast_host_prompt(podcast: Podcast) -> PodcastHostPrompt:
     apple = podcast.metadata.get("apple_podcasts") or {}
     rss = podcast.metadata.get("rss") or {}
-    legacy = podcast.metadata.get("legacy") or {}
     input_text = "\n".join(
         [
             f"Podcast title: {podcast.name}",
             f"Podcast website: {podcast.website_url}",
             f"Apple artist/publisher: {apple.get('artist_name') or ''}",
             f"RSS language: {rss.get('language') or ''}",
-            f"Existing legacy hosts: {', '.join(legacy_hosts(legacy))}",
             "Podcast description:",
             truncate(podcast.description, 2500),
         ]
@@ -72,10 +70,3 @@ def build_podcast_host_prompt(podcast: Podcast) -> PodcastHostPrompt:
         instructions=HOST_EXTRACTION_INSTRUCTIONS,
         input_text=input_text,
     )
-
-
-def legacy_hosts(legacy: dict) -> list[str]:
-    hosts = legacy.get("hosts") or []
-    if not isinstance(hosts, list):
-        return []
-    return [str(host).strip() for host in hosts if str(host).strip()]

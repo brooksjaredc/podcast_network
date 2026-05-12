@@ -12,6 +12,9 @@ from podcast_network.web.catalog.management.commands.extract_podcast_hosts impor
     persist_successful_extraction,
     select_podcasts,
 )
+from podcast_network.web.catalog.management.commands.migrate_legacy_hosts import (
+    migrate_legacy_hosts,
+)
 from podcast_network.web.catalog.models import (
     ExtractionRun,
     HostCandidate,
@@ -110,3 +113,28 @@ class PodcastHostExtractionTests(TestCase):
         assert host_kind("co-host") == HostCandidate.Kind.COHOST
         assert host_kind("sidekick") == HostCandidate.Kind.COHOST
         assert host_kind("guest") == ""
+
+    def test_migrate_legacy_hosts_creates_host_candidates(self) -> None:
+        podcast = Podcast.objects.create(
+            name="Legacy Hostful",
+            metadata={"legacy": {"hosts": ["JANE DOE", "Mike"]}},
+        )
+
+        stats = migrate_legacy_hosts(run_label="test")
+
+        assert stats.podcasts_seen == 1
+        assert stats.podcasts_with_hosts == 1
+        assert stats.candidates_created == 1
+        assert stats.skipped_single_name_hosts == 1
+        extraction = PodcastHostExtraction.objects.get(
+            podcast=podcast,
+            model="legacy-metadata",
+            prompt_version="legacy-host-import-v1",
+        )
+        assert extraction.status == PodcastHostExtraction.Status.SUCCEEDED
+        assert HostCandidate.objects.filter(
+            extraction=extraction,
+            name="Jane Doe",
+            kind=HostCandidate.Kind.HOST,
+            confidence=1.0,
+        ).exists()

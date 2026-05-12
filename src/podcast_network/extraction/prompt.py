@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from podcast_network.web.catalog.models import Episode
+from django.db.models import Q
 
-PROMPT_VERSION = "guest-extraction-v5"
+from podcast_network.web.catalog.models import Episode, HostCandidate, PodcastHostExtraction
+
+PROMPT_VERSION = "guest-extraction-v6"
 
 GUEST_EXTRACTION_INSTRUCTIONS = """
 Extract podcast episode guest names from episode metadata.
@@ -19,6 +21,8 @@ Rules:
   present as a guest, caller, interviewee, featured guest, or panelist.
 - Do not return hosts, co-hosts, producers, regular cast members, or recurring show
   participants unless the metadata explicitly frames them as guests for this episode.
+- If the input includes known podcast hosts, do not return those people as guests unless
+  the episode metadata explicitly says they are appearing as episode guests.
 - Do not return names from book titles, movie titles, article titles, manuals, songs,
   segment names, slogans, headlines, or sports/news topics.
 - Do not return partial first names unless the metadata clearly identifies them as guests.
@@ -103,15 +107,39 @@ class EpisodePrompt:
 
 def build_episode_prompt(episode: Episode) -> EpisodePrompt:
     podcast = episode.podcast
+    host_names = known_podcast_host_names(podcast.id)
     input_text = "\n".join(
         [
             f"Podcast: {podcast.name}",
+            f"Known podcast hosts: {', '.join(host_names) if host_names else 'none known'}",
             f"Episode title: {episode.title}",
             "Episode description:",
             truncate(episode.description, 3500),
         ]
     )
     return EpisodePrompt(instructions=GUEST_EXTRACTION_INSTRUCTIONS, input_text=input_text)
+
+
+def known_podcast_host_names(podcast_id: int) -> list[str]:
+    candidates = (
+        HostCandidate.objects.filter(
+            extraction__podcast_id=podcast_id,
+            extraction__status=PodcastHostExtraction.Status.SUCCEEDED,
+            confidence__gte=0.70,
+        )
+        .filter(Q(accepted=True) | Q(accepted__isnull=True))
+        .order_by("kind", "-confidence", "name")
+        .values_list("normalized_name", "name")
+    )
+    names = []
+    seen = set()
+    for normalized, name in candidates:
+        key = normalized or name.casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+    return names
 
 
 def truncate(value: str, max_chars: int) -> str:

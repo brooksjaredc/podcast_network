@@ -9,6 +9,9 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from podcast_network.paths import PROJECT_ROOT
+from podcast_network.web.catalog.management.commands.migrate_legacy_hosts import (
+    migrate_legacy_hosts,
+)
 from podcast_network.web.catalog.models import Feed, Podcast
 
 DEFAULT_LEGACY_FEED_PATH = (
@@ -61,6 +64,7 @@ def import_legacy_feeds(path: Path) -> ImportResult:
         reader = csv.DictReader(csv_file, delimiter="\t")
         for record in reader:
             result = add_results(result, import_record(record))
+    migrate_legacy_hosts(run_label=f"legacy-feed-import:{path.name}")
     return result
 
 

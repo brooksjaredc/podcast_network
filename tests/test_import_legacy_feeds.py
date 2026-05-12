@@ -5,7 +5,7 @@ from pathlib import Path
 from django.test import TestCase
 
 from podcast_network.web.catalog.management.commands.import_legacy_feeds import import_legacy_feeds
-from podcast_network.web.catalog.models import Feed, Podcast
+from podcast_network.web.catalog.models import Feed, HostCandidate, Podcast
 
 
 class ImportLegacyFeedsTests(TestCase):
@@ -29,6 +29,12 @@ class ImportLegacyFeedsTests(TestCase):
         assert podcast.image_url == "https://example.com/image.jpg"
         assert podcast.metadata["legacy"]["hosts"] == ["Example Host"]
         assert podcast.metadata["legacy"]["categories"] == ["Comedy"]
+        assert HostCandidate.objects.filter(
+            extraction__podcast=podcast,
+            extraction__model="legacy-metadata",
+            extraction__prompt_version="legacy-host-import-v1",
+            name="Example Host",
+        ).exists()
         feed = Feed.objects.get(podcast=podcast)
         assert feed.url == "https://example.com/rss"
         assert feed.active is True

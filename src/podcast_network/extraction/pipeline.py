@@ -124,7 +124,7 @@ async def extract_guest_batch_async(
         ):
             return EpisodeExtractionOutcome(episode_id=episode.id, succeeded=True)
 
-        prompt = build_episode_prompt(episode)
+        prompt = await sync_to_async(build_episode_prompt)(episode)
         try:
             async with semaphore:
                 await rate_limiter.acquire()
