@@ -38,6 +38,11 @@ class Command(BaseCommand):
         parser.add_argument("--prompt-version", default=PROMPT_VERSION)
         parser.add_argument("--coordinator-label", default="guest-extraction-batch-backfill")
         parser.add_argument("--poll-interval-seconds", type=int, default=300)
+        parser.add_argument(
+            "--new-episodes-only",
+            action="store_true",
+            help="First pass only selects episodes with no successful guest extraction at all.",
+        )
         parser.add_argument("--review-min-confidence", type=float, default=0.75)
         parser.add_argument("--review-max-confidence", type=float, default=0.90)
         parser.add_argument(
@@ -129,6 +134,7 @@ class Command(BaseCommand):
             model=str(options["first_pass_model"]),
             prompt_version=str(options["prompt_version"]),
             force=False,
+            new_episodes_only=bool(options["new_episodes_only"]),
         )
         if not episodes:
             return None

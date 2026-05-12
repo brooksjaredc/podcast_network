@@ -52,6 +52,11 @@ class Command(BaseCommand):
             help="Initial retry sleep for async provider calls; doubles each retry.",
         )
         parser.add_argument("--force", action="store_true")
+        parser.add_argument(
+            "--new-episodes-only",
+            action="store_true",
+            help="Skip episodes with any successful guest extraction, regardless of model/prompt.",
+        )
 
     def handle(self, *args: object, **options: object) -> None:
         model = str(options["model"])
@@ -63,6 +68,7 @@ class Command(BaseCommand):
             model=model,
             prompt_version=prompt_version,
             force=bool(options["force"]),
+            new_episodes_only=bool(options["new_episodes_only"]),
         )
         if not episodes:
             self.stdout.write(self.style.WARNING("No episodes selected for extraction."))
@@ -134,6 +140,7 @@ def select_episodes(
     model: str,
     prompt_version: str,
     force: bool,
+    new_episodes_only: bool = False,
 ) -> list[Episode]:
     queryset = (
         Episode.objects.select_related("podcast")
@@ -142,6 +149,12 @@ def select_episodes(
     if episode_ids:
         queryset = queryset.filter(id__in=episode_ids)
         limit = max(limit, len(episode_ids))
+    elif new_episodes_only and not force:
+        successful_extraction = EpisodeGuestExtraction.objects.filter(
+            episode=OuterRef("pk"),
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        )
+        queryset = queryset.exclude(Exists(successful_extraction))
     elif not force:
         successful_extraction = EpisodeGuestExtraction.objects.filter(
             episode=OuterRef("pk"),

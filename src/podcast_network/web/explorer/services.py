@@ -1,5 +1,7 @@
 from functools import lru_cache
+from time import monotonic
 
+from django.conf import settings
 from django.db.models import Count
 
 from podcast_network.cleaning import is_likely_english_podcast_name
@@ -7,6 +9,8 @@ from podcast_network.data import LegacyRepository
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import Edge
 from podcast_network.web.catalog.models import Appearance, PersonEntityLink
+
+_DATABASE_GRAPH_CACHE: tuple[float, SixDegreesGraph] | None = None
 
 
 @lru_cache(maxsize=1)
@@ -19,8 +23,31 @@ def six_degrees_graph() -> SixDegreesGraph:
     return SixDegreesGraph.from_legacy_dir()
 
 
-@lru_cache(maxsize=1)
 def database_six_degrees_graph() -> SixDegreesGraph:
+    global _DATABASE_GRAPH_CACHE
+    ttl_seconds = int(getattr(settings, "DATABASE_GRAPH_CACHE_TTL_SECONDS", 300))
+    now = monotonic()
+    if (
+        _DATABASE_GRAPH_CACHE is not None
+        and ttl_seconds > 0
+        and now - _DATABASE_GRAPH_CACHE[0] < ttl_seconds
+    ):
+        return _DATABASE_GRAPH_CACHE[1]
+
+    graph = build_database_six_degrees_graph()
+    _DATABASE_GRAPH_CACHE = (now, graph)
+    return graph
+
+
+def clear_database_six_degrees_graph_cache() -> None:
+    global _DATABASE_GRAPH_CACHE
+    _DATABASE_GRAPH_CACHE = None
+
+
+database_six_degrees_graph.cache_clear = clear_database_six_degrees_graph_cache
+
+
+def build_database_six_degrees_graph() -> SixDegreesGraph:
     edges: list[Edge] = []
     names: set[str] = set()
     person_ids: dict[str, int] = {}
