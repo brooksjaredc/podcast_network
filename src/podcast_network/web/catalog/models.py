@@ -255,3 +255,62 @@ class GuestCandidate(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class PodcastHostExtraction(models.Model):
+    class Status(models.TextChoices):
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    podcast = models.ForeignKey(Podcast, on_delete=models.CASCADE, related_name="host_extractions")
+    extraction_run = models.ForeignKey(
+        ExtractionRun,
+        on_delete=models.CASCADE,
+        related_name="podcast_host_extractions",
+    )
+    status = models.CharField(max_length=20, choices=Status.choices)
+    prompt_version = models.CharField(max_length=50)
+    model = models.CharField(max_length=100)
+    input_text = models.TextField()
+    raw_response = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["podcast", "prompt_version", "model"],
+                name="unique_podcast_host_extraction_model_prompt",
+            )
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.podcast_id} {self.prompt_version} {self.status}"
+
+
+class HostCandidate(models.Model):
+    class Kind(models.TextChoices):
+        HOST = "host", "Host"
+        COHOST = "cohost", "Co-host"
+
+    extraction = models.ForeignKey(
+        PodcastHostExtraction,
+        on_delete=models.CASCADE,
+        related_name="host_candidates",
+    )
+    name = models.CharField(max_length=500)
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    confidence = models.FloatField(default=0)
+    evidence = models.TextField(blank=True)
+    normalized_name = models.CharField(max_length=500, blank=True)
+    accepted = models.BooleanField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["kind", "-confidence", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.kind})"

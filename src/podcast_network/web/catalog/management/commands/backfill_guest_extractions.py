@@ -12,6 +12,7 @@ from podcast_network.extraction.pipeline import extract_guest_batch, extract_gue
 from podcast_network.extraction.prompt import PROMPT_VERSION
 from podcast_network.web.catalog.management.commands.extract_guests import (
     build_extractor,
+    podcast_skips_guest_extraction,
     select_episodes,
 )
 from podcast_network.web.catalog.models import Episode, EpisodeGuestExtraction, GuestCandidate
@@ -278,11 +279,16 @@ def run_batch(
 
 
 def remaining_episode_count(*, model: str, prompt_version: str) -> int:
-    return Episode.objects.exclude(
-        guest_extractions__model=model,
-        guest_extractions__prompt_version=prompt_version,
-        guest_extractions__status=EpisodeGuestExtraction.Status.SUCCEEDED,
-    ).count()
+    episodes = (
+        Episode.objects.select_related("podcast")
+        .exclude(
+            guest_extractions__model=model,
+            guest_extractions__prompt_version=prompt_version,
+            guest_extractions__status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        )
+        .iterator(chunk_size=5000)
+    )
+    return sum(1 for episode in episodes if not podcast_skips_guest_extraction(episode.podcast))
 
 
 def select_second_pass_review_episodes(

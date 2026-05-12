@@ -9,8 +9,10 @@ from podcast_network.web.catalog.models import (
     ExtractionRun,
     Feed,
     GuestCandidate,
+    HostCandidate,
     Person,
     Podcast,
+    PodcastHostExtraction,
     RawFeedSnapshot,
     ScrapeError,
     ScrapeRun,
@@ -96,3 +98,17 @@ class GuestCandidateAdmin(admin.ModelAdmin):
     search_fields = ["name", "evidence", "extraction__episode__title"]
     list_display = ["name", "confidence", "accepted", "extraction"]
     list_filter = ["accepted"]
+
+
+@admin.register(PodcastHostExtraction)
+class PodcastHostExtractionAdmin(admin.ModelAdmin):
+    search_fields = ["podcast__name", "error"]
+    list_display = ["podcast", "status", "model", "prompt_version", "created_at"]
+    list_filter = ["status", "model", "prompt_version"]
+
+
+@admin.register(HostCandidate)
+class HostCandidateAdmin(admin.ModelAdmin):
+    search_fields = ["name", "evidence", "extraction__podcast__name"]
+    list_display = ["name", "kind", "confidence", "accepted", "extraction"]
+    list_filter = ["kind", "accepted"]

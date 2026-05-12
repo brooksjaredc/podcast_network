@@ -12,8 +12,10 @@ from podcast_network.web.catalog.models import (
     Episode,
     EpisodeGuestExtraction,
     GuestCandidate,
+    HostCandidate,
     Person,
     Podcast,
+    PodcastHostExtraction,
 )
 
 
@@ -242,11 +244,30 @@ def podcast_host_index() -> dict[int, set[str]]:
 
 
 def explicit_host_names(podcast: Podcast) -> list[str]:
+    names = []
+    seen = set()
     legacy = podcast.metadata.get("legacy") or {}
     hosts = legacy.get("hosts") or []
     if isinstance(hosts, list):
-        return [str(host).strip() for host in hosts if str(host).strip()]
-    return []
+        for host in hosts:
+            name = str(host).strip()
+            normalized = normalize_name(clean_person_display_name(name))
+            if name and normalized not in seen:
+                names.append(name)
+                seen.add(normalized)
+
+    candidates = HostCandidate.objects.filter(
+        extraction__podcast=podcast,
+        extraction__status=PodcastHostExtraction.Status.SUCCEEDED,
+        confidence__gte=0.70,
+    ).order_by("kind", "-confidence", "name")
+    for candidate in candidates:
+        name = candidate.name.strip()
+        normalized = normalize_name(clean_person_display_name(name))
+        if name and normalized and normalized not in seen:
+            names.append(name)
+            seen.add(normalized)
+    return names
 
 
 def should_replace_display_name(current: str, candidate: str) -> bool:

@@ -4,26 +4,21 @@ import os
 
 from openai import AsyncOpenAI, OpenAI
 
-from podcast_network.extraction.models import (
-    ExtractedGuestResult,
-    GuestExtractionResponse,
-    GuestExtractionResult,
+from podcast_network.extraction.host_models import (
+    ExtractedPodcastHostResult,
+    PodcastHostExtractionResponse,
+    PodcastHostExtractionResult,
 )
-from podcast_network.extraction.prompt import EpisodePrompt
-
-DEFAULT_EXTRACTION_MODEL = "gpt-5-nano"
-
-
-class MissingOpenAIKeyError(RuntimeError):
-    pass
+from podcast_network.extraction.host_prompt import PodcastHostPrompt
+from podcast_network.extraction.openai_client import MissingOpenAIKeyError
 
 
-class OpenAIGuestExtractor:
+class OpenAIPodcastHostExtractor:
     def __init__(
         self,
         *,
-        model: str = DEFAULT_EXTRACTION_MODEL,
-        reasoning_effort: str = "minimal",
+        model: str = "gpt-5-mini",
+        reasoning_effort: str = "medium",
         web_search: bool = False,
         max_tool_calls: int | None = None,
     ) -> None:
@@ -36,25 +31,25 @@ class OpenAIGuestExtractor:
         self.client = OpenAI()
         self.async_client = AsyncOpenAI()
 
-    def extract(self, prompt: EpisodePrompt) -> GuestExtractionResult:
+    def extract(self, prompt: PodcastHostPrompt) -> PodcastHostExtractionResult:
         response = self.client.responses.parse(
             model=self.model,
             instructions=prompt.instructions,
             input=prompt.input_text,
-            text_format=GuestExtractionResponse,
-            max_output_tokens=4000,
+            text_format=PodcastHostExtractionResponse,
+            max_output_tokens=1200,
             reasoning={"effort": self.reasoning_effort},
             **self.tool_options(),
         )
         return response_to_result(response)
 
-    async def extract_async(self, prompt: EpisodePrompt) -> GuestExtractionResult:
+    async def extract_async(self, prompt: PodcastHostPrompt) -> PodcastHostExtractionResult:
         response = await self.async_client.responses.parse(
             model=self.model,
             instructions=prompt.instructions,
             input=prompt.input_text,
-            text_format=GuestExtractionResponse,
-            max_output_tokens=4000,
+            text_format=PodcastHostExtractionResponse,
+            max_output_tokens=1200,
             reasoning={"effort": self.reasoning_effort},
             **self.tool_options(),
         )
@@ -72,21 +67,21 @@ class OpenAIGuestExtractor:
         return options
 
 
-def response_to_result(response) -> GuestExtractionResult:
+def response_to_result(response) -> PodcastHostExtractionResult:
     parsed = response.output_parsed
     if parsed is None:
         raise RuntimeError("OpenAI response did not contain parsed structured output.")
-
     usage = getattr(response, "usage", None)
-    return GuestExtractionResult(
-        guests=[
-            ExtractedGuestResult(
-                name=guest.name.strip(),
-                confidence=guest.confidence,
-                evidence=guest.evidence.strip(),
+    return PodcastHostExtractionResult(
+        hosts=[
+            ExtractedPodcastHostResult(
+                name=host.name.strip(),
+                kind=host.kind.strip().lower(),
+                confidence=host.confidence,
+                evidence=host.evidence.strip(),
             )
-            for guest in parsed.guests
-            if guest.name.strip()
+            for host in parsed.hosts
+            if host.name.strip()
         ],
         raw_response={
             "id": response.id,

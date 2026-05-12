@@ -23,8 +23,10 @@ from podcast_network.web.catalog.models import (
     ExtractionRun,
     Feed,
     GuestCandidate,
+    HostCandidate,
     Person,
     Podcast,
+    PodcastHostExtraction,
 )
 
 
@@ -451,6 +453,61 @@ class GuestExtractionTests(TestCase):
         assert Person.objects.filter(name="Auto Pritts", normalized_name="auto pritts").exists()
         assert Person.objects.filter(name="John Smith", normalized_name="john smith").exists()
         assert not Person.objects.filter(normalized_name="mike").exists()
+
+    def test_sync_guest_appearances_uses_extracted_host_candidates(self) -> None:
+        podcast = Podcast.objects.create(name="Extracted Hostful")
+        episode = Episode.objects.create(
+            podcast=podcast,
+            guid="extracted-hostful-1",
+            title="Guest list",
+            description="A test episode.",
+        )
+        host_run = ExtractionRun.objects.create(
+            model="gpt-5-mini",
+            provider="openai",
+            prompt_version="podcast-host-extraction-v1",
+            episodes_requested=1,
+        )
+        host_extraction = PodcastHostExtraction.objects.create(
+            podcast=podcast,
+            extraction_run=host_run,
+            status=PodcastHostExtraction.Status.SUCCEEDED,
+            prompt_version="podcast-host-extraction-v1",
+            model="gpt-5-mini",
+            input_text="",
+        )
+        HostCandidate.objects.create(
+            extraction=host_extraction,
+            name="Jane Host",
+            normalized_name="jane host",
+            kind=HostCandidate.Kind.HOST,
+            confidence=0.95,
+        )
+        guest_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v5",
+            episodes_requested=1,
+        )
+        extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=guest_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v5",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Jane Host",
+            normalized_name="jane host",
+            confidence=0.99,
+        )
+
+        call_command("sync_guest_appearances", "--min-confidence", "0.90")
+
+        assert Appearance.objects.filter(role=Appearance.Role.HOST).count() == 1
+        assert not Appearance.objects.filter(role=Appearance.Role.GUEST).exists()
 
 
 class AsyncGuestExtractionTests(TransactionTestCase):

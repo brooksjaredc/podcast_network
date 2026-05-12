@@ -8,6 +8,7 @@ from asgiref.sync import sync_to_async
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db.models import Exists, OuterRef
 
+from podcast_network.cleaning import is_single_token_person_name
 from podcast_network.extraction.models import GuestExtractionResult
 from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL, MissingOpenAIKeyError
 from podcast_network.extraction.pipeline import (
@@ -52,6 +53,17 @@ class Command(BaseCommand):
         parser.add_argument("--first-pass-prompt-version", default=FIRST_PASS_PROMPT_VERSION)
         parser.add_argument("--provider", choices=["openai", "fake"], default="fake")
         parser.add_argument("--reasoning-effort", default="minimal")
+        parser.add_argument(
+            "--web-search",
+            action="store_true",
+            help="Allow the OpenAI Responses API web_search tool for extra context.",
+        )
+        parser.add_argument(
+            "--max-tool-calls",
+            type=int,
+            default=2,
+            help="Maximum web search tool calls per episode when --web-search is enabled.",
+        )
         parser.add_argument("--concurrency", type=int, default=10)
         parser.add_argument("--requests-per-minute", type=int, default=120)
         parser.add_argument("--retries", type=int, default=2)
@@ -104,6 +116,8 @@ class Command(BaseCommand):
                 provider=str(options["provider"]),
                 model=str(options["model"]),
                 reasoning_effort=str(options["reasoning_effort"]),
+                web_search=bool(options["web_search"]),
+                max_tool_calls=nonnegative_int(options["max_tool_calls"], "--max-tool-calls"),
             )
         except MissingOpenAIKeyError as exc:
             raise CommandError(str(exc)) from exc
@@ -126,6 +140,8 @@ class Command(BaseCommand):
                     "--retry-base-seconds",
                 ),
                 run_label=str(options["run_label"]),
+                web_search=bool(options["web_search"]),
+                max_tool_calls=nonnegative_int(options["max_tool_calls"], "--max-tool-calls"),
             )
         )
         self.stdout.write(
@@ -238,6 +254,8 @@ async def run_resolution_batch(
     retries: int,
     retry_base_seconds: float,
     run_label: str,
+    web_search: bool,
+    max_tool_calls: int,
 ) -> ExtractionRun:
     run = await sync_to_async(ExtractionRun.objects.create)(
         model=model,
@@ -251,6 +269,8 @@ async def run_resolution_batch(
             "requests_per_minute": requests_per_minute,
             "retries": retries,
             "retry_base_seconds": retry_base_seconds,
+            "web_search": web_search,
+            "max_tool_calls": max_tool_calls,
         },
     )
     semaphore = asyncio.Semaphore(concurrency)
@@ -285,7 +305,7 @@ async def run_resolution_batch(
             model=model,
             prompt_version=prompt_version,
             input_text=prompt.input_text,
-            result=result,
+            result=filter_resolution_result(result),
         )
 
     outcomes = await asyncio.gather(*(resolve_one(item) for item in selected))
@@ -308,6 +328,29 @@ def write_sample_report(selected: list[SingleNameEpisode], path: Path) -> None:
             ]
         )
     path.write_text("\n".join(sections), encoding="utf-8")
+
+
+def filter_resolution_result(result: GuestExtractionResult) -> GuestExtractionResult:
+    return GuestExtractionResult(
+        guests=[
+            guest
+            for guest in result.guests
+            if is_valid_resolved_name(guest.name)
+        ],
+        raw_response=result.raw_response,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
+
+
+def is_valid_resolved_name(name: str) -> bool:
+    stripped = name.strip()
+    if not stripped or "[" in stripped or "]" in stripped:
+        return False
+    lowered = stripped.casefold()
+    if "not provided" in lowered or "unknown" in lowered:
+        return False
+    return not is_single_token_person_name(stripped)
 
 
 def positive_int(value: object, option_name: str) -> int:

@@ -20,6 +20,8 @@ CATALOG_TABLES = [
     "catalog_scrapeerror",
     "catalog_episodeguestextraction",
     "catalog_guestcandidate",
+    "catalog_podcasthostextraction",
+    "catalog_hostcandidate",
     "catalog_appearance",
 ]
 

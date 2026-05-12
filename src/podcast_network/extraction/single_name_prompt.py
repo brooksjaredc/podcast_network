@@ -19,6 +19,11 @@ Rules:
 - Return only full human names for the listed one-word candidates.
 - Do not return the original one-word name unless it is truly a complete public name.
 - If the context does not provide enough evidence to infer the full name, omit it.
+- If the best answer would be "unknown", "full name not provided", or a note in brackets,
+  omit the candidate instead.
+- Do not combine two separate one-word candidates into fake full names. For example,
+  if the title lists "Conway & Bruce", do not return "Conway Bruce" or "Bruce Conway"
+  unless the metadata explicitly says that is a person's full name.
 - Do not guess from general world knowledge unless the metadata itself strongly anchors
   the identity, such as a podcast-specific regular cast list or direct episode text.
 - If the one-word candidate appears to be a host, co-host, producer, sidekick, regular
@@ -30,6 +35,8 @@ Rules:
 - Use the evidence field to explain the shortest reason the full name is supported.
 - Confidence should reflect the resolution of the one-word candidate to the full name,
   not merely whether the person appears somewhere in the text.
+- Most unresolved candidates should be omitted. Returning nothing is better than returning
+  an unresolved nickname, handle, first name, or guessed identity.
 
 Examples:
 - Candidate: "Mike"; metadata says "Today Mike Birbiglia joins the show."

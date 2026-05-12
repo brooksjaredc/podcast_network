@@ -135,7 +135,10 @@ def select_episodes(
     prompt_version: str,
     force: bool,
 ) -> list[Episode]:
-    queryset = Episode.objects.select_related("podcast").order_by("-published_at", "id")
+    queryset = (
+        Episode.objects.select_related("podcast")
+        .order_by("-published_at", "id")
+    )
     if episode_ids:
         queryset = queryset.filter(id__in=episode_ids)
         limit = max(limit, len(episode_ids))
@@ -147,10 +150,34 @@ def select_episodes(
             status=EpisodeGuestExtraction.Status.SUCCEEDED,
         )
         queryset = queryset.exclude(Exists(successful_extraction))
-    return list(queryset[:limit])
+    selected: list[Episode] = []
+    for episode in queryset.iterator(chunk_size=1000):
+        if podcast_skips_guest_extraction(episode.podcast):
+            continue
+        selected.append(episode)
+        if len(selected) >= limit:
+            break
+    return selected
 
 
-def build_extractor(*, provider: str, model: str, reasoning_effort: str):
+def podcast_skips_guest_extraction(podcast) -> bool:
+    policy = (podcast.metadata or {}).get("extraction_policy") or {}
+    return policy.get("skip_guest_extraction") is True
+
+
+def build_extractor(
+    *,
+    provider: str,
+    model: str,
+    reasoning_effort: str,
+    web_search: bool = False,
+    max_tool_calls: int | None = None,
+):
     if provider == "fake":
         return FakeGuestExtractor()
-    return OpenAIGuestExtractor(model=model, reasoning_effort=reasoning_effort)
+    return OpenAIGuestExtractor(
+        model=model,
+        reasoning_effort=reasoning_effort,
+        web_search=web_search,
+        max_tool_calls=max_tool_calls,
+    )
