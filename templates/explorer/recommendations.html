@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+
+{% block title %}Recommendations{% endblock %}
+
+{% block content %}
+  <h1>Recommendations</h1>
+  <p class="muted">
+    Build a set of podcasts you already like, then find other shows with overlapping guests.
+  </p>
+
+  <section class="recommendations-layout">
+    <aside class="panel">
+      <h2>Your Podcasts</h2>
+      <form class="toolbar" method="get">
+        {% for selected_id in selected_ids %}
+          <input type="hidden" name="selected" value="{{ selected_id }}">
+        {% endfor %}
+        {% for excluded_id in excluded_ids %}
+          <input type="hidden" name="excluded" value="{{ excluded_id }}">
+        {% endfor %}
+        {% for selected_genre in selected_genres %}
+          <input type="hidden" name="genre" value="{{ selected_genre }}">
+        {% endfor %}
+        <input type="hidden" name="sort" value="{{ sort }}">
+        {% if active_only %}
+          <input type="hidden" name="active" value="1">
+        {% endif %}
+        <input name="q" value="{{ search_query }}" placeholder="Search podcasts" aria-label="Search podcasts">
+        <button type="submit">Search</button>
+      </form>
+
+      {% if search_query %}
+        <div class="stack">
+          {% for podcast in search_results %}
+            <div class="podcast-row">
+              <div class="podcast-row-header">
+                <div>
+                  <h3><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></h3>
+                  <p class="muted">{{ podcast.unique_guests }} guests</p>
+                </div>
+                <form method="get">
+                  {% for selected_id in selected_ids %}
+                    <input type="hidden" name="selected" value="{{ selected_id }}">
+                  {% endfor %}
+                  {% for excluded_id in excluded_ids %}
+                    <input type="hidden" name="excluded" value="{{ excluded_id }}">
+                  {% endfor %}
+                  <input type="hidden" name="selected" value="{{ podcast.id }}">
+                  <input type="hidden" name="q" value="{{ search_query }}">
+                  {% for selected_genre in selected_genres %}
+                    <input type="hidden" name="genre" value="{{ selected_genre }}">
+                  {% endfor %}
+                  <input type="hidden" name="sort" value="{{ sort }}">
+                  {% if active_only %}
+                    <input type="hidden" name="active" value="1">
+                  {% endif %}
+                  <button type="submit">Add</button>
+                </form>
+              </div>
+            </div>
+          {% empty %}
+            <p class="muted">No matching podcasts with guest data.</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <h2>Selected</h2>
+      {% if selected_podcasts %}
+        <form class="toolbar" method="get">
+          <input type="hidden" name="q" value="{{ search_query }}">
+          {% for excluded_id in excluded_ids %}
+            <input type="hidden" name="excluded" value="{{ excluded_id }}">
+          {% endfor %}
+          {% for selected_genre in selected_genres %}
+            <input type="hidden" name="genre" value="{{ selected_genre }}">
+          {% endfor %}
+          <input type="hidden" name="sort" value="{{ sort }}">
+          {% if active_only %}
+            <input type="hidden" name="active" value="1">
+          {% endif %}
+          <button class="secondary-button" type="submit">Clear</button>
+        </form>
+      {% endif %}
+      <div class="stack">
+        {% for podcast in selected_podcasts %}
+          <div class="podcast-row">
+            <div class="podcast-row-header">
+              <div>
+                <h3><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></h3>
+                <p class="muted">{{ podcast.unique_guests }} guests</p>
+              </div>
+              <form method="get">
+                {% for selected_id in selected_ids %}
+                  {% if selected_id != podcast.id %}
+                    <input type="hidden" name="selected" value="{{ selected_id }}">
+                  {% endif %}
+                {% endfor %}
+                {% for excluded_id in excluded_ids %}
+                  <input type="hidden" name="excluded" value="{{ excluded_id }}">
+                {% endfor %}
+                <input type="hidden" name="q" value="{{ search_query }}">
+                {% for selected_genre in selected_genres %}
+                  <input type="hidden" name="genre" value="{{ selected_genre }}">
+                {% endfor %}
+                <input type="hidden" name="sort" value="{{ sort }}">
+                {% if active_only %}
+                  <input type="hidden" name="active" value="1">
+                {% endif %}
+                <button class="secondary-button" type="submit">Remove</button>
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <p class="muted">Search for a podcast to start.</p>
+        {% endfor %}
+      </div>
+
+      {% if excluded_podcasts %}
+        <h2>Excluded</h2>
+        <div class="stack">
+          {% for podcast in excluded_podcasts %}
+            <div class="podcast-row">
+              <div class="podcast-row-header">
+                <div>
+                  <h3><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></h3>
+                  <p class="muted">Down-ranking similar recommendations</p>
+                </div>
+                <form method="get">
+                  {% for selected_id in selected_ids %}
+                    <input type="hidden" name="selected" value="{{ selected_id }}">
+                  {% endfor %}
+                  {% for excluded_id in excluded_ids %}
+                    {% if excluded_id != podcast.id %}
+                      <input type="hidden" name="excluded" value="{{ excluded_id }}">
+                    {% endif %}
+                  {% endfor %}
+                  <input type="hidden" name="q" value="{{ search_query }}">
+                  {% for selected_genre in selected_genres %}
+                    <input type="hidden" name="genre" value="{{ selected_genre }}">
+                  {% endfor %}
+                  <input type="hidden" name="sort" value="{{ sort }}">
+                  {% if active_only %}
+                    <input type="hidden" name="active" value="1">
+                  {% endif %}
+                  <button class="secondary-button" type="submit">Restore</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </aside>
+
+    <section>
+      <h2>Similar Podcasts</h2>
+      <div class="stack">
+        {% for row in recommendation_rows %}
+          <article class="podcast-row">
+            <div class="podcast-row-header">
+              <div>
+                <h3><a href="{% url 'explorer:podcast_detail' row.podcast.id %}">{{ row.podcast.name }}</a></h3>
+                <p class="muted">
+                  {{ row.podcast.shared_guest_count }} shared guests,
+                  {{ row.podcast.overlap_rate_percent }}% overlap rate,
+                  {{ row.podcast.matching_appearances }} matching appearances
+                  {% if row.podcast.is_active %}, active{% endif %}
+                </p>
+              </div>
+              <form method="get">
+                {% for selected_id in selected_ids %}
+                  <input type="hidden" name="selected" value="{{ selected_id }}">
+                {% endfor %}
+                {% for excluded_id in excluded_ids %}
+                  <input type="hidden" name="excluded" value="{{ excluded_id }}">
+                {% endfor %}
+                <input type="hidden" name="selected" value="{{ row.podcast.id }}">
+                <input type="hidden" name="q" value="{{ search_query }}">
+                {% for selected_genre in selected_genres %}
+                  <input type="hidden" name="genre" value="{{ selected_genre }}">
+                {% endfor %}
+                <input type="hidden" name="sort" value="{{ sort }}">
+                {% if active_only %}
+                  <input type="hidden" name="active" value="1">
+                {% endif %}
+                <button type="submit">Add</button>
+              </form>
+              <form method="get">
+                {% for selected_id in selected_ids %}
+                  <input type="hidden" name="selected" value="{{ selected_id }}">
+                {% endfor %}
+                {% for excluded_id in excluded_ids %}
+                  <input type="hidden" name="excluded" value="{{ excluded_id }}">
+                {% endfor %}
+                <input type="hidden" name="excluded" value="{{ row.podcast.id }}">
+                <input type="hidden" name="q" value="{{ search_query }}">
+                {% for selected_genre in selected_genres %}
+                  <input type="hidden" name="genre" value="{{ selected_genre }}">
+                {% endfor %}
+                <input type="hidden" name="sort" value="{{ sort }}">
+                {% if active_only %}
+                  <input type="hidden" name="active" value="1">
+                {% endif %}
+                <button class="secondary-button" type="submit">Not Interested</button>
+              </form>
+            </div>
+            {% if row.podcast.recommendation_genres %}
+              <p class="muted">
+                Genres:
+                {% for genre in row.podcast.recommendation_genres %}
+                  {{ genre }}{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+              </p>
+            {% endif %}
+            {% if row.explanation %}
+              <p>
+                Recommended because it shares {{ row.explanation.guest_count }}
+                guests with {{ row.explanation.source_podcast }}:
+                {% for guest in row.explanation.guests %}
+                  {{ guest }}{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+              </p>
+            {% endif %}
+            {% if row.podcast.exclusion_penalty %}
+              <p class="muted">
+                Down-ranked because it overlaps with excluded podcasts.
+              </p>
+            {% endif %}
+            <p>
+              Shared guests:
+              {% for guest in row.shared_guests %}
+                <a href="{% url 'explorer:person_detail' guest.id %}">{{ guest.name }}</a>{% if not forloop.last %}, {% endif %}
+              {% empty %}
+                <span class="muted">No guest details available.</span>
+              {% endfor %}
+            </p>
+          </article>
+        {% empty %}
+          {% if selected_podcasts %}
+            <p class="muted">No recommendations found for this set yet.</p>
+          {% else %}
+            <p class="muted">Add podcasts on the left to load recommendations.</p>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+
+    <aside class="panel recommendations-filters">
+      <h2>Options</h2>
+      <div class="filter-section">
+        <h3>Genres</h3>
+        <div class="pill-row" aria-label="Genre filters">
+          <form class="pill-form" method="get">
+            {% for selected_id in selected_ids %}
+              <input type="hidden" name="selected" value="{{ selected_id }}">
+            {% endfor %}
+            {% for excluded_id in excluded_ids %}
+              <input type="hidden" name="excluded" value="{{ excluded_id }}">
+            {% endfor %}
+            <input type="hidden" name="q" value="{{ search_query }}">
+            {% if active_only %}
+              <input type="hidden" name="active" value="1">
+            {% endif %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <button class="pill-button {% if not selected_genres %}active{% endif %}" type="submit">All genres</button>
+          </form>
+          {% for genre in genre_options %}
+            <form class="pill-form" method="get">
+              {% for selected_id in selected_ids %}
+                <input type="hidden" name="selected" value="{{ selected_id }}">
+              {% endfor %}
+              {% for excluded_id in excluded_ids %}
+                <input type="hidden" name="excluded" value="{{ excluded_id }}">
+              {% endfor %}
+              <input type="hidden" name="q" value="{{ search_query }}">
+              {% for selected_genre in selected_genres %}
+                {% if selected_genre != genre %}
+                  <input type="hidden" name="genre" value="{{ selected_genre }}">
+                {% endif %}
+              {% endfor %}
+              {% if genre not in selected_genres %}
+                <input type="hidden" name="genre" value="{{ genre }}">
+              {% endif %}
+              {% if active_only %}
+                <input type="hidden" name="active" value="1">
+              {% endif %}
+              <input type="hidden" name="sort" value="{{ sort }}">
+              <button class="pill-button {% if genre in selected_genres %}active{% endif %}" type="submit">{{ genre }}</button>
+            </form>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="filter-section">
+        <h3>Activity</h3>
+        <div class="pill-row" aria-label="Activity filters">
+          <form class="pill-form" method="get">
+            {% for selected_id in selected_ids %}
+              <input type="hidden" name="selected" value="{{ selected_id }}">
+            {% endfor %}
+            {% for excluded_id in excluded_ids %}
+              <input type="hidden" name="excluded" value="{{ excluded_id }}">
+            {% endfor %}
+            <input type="hidden" name="q" value="{{ search_query }}">
+            {% for selected_genre in selected_genres %}
+              <input type="hidden" name="genre" value="{{ selected_genre }}">
+            {% endfor %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <button class="pill-button {% if not active_only %}active{% endif %}" type="submit">All podcasts</button>
+          </form>
+          <form class="pill-form" method="get">
+            {% for selected_id in selected_ids %}
+              <input type="hidden" name="selected" value="{{ selected_id }}">
+            {% endfor %}
+            {% for excluded_id in excluded_ids %}
+              <input type="hidden" name="excluded" value="{{ excluded_id }}">
+            {% endfor %}
+            <input type="hidden" name="q" value="{{ search_query }}">
+            {% for selected_genre in selected_genres %}
+              <input type="hidden" name="genre" value="{{ selected_genre }}">
+            {% endfor %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="active" value="1">
+            <button class="pill-button {% if active_only %}active{% endif %}" type="submit">Active in last 2 months</button>
+          </form>
+        </div>
+      </div>
+      <div class="filter-section">
+        <h3>Sort</h3>
+        <div class="pill-row" aria-label="Recommendation sorting">
+          {% for sort_key, sort_label in sort_options.items %}
+            <form class="pill-form" method="get">
+              {% for selected_id in selected_ids %}
+                <input type="hidden" name="selected" value="{{ selected_id }}">
+              {% endfor %}
+              {% for excluded_id in excluded_ids %}
+                <input type="hidden" name="excluded" value="{{ excluded_id }}">
+              {% endfor %}
+              <input type="hidden" name="q" value="{{ search_query }}">
+              {% for selected_genre in selected_genres %}
+                <input type="hidden" name="genre" value="{{ selected_genre }}">
+              {% endfor %}
+              {% if active_only %}
+                <input type="hidden" name="active" value="1">
+              {% endif %}
+              <input type="hidden" name="sort" value="{{ sort_key }}">
+              <button class="pill-button {% if sort == sort_key %}active{% endif %}" type="submit">{{ sort_label }}</button>
+            </form>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+  </section>
+{% endblock %}

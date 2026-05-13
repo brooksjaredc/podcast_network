@@ -7,6 +7,23 @@ from urllib.parse import parse_qsl, urlparse
 BASE_DIR = Path(__file__).resolve().parents[3]
 
 
+def load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key:
+            os.environ.setdefault(key, value)
+
+
+load_dotenv(BASE_DIR / ".env")
+
+
 def database_config() -> dict[str, object]:
     database_url = os.environ.get("DATABASE_URL", "")
     if not database_url:

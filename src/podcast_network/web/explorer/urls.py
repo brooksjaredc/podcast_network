@@ -11,6 +11,7 @@ urlpatterns = [
     path("people/", db_views.people, name="people"),
     path("people/<int:person_id>/", db_views.person_detail, name="person_detail"),
     path("rankings/", db_views.rankings, name="rankings"),
+    path("recommendations/", db_views.recommendations, name="recommendations"),
     path("common/", db_views.common, name="common"),
     path("path/", db_views.path, name="path"),
     path("advanced/", views.advanced, name="advanced"),

@@ -28,7 +28,7 @@
         background: var(--panel);
       }
       nav, main {
-        max-width: 1120px;
+        max-width: 1280px;
         margin: 0 auto;
         padding: 18px 22px;
       }
@@ -76,6 +76,19 @@
         padding: 9px 10px;
         border: 1px solid var(--line);
         border-radius: 6px;
+        font: inherit;
+      }
+      input[type="checkbox"] {
+        width: auto;
+        min-width: 0;
+        padding: 0;
+      }
+      select {
+        min-width: 190px;
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
         font: inherit;
       }
       button, .button {
@@ -443,10 +456,77 @@
         border-color: var(--accent);
         color: var(--accent);
       }
+      .pill-form {
+        display: inline;
+        margin: 0;
+      }
+      .pill-button {
+        padding: 5px 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink);
+        background: #fff;
+        font-size: 14px;
+      }
+      .pill-button.active {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--person-bg);
+      }
+      .filter-section {
+        margin: 16px 0;
+      }
+      .filter-section h3 {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 13px;
+        text-transform: uppercase;
+      }
       .grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 22px;
+      }
+      .recommendations-layout {
+        display: grid;
+        grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.25fr) minmax(220px, 0.62fr);
+        gap: 22px;
+        align-items: start;
+      }
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+      .podcast-row {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .podcast-row-header {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        justify-content: space-between;
+      }
+      .podcast-row h3 {
+        margin: 0 0 6px;
+        font-size: 17px;
+        line-height: 1.25;
+      }
+      .podcast-row p {
+        margin: 6px 0 0;
+      }
+      .secondary-button {
+        border-color: var(--line);
+        color: var(--ink);
+        background: #fff;
+      }
+      .inline-check {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+        color: var(--ink);
       }
       .panel {
         padding: 16px;
@@ -493,6 +573,9 @@
         .home-actions {
           grid-template-columns: 1fr;
         }
+        .recommendations-layout {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -503,6 +586,7 @@
         <a href="{% url 'explorer:podcasts' %}">Podcasts</a>
         <a href="{% url 'explorer:people' %}">People</a>
         <a href="{% url 'explorer:rankings' %}">Rankings</a>
+        <a href="{% url 'explorer:recommendations' %}">Recommendations</a>
         <a href="{% url 'explorer:path' %}">Six Degrees</a>
         <a href="{% url 'explorer:common' %}">Common Guests</a>
         <a href="{% url 'explorer:advanced' %}">Advanced</a>

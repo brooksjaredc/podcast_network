@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.management import call_command
 from django.test import Client, override_settings
 from django.utils import timezone
@@ -172,6 +174,20 @@ def test_podcast_detail_links_guests() -> None:
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
+def test_podcast_detail_shows_genres() -> None:
+    first_podcast, _, _, _ = make_db_graph()
+    first_podcast.metadata = {"legacy": {"categories": ["Comedy", "Society & Culture"]}}
+    first_podcast.save(update_fields=["metadata"])
+
+    response = Client().get(f"/podcasts/{first_podcast.id}/")
+
+    assert response.status_code == 200
+    assert b"Podcast genres" in response.content
+    assert b"Comedy" in response.content
+    assert b"Society &amp; Culture" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
 def test_frequent_guest_is_listed_as_cohost_and_removed_from_guest_list() -> None:
     podcast = Podcast.objects.create(name="Daily Panel")
     regular = Person.objects.create(name="Regular Panelist", normalized_name="regular panelist")
@@ -302,6 +318,363 @@ def test_common_guests_loads() -> None:
     assert response.status_code == 200
     assert b"The Joe Rogan Experience" in response.content
     assert b"Common Guest" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_search_adds_selected_podcasts() -> None:
+    first_podcast, _, _, _ = make_db_graph()
+    response = Client().get("/recommendations/", {"q": "Joe Rogan"})
+
+    assert response.status_code == 200
+    assert b"Recommendations" in response.content
+    assert b"The Joe Rogan Experience" in response.content
+    assert f'name="selected" value="{first_podcast.id}"'.encode() in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_rank_podcasts_by_shared_guests() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    response = Client().get("/recommendations/", {"selected": str(first_podcast.id)})
+
+    assert response.status_code == 200
+    assert b"Similar Podcasts" in response.content
+    assert b"WTF with Marc Maron" in response.content
+    assert b"Common Guest" in response.content
+    assert b"Recommended because it shares" in response.content
+    assert b"guests with The Joe Rogan Experience" in response.content
+    assert f'href="/podcasts/{second_podcast.id}/"'.encode() in response.content
+    assert f'name="selected" value="{second_podcast.id}"'.encode() in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_show_clear_button_for_selected_podcasts() -> None:
+    first_podcast, _, _, _ = make_db_graph()
+    response = Client().get(
+        "/recommendations/",
+        {"selected": str(first_podcast.id), "q": "Joe"},
+    )
+
+    assert response.status_code == 200
+    assert b"Clear" in response.content
+    assert b'name="q" value="Joe"' in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_filter_by_genre() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    second_podcast.metadata = {"legacy": {"categories": ["Comedy"]}}
+    second_podcast.save(update_fields=["metadata"])
+
+    response = Client().get(
+        "/recommendations/",
+        {"selected": str(first_podcast.id), "genre": "Comedy"},
+    )
+
+    assert response.status_code == 200
+    assert b"WTF with Marc Maron" in response.content
+    assert b"Comedy" in response.content
+    assert b"All genres" in response.content
+    assert b'class="pill-button active" type="submit">Comedy' in response.content
+    assert b"<h3>Genres</h3>" in response.content
+    assert b"<h3>Activity</h3>" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_filter_by_multiple_genres() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    shared_guest = Person.objects.get(name="Common Guest")
+    second_podcast.metadata = {"legacy": {"categories": ["Comedy"]}}
+    second_podcast.save(update_fields=["metadata"])
+    third_podcast = Podcast.objects.create(
+        name="Arts Interview Hour",
+        metadata={"legacy": {"categories": ["Arts"]}},
+    )
+    episode = Episode.objects.create(
+        podcast=third_podcast,
+        guid="arts-1",
+        title="Arts with Common Guest",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=episode,
+        person=shared_guest,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+
+    response = Client().get(
+        "/recommendations/",
+        {
+            "selected": str(first_podcast.id),
+            "genre": ["Comedy", "Arts"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"WTF with Marc Maron" in response.content
+    assert b"Arts Interview Hour" in response.content
+    assert b'class="pill-button active" type="submit">Comedy' in response.content
+    assert b'class="pill-button active" type="submit">Arts' in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_active_filter_excludes_old_podcasts() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    second_podcast.episodes.update(published_at=timezone.now() - timedelta(days=90))
+
+    response = Client().get(
+        "/recommendations/",
+        {"selected": str(first_podcast.id), "active": "1"},
+    )
+
+    assert response.status_code == 200
+    assert b"WTF with Marc Maron" not in response.content
+    assert b'class="pill-button active" type="submit">Active in last 2 months' in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_can_exclude_and_restore_podcasts() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    response = Client().get(
+        "/recommendations/",
+        {
+            "selected": str(first_podcast.id),
+            "excluded": str(second_podcast.id),
+        },
+    )
+
+    assert response.status_code == 200
+    recommendations_section = response.content.split(b"<h2>Similar Podcasts</h2>")[1]
+    assert b"WTF with Marc Maron" not in recommendations_section
+    assert b"Excluded" in response.content
+    assert b"Restore" in response.content
+    assert f'name="excluded" value="{second_podcast.id}"'.encode() in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_excluded_podcasts_downrank_similar_candidates() -> None:
+    first_podcast, second_podcast, _, marc = make_db_graph()
+    shared_guest = Person.objects.get(name="Common Guest")
+    second_episode = second_podcast.episodes.first()
+    assert second_episode is not None
+    Appearance.objects.create(
+        episode=second_episode,
+        person=marc,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    similar_to_excluded = Podcast.objects.create(name="Similar To Excluded")
+    similar_episode = Episode.objects.create(
+        podcast=similar_to_excluded,
+        guid="similar-excluded-1",
+        title="Similar with Common and Marc",
+        published_at=timezone.now(),
+    )
+    for person in [shared_guest, marc]:
+        Appearance.objects.create(
+            episode=similar_episode,
+            person=person,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+
+    cleaner_match = Podcast.objects.create(name="Cleaner Match")
+    cleaner_episode = Episode.objects.create(
+        podcast=cleaner_match,
+        guid="cleaner-match-1",
+        title="Cleaner with Joe",
+        published_at=timezone.now(),
+    )
+    joe = Person.objects.get(name="Joe Rogan")
+    Appearance.objects.create(
+        episode=cleaner_episode,
+        person=joe,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+
+    response = Client().get(
+        "/recommendations/",
+        {
+            "selected": str(first_podcast.id),
+            "excluded": str(second_podcast.id),
+        },
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Cleaner Match" in content
+    assert "Similar To Excluded" in content
+    assert content.index("Cleaner Match") < content.index("Similar To Excluded")
+    assert "Down-ranked because it overlaps with excluded podcasts" in content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_can_sort_by_overlap_rate() -> None:
+    first_podcast, _, joe, marc = make_db_graph()
+    broad_match = Podcast.objects.create(name="Broad Match")
+    broad_episode = Episode.objects.create(
+        podcast=broad_match,
+        guid="broad-match-1",
+        title="Broad Match",
+        published_at=timezone.now(),
+    )
+    for person in [joe, marc]:
+        Appearance.objects.create(
+            episode=broad_episode,
+            person=person,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+    for index in range(8):
+        extra = Person.objects.create(
+            name=f"Broad Extra {index}",
+            normalized_name=f"broad extra {index}",
+        )
+        Appearance.objects.create(
+            episode=broad_episode,
+            person=extra,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+
+    niche_match = Podcast.objects.create(name="Niche Match")
+    niche_episode = Episode.objects.create(
+        podcast=niche_match,
+        guid="niche-match-1",
+        title="Niche Match",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=niche_episode,
+        person=joe,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+
+    response = Client().get(
+        "/recommendations/",
+        {
+            "selected": str(first_podcast.id),
+            "sort": "rate",
+        },
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Highest overlap rate" in content
+    assert "100% overlap rate" in content
+    assert content.index("Niche Match") < content.index("Broad Match")
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendation_shared_guests_sort_by_total_appearances() -> None:
+    first_podcast, _, _, _ = make_db_graph()
+    alpha = Person.objects.create(name="Alpha Guest", normalized_name="alpha guest")
+    zed = Person.objects.create(name="Zed Guest", normalized_name="zed guest")
+    for index in range(3):
+        episode = Episode.objects.create(
+            podcast=first_podcast,
+            guid=f"selected-zed-{index}",
+            title=f"Selected Zed {index}",
+            published_at=timezone.now(),
+        )
+        Appearance.objects.create(
+            episode=episode,
+            person=zed,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+    alpha_selected_episode = Episode.objects.create(
+        podcast=first_podcast,
+        guid="selected-alpha",
+        title="Selected Alpha",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=alpha_selected_episode,
+        person=alpha,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+
+    candidate = Podcast.objects.create(name="Shared Guest Ordering")
+    candidate_episode = Episode.objects.create(
+        podcast=candidate,
+        guid="shared-guest-ordering",
+        title="Shared Guest Ordering",
+        published_at=timezone.now(),
+    )
+    for person in [alpha, zed]:
+        Appearance.objects.create(
+            episode=candidate_episode,
+            person=person,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+
+    response = Client().get("/recommendations/", {"selected": str(first_podcast.id)})
+
+    assert response.status_code == 200
+    card = response.content.decode().split("Shared Guest Ordering", 1)[1]
+    shared_guest_line = card.split("Shared guests:", 1)[1]
+    assert shared_guest_line.index("Zed Guest") < shared_guest_line.index("Alpha Guest")
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendation_explanation_guests_sort_by_total_appearances() -> None:
+    first_podcast, _, _, _ = make_db_graph()
+    alpha = Person.objects.create(name="Alpha Explanation", normalized_name="alpha explanation")
+    zed = Person.objects.create(name="Zed Explanation", normalized_name="zed explanation")
+    for index in range(3):
+        episode = Episode.objects.create(
+            podcast=first_podcast,
+            guid=f"selected-explanation-zed-{index}",
+            title=f"Selected Explanation Zed {index}",
+            published_at=timezone.now(),
+        )
+        Appearance.objects.create(
+            episode=episode,
+            person=zed,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+    alpha_episode = Episode.objects.create(
+        podcast=first_podcast,
+        guid="selected-explanation-alpha",
+        title="Selected Explanation Alpha",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=alpha_episode,
+        person=alpha,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+
+    candidate = Podcast.objects.create(name="Explanation Ordering")
+    candidate_episode = Episode.objects.create(
+        podcast=candidate,
+        guid="explanation-ordering",
+        title="Explanation Ordering",
+        published_at=timezone.now(),
+    )
+    for person in [alpha, zed]:
+        Appearance.objects.create(
+            episode=candidate_episode,
+            person=person,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+
+    response = Client().get("/recommendations/", {"selected": str(first_podcast.id)})
+
+    assert response.status_code == 200
+    card = response.content.decode().split("Explanation Ordering", 1)[1]
+    explanation_line = card.split("Recommended because", 1)[1].split("</p>", 1)[0]
+    assert explanation_line.index("Zed Explanation") < explanation_line.index(
+        "Alpha Explanation"
+    )
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])

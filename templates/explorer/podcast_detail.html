@@ -6,6 +6,13 @@
   <h1>{{ podcast.name }}</h1>
   <p class="muted">{{ podcast.website_url }}</p>
   <p>{{ podcast.description|striptags }}</p>
+  {% if genres %}
+    <div class="pill-row" aria-label="Podcast genres">
+      {% for genre in genres %}
+        <span class="pill">{{ genre }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
 
   <section class="stats">
     <div class="stat"><strong>{{ episode_count }}</strong><span>episodes</span></div>
