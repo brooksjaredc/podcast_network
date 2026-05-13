@@ -462,6 +462,109 @@ class PodcastNetworkMetric(models.Model):
         return f"{self.podcast} metrics for run {self.run_id}"
 
 
+class NetworkEvolutionRun(models.Model):
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        SKIPPED = "skipped", "Skipped"
+        FAILED = "failed", "Failed"
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RUNNING)
+    graph_version = models.CharField(max_length=50, default="network-evolution-v1")
+    weeks_requested = models.PositiveIntegerField(default=0)
+    weeks_calculated = models.PositiveIntegerField(default=0)
+    start_week = models.DateField(null=True, blank=True)
+    end_week = models.DateField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        return f"NetworkEvolutionRun #{self.pk or 'new'} {self.status}"
+
+
+class NetworkEvolutionSnapshot(models.Model):
+    run = models.ForeignKey(
+        NetworkEvolutionRun,
+        on_delete=models.CASCADE,
+        related_name="snapshots",
+    )
+    week_start = models.DateField()
+    cutoff_at = models.DateTimeField()
+    person_nodes = models.PositiveIntegerField(default=0)
+    person_edges = models.PositiveIntegerField(default=0)
+    podcast_count = models.PositiveIntegerField(default=0)
+    guest_appearance_count = models.PositiveIntegerField(default=0)
+    largest_component_nodes = models.PositiveIntegerField(default=0)
+    largest_component_edges = models.PositiveIntegerField(default=0)
+    density = models.FloatField(default=0.0)
+    average_clustering = models.FloatField(default=0.0)
+    transitivity = models.FloatField(default=0.0)
+    average_shortest_path_length = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["week_start"],
+                name="unique_network_evolution_snapshot_week",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["week_start"]),
+            models.Index(fields=["run", "week_start"]),
+        ]
+        ordering = ["week_start"]
+
+    def __str__(self) -> str:
+        return f"Network evolution snapshot {self.week_start}"
+
+
+class PersonNetworkEvolutionMetric(models.Model):
+    snapshot = models.ForeignKey(
+        NetworkEvolutionSnapshot,
+        on_delete=models.CASCADE,
+        related_name="person_metrics",
+    )
+    canonical = models.ForeignKey(
+        CanonicalPersonEntity,
+        on_delete=models.CASCADE,
+        related_name="network_evolution_metrics",
+    )
+    display_name = models.CharField(max_length=500)
+    pagerank = models.FloatField(default=0.0)
+    hub = models.FloatField(default=0.0)
+    authority = models.FloatField(default=0.0)
+    closeness = models.FloatField(default=0.0)
+    pagerank_rank = models.PositiveIntegerField(default=0)
+    hub_rank = models.PositiveIntegerField(default=0)
+    authority_rank = models.PositiveIntegerField(default=0)
+    closeness_rank = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["snapshot", "canonical"],
+                name="unique_person_network_evolution_metric_per_snapshot",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["canonical", "snapshot"]),
+            models.Index(fields=["snapshot", "pagerank_rank"]),
+            models.Index(fields=["snapshot", "hub_rank"]),
+            models.Index(fields=["snapshot", "authority_rank"]),
+            models.Index(fields=["snapshot", "closeness_rank"]),
+        ]
+        ordering = ["snapshot__week_start", "pagerank_rank", "display_name"]
+
+    def __str__(self) -> str:
+        return f"{self.display_name} evolution metric for {self.snapshot.week_start}"
+
+
 class ScrapeError(models.Model):
     class Stage(models.TextChoices):
         FETCH = "fetch", "Fetch"

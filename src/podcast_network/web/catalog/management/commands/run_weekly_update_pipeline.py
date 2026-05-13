@@ -26,7 +26,8 @@ TODO_NOTES = (
     "Add scheduled host/co-host extraction refresh for newly discovered podcasts.",
     "Add single-name resolution once the cheaper/contextual strategy is settled.",
     "Add entity-resolution active-learning sampling for new uncertain pairs.",
-    "Add network metric evolution snapshots and leader-score calculations.",
+    "Bootstrap historical network evolution snapshots when ready for the expensive backfill.",
+    "Add leader-score calculations.",
     "Add optional plot/static artifact regeneration once plots read from Postgres metrics.",
 )
 
@@ -73,6 +74,7 @@ class Command(BaseCommand):
         parser.add_argument("--skip-processing", action="store_true")
         parser.add_argument("--skip-entity-resolution", action="store_true")
         parser.add_argument("--skip-network-metrics", action="store_true")
+        parser.add_argument("--skip-network-evolution", action="store_true")
         parser.add_argument("--skip-graph-warm", action="store_true")
         parser.add_argument(
             "--dry-run",
@@ -192,6 +194,14 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
             PipelineStep(
                 name="Calculate network metrics",
                 command="calculate_network_metrics",
+                options={},
+            )
+        )
+    if not options["skip_network_evolution"]:
+        steps.append(
+            PipelineStep(
+                name="Calculate incremental network evolution",
+                command="calculate_network_evolution",
                 options={},
             )
         )

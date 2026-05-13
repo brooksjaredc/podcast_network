@@ -18,6 +18,7 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
         "promote_frequent_guests_to_cohosts",
         "refresh_person_entity_resolution",
         "calculate_network_metrics",
+        "calculate_network_evolution",
     ]
     batch_step = steps[1]
     assert batch_step.options["new_episodes_only"] is True
@@ -39,6 +40,7 @@ def test_weekly_update_plan_can_reprocess_current_prompt() -> None:
 def test_weekly_update_todos_document_future_processing_hooks() -> None:
     assert any("topic-only false positives" in note for note in TODO_NOTES)
     assert any("single-name resolution" in note for note in TODO_NOTES)
+    assert any("historical network evolution snapshots" in note for note in TODO_NOTES)
     assert any("plots read from Postgres" in note for note in TODO_NOTES)
 
 
@@ -67,4 +69,5 @@ def default_options() -> dict[str, object]:
         "skip_processing": False,
         "skip_entity_resolution": False,
         "skip_network_metrics": False,
+        "skip_network_evolution": False,
     }
