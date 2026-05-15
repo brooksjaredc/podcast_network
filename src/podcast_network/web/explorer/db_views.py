@@ -673,21 +673,7 @@ def podcast_genres(podcast: Podcast) -> list[str]:
         category = str(category).strip()
         if category and category not in genres:
             genres.append(category)
-    apple = metadata.get("apple_podcasts") or {}
-    for source in apple.get("chart_sources") or []:
-        source = str(source).strip()
-        if source and source not in genres:
-            genres.append(apple_genre_label(source))
     return genres
-
-
-def apple_genre_label(source: str) -> str:
-    labels = {
-        "genre:26": "Apple: Podcasts",
-        "genre:1301": "Apple: Arts",
-        "genre:1482": "Apple: Books",
-    }
-    return labels.get(source, source.replace("genre:", "Apple genre "))
 
 
 def is_active_podcast(podcast: Podcast) -> bool:

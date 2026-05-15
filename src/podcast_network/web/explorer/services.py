@@ -2,13 +2,13 @@ from functools import lru_cache
 from time import monotonic
 
 from django.conf import settings
-from django.db.models import Count, ExpressionWrapper, F, FloatField, Q, Value
+from django.db.models import Count
 
 from podcast_network.cleaning import is_likely_english_podcast_name
 from podcast_network.data import LegacyRepository
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import Edge
-from podcast_network.web.catalog.models import Appearance, PersonEntityLink
+from podcast_network.web.catalog.models import Appearance, PersonEntityLink, Podcast
 
 COHOST_EPISODE_THRESHOLD = 100
 COHOST_EPISODE_SHARE = 0.20
@@ -111,9 +111,11 @@ def raw_appearance_graph_rows():
 
 
 def frequent_guest_cohost_keys(*, use_canonical_links: bool) -> set[tuple[str | int, int]]:
-    episode_share_cutoff = ExpressionWrapper(
-        F("podcast_episode_count") * Value(COHOST_EPISODE_SHARE),
-        output_field=FloatField(),
+    episode_counts = dict(
+        Podcast.objects.annotate(episode_count=Count("episodes", distinct=True)).values_list(
+            "id",
+            "episode_count",
+        )
     )
     if use_canonical_links:
         rows = (
@@ -121,29 +123,39 @@ def frequent_guest_cohost_keys(*, use_canonical_links: bool) -> set[tuple[str | 
             .values("canonical_id", "observation__episode__podcast_id")
             .annotate(
                 guest_episode_count=Count("observation__episode_id", distinct=True),
-                podcast_episode_count=Count(
-                    "observation__episode__podcast__episodes",
-                    distinct=True,
+            )
+        )
+        return {
+            (row["canonical_id"], row["observation__episode__podcast_id"])
+            for row in rows
+            if is_cohost_count(
+                guest_episode_count=row["guest_episode_count"],
+                podcast_episode_count=episode_counts.get(
+                    row["observation__episode__podcast_id"],
+                    0,
                 ),
             )
-            .filter(
-                Q(guest_episode_count__gt=COHOST_EPISODE_THRESHOLD)
-                | Q(guest_episode_count__gt=episode_share_cutoff)
-            )
-            .values_list("canonical_id", "observation__episode__podcast_id")
-        )
+        }
     else:
         rows = (
             Appearance.objects.filter(role=Appearance.Role.GUEST)
             .values("person_id", "episode__podcast_id")
             .annotate(
                 guest_episode_count=Count("episode_id", distinct=True),
-                podcast_episode_count=Count("episode__podcast__episodes", distinct=True),
             )
-            .filter(
-                Q(guest_episode_count__gt=COHOST_EPISODE_THRESHOLD)
-                | Q(guest_episode_count__gt=episode_share_cutoff)
-            )
-            .values_list("person_id", "episode__podcast_id")
         )
-    return set(rows)
+        return {
+            (row["person_id"], row["episode__podcast_id"])
+            for row in rows
+            if is_cohost_count(
+                guest_episode_count=row["guest_episode_count"],
+                podcast_episode_count=episode_counts.get(row["episode__podcast_id"], 0),
+            )
+        }
+
+
+def is_cohost_count(*, guest_episode_count: int, podcast_episode_count: int) -> bool:
+    return (
+        guest_episode_count > COHOST_EPISODE_THRESHOLD
+        or guest_episode_count > podcast_episode_count * COHOST_EPISODE_SHARE
+    )

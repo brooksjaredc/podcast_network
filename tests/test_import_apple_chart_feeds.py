@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from django.test import TestCase
 
+from podcast_network.ingest.models import ParsedEpisode
 from podcast_network.web.catalog.management.commands.import_apple_chart_feeds import (
     AppleChartPodcast,
     collect_genre_ids,
     contains_cjk,
+    episode_has_guest_signal,
     import_podcast,
     parse_chart_feed_podcast_ids,
+    read_csv,
+    write_csv,
 )
 from podcast_network.web.catalog.models import Feed, Podcast
 
@@ -77,3 +82,41 @@ class ImportAppleChartFeedsTests(TestCase):
         assert Feed.objects.count() == 0
         assert contains_cjk("下一本讀什麼？") is True
         assert contains_cjk("Example Chart Show") is False
+
+    def test_episode_guest_signal_detects_common_interview_wording(self) -> None:
+        assert episode_has_guest_signal(
+            ParsedEpisode(
+                guid="1",
+                title="Episode 100 with Jane Smith",
+                description="",
+            )
+        )
+        assert episode_has_guest_signal(
+            ParsedEpisode(
+                guid="2",
+                title="A solo update",
+                description="Today I am joined by Jane Smith to talk about policy.",
+            )
+        )
+        assert not episode_has_guest_signal(
+            ParsedEpisode(
+                guid="3",
+                title="A solo update",
+                description="Today I talk about the news and answer listener questions.",
+            )
+        )
+
+    def test_chart_csv_round_trips_for_screened_imports(self) -> None:
+        path = Path("data/test_apple_chart_feeds.csv")
+        podcast = AppleChartPodcast(
+            apple_id="12345",
+            name="Example Chart Show",
+            artist_name="Example Network",
+            feed_url="https://example.com/rss.xml",
+            apple_url="https://podcasts.apple.com/us/podcast/example/id12345",
+            chart_sources="genre:26",
+        )
+
+        write_csv([podcast], path)
+
+        assert read_csv(path) == [podcast]

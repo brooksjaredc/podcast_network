@@ -5,6 +5,7 @@ import html
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -13,12 +14,29 @@ from urllib.request import Request, urlopen
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
+from podcast_network.ingest.fetch import fetch_feed
+from podcast_network.ingest.models import ParsedEpisode
+from podcast_network.ingest.parse import parse_feed
 from podcast_network.web.catalog.models import Feed, Podcast
 
 APPLE_LOOKUP_URL = "https://itunes.apple.com/lookup"
 APPLE_GENRES_URL = "https://itunes.apple.com/WebObjects/MZStoreServices.woa/ws/genres"
 USER_AGENT = "podcast-network-ingest/0.1"
 CJK_PATTERN = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
+GUEST_SIGNAL_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r"\bwith\s+[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,4}",
+        r"\bw/\s*[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,4}",
+        r"\bguest(?:s)?\s*:",
+        r"\bfeatur(?:e|ing|es)\s+[A-Z][A-Za-z'.-]+",
+        r"\bjoined by\s+[A-Z][A-Za-z'.-]+",
+        r"\binterview with\s+[A-Z][A-Za-z'.-]+",
+        r"\bconversation with\s+[A-Z][A-Za-z'.-]+",
+        r"\bwelcomes\s+[A-Z][A-Za-z'.-]+",
+        r"\bsits down with\s+[A-Z][A-Za-z'.-]+",
+    ]
+]
 
 # Fallback broad US Apple Podcasts chart categories. The command normally pulls
 # the live Apple genre taxonomy, but these keep it usable if that endpoint drifts.
@@ -64,6 +82,7 @@ class ImportAppleChartResult:
     feeds_created: int = 0
     feeds_existing: int = 0
     missing_feed_url: int = 0
+    screened_out: int = 0
 
     def __add__(self, other: ImportAppleChartResult) -> ImportAppleChartResult:
         return ImportAppleChartResult(
@@ -74,7 +93,18 @@ class ImportAppleChartResult:
             feeds_created=self.feeds_created + other.feeds_created,
             feeds_existing=self.feeds_existing + other.feeds_existing,
             missing_feed_url=self.missing_feed_url + other.missing_feed_url,
+            screened_out=self.screened_out + other.screened_out,
         )
+
+
+@dataclass(frozen=True)
+class InterviewScreeningResult:
+    podcast: AppleChartPodcast
+    fetched: bool
+    sampled_episodes: int = 0
+    likely_guest_episodes: int = 0
+    qualifies: bool = False
+    error: str = ""
 
 
 class Command(BaseCommand):
@@ -96,6 +126,24 @@ class Command(BaseCommand):
             default="data/reports/apple_chart_feeds.csv",
             help="Write resolved chart feeds to this CSV file.",
         )
+        parser.add_argument(
+            "--from-csv",
+            dest="from_csv_path",
+            default="",
+            help="Import podcasts from a previously written Apple chart CSV.",
+        )
+        parser.add_argument(
+            "--screen-interview",
+            action="store_true",
+            help="Fetch a sample of episodes and only import likely interview podcasts.",
+        )
+        parser.add_argument("--sample-episodes", type=int, default=50)
+        parser.add_argument("--min-guest-episodes", type=int, default=5)
+        parser.add_argument("--screen-concurrency", type=int, default=10)
+        parser.add_argument(
+            "--screen-report",
+            default="data/reports/apple_chart_interview_screening.csv",
+        )
         parser.add_argument("--dry-run", action="store_true", help="Do not write database rows.")
 
     def handle(self, *args: object, **options: object) -> None:
@@ -104,13 +152,34 @@ class Command(BaseCommand):
         if limit < 1:
             raise CommandError("--limit must be positive.")
 
-        genre_ids = list(options["genre_id"]) or default_genre_ids(country)
-        chart_ids = collect_chart_ids(country=country, genre_ids=genre_ids, limit=limit)
-        resolved = resolve_apple_podcasts(chart_ids)
-        podcasts = resolved[:limit]
-        write_csv(podcasts, Path(str(options["csv_path"])))
+        from_csv_path = str(options["from_csv_path"])
+        if from_csv_path:
+            chart_ids = []
+            podcasts = read_csv(Path(from_csv_path))[:limit]
+        else:
+            genre_ids = list(options["genre_id"]) or default_genre_ids(country)
+            chart_ids = collect_chart_ids(country=country, genre_ids=genre_ids, limit=limit)
+            resolved = resolve_apple_podcasts(chart_ids)
+            podcasts = resolved[:limit]
+        screened_out = 0
+        if options["screen_interview"]:
+            screening_results = screen_interview_podcasts(
+                podcasts,
+                sample_episodes=int(options["sample_episodes"]),
+                min_guest_episodes=int(options["min_guest_episodes"]),
+                concurrency=int(options["screen_concurrency"]),
+            )
+            write_screening_csv(screening_results, Path(str(options["screen_report"])))
+            podcasts = [result.podcast for result in screening_results if result.qualifies]
+            screened_out = len(screening_results) - len(podcasts)
+        if not from_csv_path:
+            write_csv(podcasts, Path(str(options["csv_path"])))
 
-        result = ImportAppleChartResult(discovered=len(chart_ids), resolved=len(podcasts))
+        result = ImportAppleChartResult(
+            discovered=len(chart_ids),
+            resolved=len(podcasts),
+            screened_out=screened_out,
+        )
         if not options["dry_run"]:
             for podcast in podcasts:
                 result += import_podcast(podcast)
@@ -121,7 +190,8 @@ class Command(BaseCommand):
                 f"Created {result.podcasts_created} podcasts and {result.feeds_created} feeds. "
                 f"Existing feeds {result.feeds_existing}, "
                 f"missing feed URLs {result.missing_feed_url}. "
-                f"Wrote {options['csv_path']}."
+                f"Screened out {result.screened_out}. "
+                f"{'Read ' + from_csv_path if from_csv_path else 'Wrote ' + options['csv_path']}."
             )
         )
 
@@ -254,6 +324,62 @@ def import_podcast(podcast: AppleChartPodcast) -> ImportAppleChartResult:
     )
 
 
+def screen_interview_podcasts(
+    podcasts: list[AppleChartPodcast],
+    *,
+    sample_episodes: int,
+    min_guest_episodes: int,
+    concurrency: int = 10,
+) -> list[InterviewScreeningResult]:
+    if concurrency < 1:
+        raise CommandError("--screen-concurrency must be positive.")
+    results_by_index: dict[int, InterviewScreeningResult] = {}
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = {
+            executor.submit(
+                screen_interview_podcast,
+                podcast,
+                sample_episodes=sample_episodes,
+                min_guest_episodes=min_guest_episodes,
+            ): index
+            for index, podcast in enumerate(podcasts)
+        }
+        for future in as_completed(futures):
+            results_by_index[futures[future]] = future.result()
+    return [results_by_index[index] for index in range(len(podcasts))]
+
+
+def screen_interview_podcast(
+    podcast: AppleChartPodcast,
+    *,
+    sample_episodes: int,
+    min_guest_episodes: int,
+) -> InterviewScreeningResult:
+    try:
+        fetched = fetch_feed(podcast.feed_url, timeout_seconds=20)
+        parsed = parse_feed(fetched.content)
+    except Exception as exc:  # noqa: BLE001
+        return InterviewScreeningResult(
+            podcast=podcast,
+            fetched=False,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+    episodes = parsed.episodes[:sample_episodes]
+    likely_guest_episodes = sum(int(episode_has_guest_signal(episode)) for episode in episodes)
+    return InterviewScreeningResult(
+        podcast=podcast,
+        fetched=True,
+        sampled_episodes=len(episodes),
+        likely_guest_episodes=likely_guest_episodes,
+        qualifies=likely_guest_episodes >= min_guest_episodes,
+    )
+
+
+def episode_has_guest_signal(episode: ParsedEpisode) -> bool:
+    text = f"{episode.title}\n{episode.description}"
+    return any(pattern.search(text) for pattern in GUEST_SIGNAL_PATTERNS)
+
+
 def apple_metadata(podcast: AppleChartPodcast) -> dict:
     return {
         "apple_podcasts": {
@@ -278,6 +404,45 @@ def write_csv(podcasts: list[AppleChartPodcast], path: Path) -> None:
         writer.writeheader()
         for podcast in podcasts:
             writer.writerow(podcast.__dict__)
+
+
+def read_csv(path: Path) -> list[AppleChartPodcast]:
+    with path.open(newline="", encoding="utf-8") as csv_file:
+        return [AppleChartPodcast(**row) for row in csv.DictReader(csv_file)]
+
+
+def write_screening_csv(results: list[InterviewScreeningResult], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "apple_id",
+        "name",
+        "artist_name",
+        "feed_url",
+        "fetched",
+        "sampled_episodes",
+        "likely_guest_episodes",
+        "qualifies",
+        "error",
+        "chart_sources",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in results:
+            writer.writerow(
+                {
+                    "apple_id": result.podcast.apple_id,
+                    "name": result.podcast.name,
+                    "artist_name": result.podcast.artist_name,
+                    "feed_url": result.podcast.feed_url,
+                    "fetched": result.fetched,
+                    "sampled_episodes": result.sampled_episodes,
+                    "likely_guest_episodes": result.likely_guest_episodes,
+                    "qualifies": result.qualifies,
+                    "error": result.error,
+                    "chart_sources": result.podcast.chart_sources,
+                }
+            )
 
 
 def batched[T](items: list[T], size: int) -> list[list[T]]:

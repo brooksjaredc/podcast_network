@@ -1,0 +1,2 @@
+apple_id,name,artist_name,feed_url,apple_url,chart_sources
+12345,Example Chart Show,Example Network,https://example.com/rss.xml,https://podcasts.apple.com/us/podcast/example/id12345,genre:26

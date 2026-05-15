@@ -188,6 +188,19 @@ def test_podcast_detail_shows_genres() -> None:
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
+def test_podcast_detail_hides_apple_genre_metadata() -> None:
+    first_podcast, _, _, _ = make_db_graph()
+    first_podcast.metadata = {"apple_podcasts": {"chart_sources": ["genre:1301"]}}
+    first_podcast.save(update_fields=["metadata"])
+
+    response = Client().get(f"/podcasts/{first_podcast.id}/")
+
+    assert response.status_code == 200
+    assert b"Apple:" not in response.content
+    assert b"Apple genre" not in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
 def test_frequent_guest_is_listed_as_cohost_and_removed_from_guest_list() -> None:
     podcast = Podcast.objects.create(name="Daily Panel")
     regular = Person.objects.create(name="Regular Panelist", normalized_name="regular panelist")
@@ -415,6 +428,20 @@ def test_recommendations_filter_by_multiple_genres() -> None:
     assert b"Arts Interview Hour" in response.content
     assert b'class="pill-button active" type="submit">Comedy' in response.content
     assert b'class="pill-button active" type="submit">Arts' in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_hide_apple_genre_filters() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    second_podcast.metadata = {"apple_podcasts": {"chart_sources": ["genre:1301"]}}
+    second_podcast.save(update_fields=["metadata"])
+
+    response = Client().get("/recommendations/", {"selected": str(first_podcast.id)})
+
+    assert response.status_code == 200
+    assert b"WTF with Marc Maron" in response.content
+    assert b"Apple:" not in response.content
+    assert b"Apple genre" not in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
