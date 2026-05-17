@@ -42,6 +42,24 @@ class LocalRawFeedStorage:
         )
 
 
+class NoopRawFeedStorage:
+    def save_feed_snapshot(
+        self,
+        *,
+        feed_id: int,
+        content: bytes,
+        fetched_at: datetime | None = None,
+    ) -> StoredObject:
+        fetched_at = fetched_at or timezone.now()
+        content_hash = hashlib.sha256(content).hexdigest()
+        relative_path = Path("rss") / str(feed_id) / snapshot_filename(fetched_at, content_hash)
+        return StoredObject(
+            uri=f"noop://{relative_path}",
+            content_hash=content_hash,
+            size_bytes=len(content),
+        )
+
+
 def snapshot_filename(fetched_at: datetime, content_hash: str) -> str:
     timestamp = fetched_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"{timestamp}_{content_hash[:16]}.xml"

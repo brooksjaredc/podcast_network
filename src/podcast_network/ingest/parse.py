@@ -10,10 +10,13 @@ from django.utils import timezone
 from podcast_network.ingest.models import ParsedEpisode, ParsedFeed
 
 
-def parse_feed(content: bytes) -> ParsedFeed:
+def parse_feed(content: bytes, *, max_episodes: int | None = None) -> ParsedFeed:
     parsed = feedparser.parse(content)
     feed = parsed.get("feed", {})
-    episodes = [parse_episode(entry) for entry in parsed.get("entries", [])]
+    entries = parsed.get("entries", [])
+    if max_episodes is not None and max_episodes > 0:
+        entries = entries[:max_episodes]
+    episodes = [parse_episode(entry) for entry in entries]
     return ParsedFeed(
         title=string_value(feed.get("title")),
         description=string_value(feed.get("description") or feed.get("subtitle")),

@@ -109,6 +109,7 @@ def fixture_fetcher(content: bytes):
         etag: str = "",
         last_modified: str = "",
         timeout_seconds: int = 20,
+        max_bytes: int = 25 * 1024 * 1024,
     ) -> FetchResult:
         return FetchResult(
             url=url,
@@ -127,6 +128,7 @@ def not_modified_fetcher(
     etag: str = "",
     last_modified: str = "",
     timeout_seconds: int = 20,
+    max_bytes: int = 25 * 1024 * 1024,
 ) -> FetchResult:
     return FetchResult(url=url, status_code=304, content=b"")
 

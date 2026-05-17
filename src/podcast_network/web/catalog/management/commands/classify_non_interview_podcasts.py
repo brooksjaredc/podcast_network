@@ -6,7 +6,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandParser
 from django.db.models import Count, Q
 
-from podcast_network.web.catalog.models import Feed, Podcast
+from podcast_network.web.catalog.models import Podcast
 
 
 @dataclass(frozen=True)
@@ -49,15 +49,15 @@ class Command(BaseCommand):
             path=report_path,
         )
         if options["apply"]:
-            updated, deactivated = mark_non_interview_podcasts(
+            updated = mark_non_interview_podcasts(
                 rows=rows,
                 threshold=threshold,
                 min_episodes=min_episodes,
             )
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Marked {updated} podcasts as non-interview and deactivated "
-                    f"{deactivated} feeds. Report: {report_path}"
+                    f"Marked {updated} podcasts as non-interview. "
+                    f"Report: {report_path}"
                 )
             )
         else:
@@ -105,9 +105,8 @@ def mark_non_interview_podcasts(
     rows: list[PodcastClassification],
     threshold: float,
     min_episodes: int,
-) -> tuple[int, int]:
+) -> int:
     updated = 0
-    podcast_ids = []
     for row in rows:
         podcast = row.podcast
         metadata = dict(podcast.metadata)
@@ -127,13 +126,10 @@ def mark_non_interview_podcasts(
         )
         metadata["extraction_policy"] = policy
         podcast.metadata = metadata
-        podcast.save(update_fields=["metadata", "updated_at"])
+        podcast.is_interview_podcast = False
+        podcast.save(update_fields=["metadata", "is_interview_podcast", "updated_at"])
         updated += 1
-        podcast_ids.append(podcast.id)
-    deactivated = Feed.objects.filter(podcast_id__in=podcast_ids, active=True).update(
-        active=False
-    )
-    return updated, deactivated
+    return updated
 
 
 def write_report(

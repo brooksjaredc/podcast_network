@@ -9,6 +9,8 @@ class Podcast(models.Model):
     website_url = models.URLField(max_length=1000, blank=True)
     image_url = models.URLField(max_length=1000, blank=True)
     external_id = models.CharField(max_length=255, blank=True)
+    active = models.BooleanField(default=True)
+    is_interview_podcast = models.BooleanField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

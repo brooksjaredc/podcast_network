@@ -174,6 +174,10 @@ def select_episodes(
 
 
 def podcast_skips_guest_extraction(podcast) -> bool:
+    if getattr(podcast, "active", True) is False:
+        return True
+    if getattr(podcast, "is_interview_podcast", None) is False:
+        return True
     policy = (podcast.metadata or {}).get("extraction_policy") or {}
     return policy.get("skip_guest_extraction") is True
 

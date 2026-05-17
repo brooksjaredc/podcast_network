@@ -27,7 +27,8 @@ from podcast_network.web.catalog.models import (
 @admin.register(Podcast)
 class PodcastAdmin(admin.ModelAdmin):
     search_fields = ["name"]
-    list_display = ["name", "website_url", "updated_at"]
+    list_display = ["name", "active", "is_interview_podcast", "website_url", "updated_at"]
+    list_filter = ["active", "is_interview_podcast"]
 
 
 @admin.register(Feed)

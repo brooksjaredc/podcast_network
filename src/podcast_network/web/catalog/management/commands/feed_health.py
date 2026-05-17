@@ -14,6 +14,8 @@ from podcast_network.web.catalog.models import Feed
 @dataclass(frozen=True)
 class FeedHealthRow:
     podcast: str
+    podcast_active: bool
+    is_interview_podcast: bool | None
     url: str
     active: bool
     last_status: int | None
@@ -64,6 +66,8 @@ def feed_health_rows() -> list[FeedHealthRow]:
     return [
         FeedHealthRow(
             podcast=feed.podcast.name,
+            podcast_active=feed.podcast.active,
+            is_interview_podcast=feed.podcast.is_interview_podcast,
             url=feed.url,
             active=feed.active,
             last_status=feed.last_status,
@@ -80,6 +84,8 @@ def feed_health_rows() -> list[FeedHealthRow]:
 def print_summary(rows: list[FeedHealthRow], write) -> None:
     total = len(rows)
     active = sum(row.active for row in rows)
+    podcast_active = sum(row.podcast_active for row in rows)
+    non_interview = sum(row.is_interview_podcast is False for row in rows)
     fetched = sum(row.last_fetched_at != "" for row in rows)
     succeeded = sum((row.last_status or 0) < 400 and row.last_status is not None for row in rows)
     failed = sum(row.failure_count > 0 for row in rows)
@@ -87,7 +93,8 @@ def print_summary(rows: list[FeedHealthRow], write) -> None:
     total_episodes = sum(row.episode_count for row in rows)
     write(
         "Feed health: "
-        f"{total} feeds, {active} active, {fetched} fetched, "
+        f"{total} feeds, {active} active feeds, {podcast_active} active podcasts, "
+        f"{non_interview} non-interview podcasts, {fetched} fetched, "
         f"{succeeded} last-success, {failed} with failures, "
         f"{zero_episode} with zero episodes, {total_episodes} parsed episodes."
     )

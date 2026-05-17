@@ -677,9 +677,11 @@ def podcast_genres(podcast: Podcast) -> list[str]:
 
 
 def is_active_podcast(podcast: Podcast) -> bool:
+    if getattr(podcast, "active", True) is False:
+        return False
     latest_episode = getattr(podcast, "latest_episode", None)
     if latest_episode is None:
-        return False
+        return True
     return latest_episode >= timezone.now() - timedelta(days=60)
 
 
