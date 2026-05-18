@@ -59,3 +59,41 @@ python -m pytest
 ```
 
 The Django web pages read from the catalog tables. The advanced plot pages still use the copied legacy analysis artifacts under `data/legacy/analysis/`.
+
+## Development Workflow
+
+For normal iteration, use a local Postgres database and keep cloud credentials out of
+your everyday shell:
+
+```bash
+# If you do not already have a .env, start from the local template.
+cp .env.local.example .env
+make migrate
+make dev
+```
+
+Use the cloud database only when you need to inspect production-shaped data. Start the
+Cloud SQL Auth Proxy in one terminal:
+
+```bash
+make cloud-sql-proxy
+```
+
+Then run commands from another terminal with a cloud-read profile:
+
+```bash
+cp .env.cloud-read.example .env.cloud-read
+set -a; source .env.cloud-read; set +a
+python manage.py runserver
+```
+
+Environment variables loaded in the shell override `.env`, so this lets you inspect cloud
+data without rewriting your local profile. Prefer a dedicated read-only Cloud SQL user
+for that profile. The local database should remain the default for migrations, scraping
+tests, and UI iteration; Docker is mainly for deployment parity and Cloud Run. Before
+deploying, run:
+
+```bash
+make check
+make deploy
+```

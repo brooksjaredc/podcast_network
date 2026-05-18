@@ -13,3 +13,5 @@ data/reports/
 staticfiles/
 media/
 .env
+.env.*
+!.env.*.example
