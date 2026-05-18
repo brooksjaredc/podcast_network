@@ -22,6 +22,9 @@ from podcast_network.web.catalog.models import (
     ScrapeRun,
 )
 
+PERMANENT_HTTP_FAILURE_STATUSES = {400, 401, 403, 404, 410}
+PERMANENT_FAILURE_DEACTIVATION_THRESHOLD = 3
+
 
 @dataclass(frozen=True)
 class FeedIngestResult:
@@ -363,7 +366,19 @@ def record_feed_failure(feed: Feed, *, status_code: int | None = None) -> None:
     if status_code is not None:
         feed.last_status = status_code
         update_fields.append("last_status")
+    if (
+        status_code in PERMANENT_HTTP_FAILURE_STATUSES
+        and feed.failure_count >= PERMANENT_FAILURE_DEACTIVATION_THRESHOLD
+    ):
+        feed.active = False
+        update_fields.append("active")
     feed.save(update_fields=update_fields)
+    if not feed.active and not Feed.objects.filter(
+        podcast=feed.podcast,
+        active=True,
+    ).exclude(pk=feed.pk).exists():
+        feed.podcast.active = False
+        feed.podcast.save(update_fields=["active", "updated_at"])
 
 
 def classify_error_stage(exc: Exception) -> str:

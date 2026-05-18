@@ -5,7 +5,7 @@ from pathlib import Path
 from django.test import TestCase
 
 from podcast_network.ingest.fetch import FetchResult
-from podcast_network.ingest.pipeline import ingest_feed
+from podcast_network.ingest.pipeline import ingest_feed, record_feed_failure
 from podcast_network.ingest.storage import LocalRawFeedStorage
 from podcast_network.web.catalog.models import (
     Episode,
@@ -124,6 +124,30 @@ class IngestPipelineTests(TestCase):
         assert len(episode.enclosure_url) == 1000
         assert len(episode.duration_raw) == 100
         assert "..." in episode.guid
+
+    def test_repeated_permanent_http_failures_deactivate_feed_and_podcast(self) -> None:
+        feed = create_feed()
+        feed.failure_count = 2
+        feed.save(update_fields=["failure_count"])
+
+        record_feed_failure(feed, status_code=404)
+
+        feed.refresh_from_db()
+        feed.podcast.refresh_from_db()
+        assert feed.active is False
+        assert feed.podcast.active is False
+
+    def test_non_http_failures_do_not_deactivate_feed(self) -> None:
+        feed = create_feed()
+        feed.failure_count = 8
+        feed.save(update_fields=["failure_count"])
+
+        record_feed_failure(feed, status_code=None)
+
+        feed.refresh_from_db()
+        feed.podcast.refresh_from_db()
+        assert feed.active is True
+        assert feed.podcast.active is True
 
     def setUp(self) -> None:
         self.tmpdir = self.enterContext(PathContext())
