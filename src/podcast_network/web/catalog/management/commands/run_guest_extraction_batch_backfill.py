@@ -13,6 +13,7 @@ from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL
 from podcast_network.extraction.pipeline import finalize_extraction_run
 from podcast_network.extraction.prompt import PROMPT_VERSION
 from podcast_network.web.catalog.management.commands.backfill_guest_extractions import (
+    nonnegative_int,
     positive_int,
     select_second_pass_review_episodes,
 )
@@ -30,7 +31,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--first-pass-batch-size", type=int, default=1000)
-        parser.add_argument("--max-first-pass-batches", type=int, default=1)
+        parser.add_argument(
+            "--max-first-pass-batches",
+            type=int,
+            default=1,
+            help="Maximum first-pass batches to complete. Use 0 to run until exhausted.",
+        )
         parser.add_argument("--first-pass-model", default=DEFAULT_EXTRACTION_MODEL)
         parser.add_argument("--first-pass-reasoning-effort", default="low")
         parser.add_argument("--second-pass-model", default="gpt-5-mini")
@@ -64,7 +70,7 @@ class Command(BaseCommand):
             options["first_pass_batch_size"],
             "--first-pass-batch-size",
         )
-        max_first_pass_batches = positive_int(
+        max_first_pass_batches = nonnegative_int(
             options["max_first_pass_batches"],
             "--max-first-pass-batches",
         )
@@ -75,7 +81,9 @@ class Command(BaseCommand):
         client = OpenAI()
         completed_first_pass_batches = 0
 
-        while completed_first_pass_batches < max_first_pass_batches:
+        while max_first_pass_batches == 0 or (
+            completed_first_pass_batches < max_first_pass_batches
+        ):
             first_pass_run = self.get_or_submit_first_pass_run(
                 client=client,
                 batch_size=first_pass_batch_size,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandParser
@@ -26,8 +27,7 @@ TODO_NOTES = (
     "Add scheduled host/co-host extraction refresh for newly discovered podcasts.",
     "Add single-name resolution once the cheaper/contextual strategy is settled.",
     "Add entity-resolution active-learning sampling for new uncertain pairs.",
-    "Bootstrap historical network evolution snapshots when ready for the expensive backfill.",
-    "Add leader-score calculations.",
+    "Add future-guest feature rebuild, model retraining, and prediction publishing.",
     "Add optional plot/static artifact regeneration once plots read from Postgres metrics.",
 )
 
@@ -37,15 +37,35 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--feed-timeout", type=int, default=20)
+        parser.add_argument("--feed-concurrency", type=int, default=8)
+        parser.add_argument("--feed-progress-every", type=int, default=50)
+        parser.add_argument("--max-feed-mb", type=float, default=50.0)
+        parser.add_argument("--max-episodes-per-feed", type=int, default=500)
+        parser.add_argument(
+            "--raw-snapshot-storage",
+            choices=["local", "none"],
+            default="none",
+            help="Use 'none' for Cloud Run jobs so RSS XML is not written to the image FS.",
+        )
         parser.add_argument("--include-inactive-feeds", action="store_true")
         parser.add_argument("--first-pass-batch-size", type=int, default=1000)
-        parser.add_argument("--max-first-pass-batches", type=int, default=1)
+        parser.add_argument(
+            "--max-first-pass-batches",
+            type=int,
+            default=0,
+            help="Maximum first-pass batches to complete. Default 0 runs until exhausted.",
+        )
         parser.add_argument("--first-pass-model", default=DEFAULT_EXTRACTION_MODEL)
         parser.add_argument("--first-pass-reasoning-effort", default="low")
         parser.add_argument("--second-pass-model", default="gpt-5-mini")
         parser.add_argument("--second-pass-reasoning-effort", default="medium")
         parser.add_argument("--prompt-version", default=PROMPT_VERSION)
-        parser.add_argument("--coordinator-label", default="weekly-update")
+        parser.add_argument("--coordinator-label", default="")
+        parser.add_argument(
+            "--llm-output-dir",
+            default="/tmp/podcast-network-batches",
+            help="Temporary OpenAI batch input/output directory for Cloud Run.",
+        )
         parser.add_argument("--poll-interval-seconds", type=int, default=300)
         parser.add_argument("--review-min-confidence", type=float, default=0.75)
         parser.add_argument("--review-max-confidence", type=float, default=0.90)
@@ -61,6 +81,10 @@ class Command(BaseCommand):
             default=DEFAULT_COHOST_EPISODE_SHARE,
         )
         parser.add_argument("--entity-limit-pairs", type=int, default=20000)
+        parser.add_argument("--entity-min-score", type=float, default=0.5)
+        parser.add_argument("--entity-min-observations", type=int, default=1)
+        parser.add_argument("--evolution-max-weeks", type=int, default=1)
+        parser.add_argument("--evolution-person-metric-limit", type=int, default=100)
         parser.add_argument(
             "--reprocess-current-prompt",
             action="store_true",
@@ -123,6 +147,7 @@ class Command(BaseCommand):
 
 def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
     steps: list[PipelineStep] = []
+    coordinator_label = str(options["coordinator_label"]) or weekly_label()
     if not options["skip_scrape"]:
         steps.append(
             PipelineStep(
@@ -130,6 +155,11 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 command="ingest_feeds",
                 options={
                     "timeout": int(options["feed_timeout"]),
+                    "concurrency": int(options["feed_concurrency"]),
+                    "progress_every": int(options["feed_progress_every"]),
+                    "max_feed_mb": float(options["max_feed_mb"]),
+                    "max_episodes_per_feed": int(options["max_episodes_per_feed"]),
+                    "raw_snapshot_storage": str(options["raw_snapshot_storage"]),
                     "inactive": bool(options["include_inactive_feeds"]),
                 },
             )
@@ -147,11 +177,12 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     "second_pass_model": str(options["second_pass_model"]),
                     "second_pass_reasoning_effort": str(options["second_pass_reasoning_effort"]),
                     "prompt_version": str(options["prompt_version"]),
-                    "coordinator_label": str(options["coordinator_label"]),
+                    "coordinator_label": coordinator_label,
                     "poll_interval_seconds": int(options["poll_interval_seconds"]),
                     "review_min_confidence": float(options["review_min_confidence"]),
                     "review_max_confidence": float(options["review_max_confidence"]),
                     "new_episodes_only": not bool(options["reprocess_current_prompt"]),
+                    "output_dir": str(options["llm_output_dir"]),
                 },
             )
         )
@@ -186,7 +217,11 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
             PipelineStep(
                 name="Refresh person entity resolution",
                 command="refresh_person_entity_resolution",
-                options={"limit_pairs": int(options["entity_limit_pairs"])},
+                options={
+                    "limit_pairs": int(options["entity_limit_pairs"]),
+                    "min_score": float(options["entity_min_score"]),
+                    "min_observations": int(options["entity_min_observations"]),
+                },
             )
         )
     if not options["skip_network_metrics"]:
@@ -202,7 +237,14 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
             PipelineStep(
                 name="Calculate incremental network evolution",
                 command="calculate_network_evolution",
-                options={},
+                options={
+                    "max_weeks": int(options["evolution_max_weeks"]),
+                    "person_metric_limit": int(options["evolution_person_metric_limit"]),
+                },
             )
         )
     return steps
+
+
+def weekly_label() -> str:
+    return f"weekly-update-{datetime.now(tz=UTC).strftime('%Y%m%d')}"

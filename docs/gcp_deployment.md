@@ -98,11 +98,26 @@ Use the same image for management-command jobs. Example:
 gcloud run jobs create weekly-update \
   --image us-central1-docker.pkg.dev/PROJECT_ID/podcast-network/web:latest \
   --region us-central1 \
-  --add-cloudsql-instances PROJECT_ID:us-central1:podcast-network-db \
+  --set-cloudsql-instances PROJECT_ID:us-central1:podcast-network-db \
   --set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest \
   --command python \
-  --args manage.py,run_weekly_update_pipeline
+  --args manage.py,run_weekly_update_pipeline \
+  --task-timeout 86400 \
+  --memory 2Gi \
+  --cpu 1
 ```
 
-The heavy historical backfills should become separate jobs with explicit limits, not part of
-the regular web service startup.
+Before scheduling the job, run the command in dry-run mode and then with tight limits:
+
+```bash
+gcloud run jobs execute weekly-update \
+  --region us-central1 \
+  --args manage.py,run_weekly_update_pipeline,--dry-run
+
+gcloud run jobs execute weekly-update \
+  --region us-central1 \
+  --args manage.py,run_weekly_update_pipeline,--first-pass-batch-size,25,--max-first-pass-batches,1,--evolution-max-weeks,1
+```
+
+The regular weekly job is meant for incremental updates. Heavy historical backfills should
+remain separate jobs with explicit limits, not part of the regular web service startup.
