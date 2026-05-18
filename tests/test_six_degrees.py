@@ -47,6 +47,15 @@ class SixDegreesGraphTests(unittest.TestCase):
         self.assertEqual(result.path, ("Alice", "Hosted Podcast", "Carla"))
         self.assertIn("Alice is a host of Hosted Podcast", result.message)
 
+    def test_edge_date_is_available_for_visuals(self) -> None:
+        graph = SixDegreesGraph(
+            edges=[Edge("Alice", "Podcast A", "guest", date="2024-01-15")],
+            names={"Alice"},
+        )
+
+        self.assertEqual(graph.edge_kind("Alice", "Podcast A"), "guest")
+        self.assertEqual(graph.edge_date("Podcast A", "Alice"), "2024-01-15")
+
     def test_explain_suggests_missing_name(self) -> None:
         graph = SixDegreesGraph(edges=[], names={"Joe Rogan", "Marc Maron"})
 

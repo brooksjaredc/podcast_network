@@ -18,6 +18,7 @@ class Edge:
     left: str
     right: str
     kind: str
+    date: str | None = None
 
 
 @dataclass(frozen=True)
@@ -61,10 +62,10 @@ class SixDegreesGraph:
         self.podcast_ids = podcast_ids or {}
         self.person_ids = person_ids or {}
         self._canonical_names = canonical_name_index(names)
-        self._adjacency: dict[str, dict[str, str]] = {}
+        self._adjacency: dict[str, dict[str, Edge]] = {}
         for edge in edges:
-            self._adjacency.setdefault(edge.left, {})[edge.right] = edge.kind
-            self._adjacency.setdefault(edge.right, {})[edge.left] = edge.kind
+            self._adjacency.setdefault(edge.left, {})[edge.right] = edge
+            self._adjacency.setdefault(edge.right, {})[edge.left] = edge
 
     @classmethod
     def from_legacy_dir(cls, data_dir: Path = LEGACY_ANALYSIS_DIR) -> SixDegreesGraph:
@@ -151,14 +152,17 @@ class SixDegreesGraph:
         return max(self.names, key=lambda name: name_match_score(target, name))
 
     def edge_kind(self, left: str, right: str) -> str:
-        return self._adjacency[left][right]
+        return self._adjacency[left][right].kind
+
+    def edge_date(self, left: str, right: str) -> str | None:
+        return self._adjacency[left][right].date
 
     def _ordered_neighbors(self, node: str, *, is_source: bool) -> list[str]:
         neighbors = self._adjacency.get(node, {})
         if not neighbors:
             return []
         if is_source and node in self.names:
-            return sorted(neighbors, key=lambda neighbor: neighbors[neighbor] != "host")
+            return sorted(neighbors, key=lambda neighbor: neighbors[neighbor].kind != "host")
         return list(neighbors)
 
     def _first_missing_field(
@@ -210,7 +214,14 @@ def load_edges(path: Path) -> list[Edge]:
                 continue
             left, right, raw_attrs = fields
             attrs = ast.literal_eval(raw_attrs)
-            edges.append(Edge(left=left, right=right, kind=attrs.get("attr", "guest")))
+            edges.append(
+                Edge(
+                    left=left,
+                    right=right,
+                    kind=attrs.get("attr", "guest"),
+                    date=normalize_edge_date(attrs.get("date")),
+                )
+            )
     return edges
 
 
@@ -218,6 +229,15 @@ def load_names(path: Path) -> set[str]:
     with path.open(encoding="utf-8") as handle:
         reader = csv.reader(handle, delimiter="\t")
         return {row[0] for row in reader if row}
+
+
+def normalize_edge_date(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:10]
 
 
 def load_pickle(path: Path) -> dict[str, int]:

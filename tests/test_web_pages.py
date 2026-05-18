@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from django.core.management import call_command
 from django.test import Client, override_settings
@@ -32,15 +32,21 @@ def make_db_graph() -> tuple[Podcast, Podcast, Person, Person]:
         guid="jre-1",
         title="Joe Rogan Experience with Marc Maron",
         description="Marc Maron joins Joe Rogan.",
-        published_at=timezone.now(),
+        published_at=datetime(2024, 1, 15, tzinfo=UTC),
     )
     second_episode = Episode.objects.create(
         podcast=second_podcast,
         guid="wtf-1",
         title="WTF with Common Guest",
         description="A conversation with Common Guest.",
-        published_at=timezone.now(),
+        published_at=datetime(2024, 2, 20, tzinfo=UTC),
     )
+    for index in range(4):
+        Episode.objects.create(
+            podcast=first_podcast,
+            guid=f"jre-extra-{index}",
+            title=f"Extra JRE episode {index}",
+        )
     Appearance.objects.create(
         episode=first_episode,
         person=joe,
@@ -105,9 +111,9 @@ def test_path_page_loads_real_query() -> None:
     assert f'href="/people/{joe.id}/"'.encode() in response.content
     assert f'href="/people/{marc.id}/"'.encode() in response.content
     assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
-    assert b"class=\"path-graphic-svg\"" in response.content
-    assert b"class=\"path-graphic-node path-graphic-node-person\"" in response.content
-    assert b"class=\"path-graphic-node path-graphic-node-podcast\"" in response.content
+    assert b"data-path-graph" in response.content
+    assert b"path_graph.js" in response.content
+    assert b"Jan 15, 2024" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -287,7 +293,7 @@ def test_database_graph_treats_frequent_guest_as_host_and_keeps_single_names() -
 
     graph = database_six_degrees_graph()
 
-    assert graph._adjacency["Regular Panelist"]["Daily Panel"] == Appearance.Role.HOST
+    assert graph.edge_kind("Regular Panelist", "Daily Panel") == Appearance.Role.HOST
     assert "Prince" in graph.names
 
 

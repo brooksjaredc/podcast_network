@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from django.http import Http404, HttpRequest, HttpResponse
@@ -304,6 +305,10 @@ def build_path_graph(graph: SixDegreesGraph, result: PathResult) -> dict[str, An
                     right_node["y"],
                 ),
                 "label": edge_label(role, left_node["kind"], right_node["kind"]),
+                "date": graph.edge_date(left, right) if role == "guest" else None,
+                "date_label": edge_date_label(graph.edge_date(left, right))
+                if role == "guest"
+                else "",
                 "label_x": (left_node["x"] + right_node["x"]) / 2,
                 "label_y": (left_node["y"] + right_node["y"]) / 2 - 12,
             }
@@ -323,6 +328,16 @@ def edge_label(role: str, left_kind: str, right_kind: str) -> str:
     if left_kind == "person" and right_kind == "podcast":
         return "guest on"
     return "guest"
+
+
+def edge_date_label(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value[:10])
+        return f"{parsed:%b} {parsed.day}, {parsed:%Y}"
+    except ValueError:
+        return value[:10]
 
 
 def curved_edge_path(x1: float, y1: float, x2: float, y2: float) -> str:

@@ -59,7 +59,7 @@ def build_database_six_degrees_graph() -> SixDegreesGraph:
     use_canonical_links = PersonEntityLink.objects.exists()
     cohost_keys = frequent_guest_cohost_keys(use_canonical_links=use_canonical_links)
     rows = canonical_graph_rows() if use_canonical_links else raw_appearance_graph_rows()
-    for person_name, person_id, podcast_name, podcast_id, role, entity_id in rows:
+    for person_name, person_id, podcast_name, podcast_id, role, entity_id, published_at in rows:
         if not is_likely_english_podcast_name(podcast_name):
             continue
         if (entity_id or person_id, podcast_id) in cohost_keys:
@@ -67,7 +67,14 @@ def build_database_six_degrees_graph() -> SixDegreesGraph:
         names.add(person_name)
         person_ids.setdefault(person_name, person_id)
         podcast_ids.setdefault(podcast_name, podcast_id)
-        edges.append(Edge(left=person_name, right=podcast_name, kind=role))
+        edges.append(
+            Edge(
+                left=person_name,
+                right=podcast_name,
+                kind=role,
+                date=published_at.date().isoformat() if published_at else None,
+            )
+        )
 
     return SixDegreesGraph(edges=edges, names=names, podcast_ids=podcast_ids, person_ids=person_ids)
 
@@ -89,6 +96,7 @@ def canonical_graph_rows():
             "observation__episode__podcast_id",
             "observation__role",
             "canonical_id",
+            "observation__episode__published_at",
         )
         .iterator(chunk_size=10_000)
     )
@@ -105,6 +113,7 @@ def raw_appearance_graph_rows():
             "episode__podcast_id",
             "role",
             "person_id",
+            "episode__published_at",
         )
         .iterator(chunk_size=10_000)
     )
