@@ -37,8 +37,8 @@ RANKING_FIELDS = {
 }
 
 RECOMMENDATION_SORTS = {
+    "rate": "Highest guest overlap",
     "overlap": "Most shared guests",
-    "rate": "Highest overlap rate",
 }
 
 RANKING_DEFINITIONS = [
@@ -219,9 +219,9 @@ def recommendations(request: HttpRequest) -> HttpResponse:
     search_query = request.GET.get("q", "").strip()
     selected_genres = parse_string_list(request.GET.getlist("genre"))
     active_only = request.GET.get("active") == "1"
-    sort = request.GET.get("sort", "overlap")
+    sort = request.GET.get("sort", "rate")
     if sort not in RECOMMENDATION_SORTS:
-        sort = "overlap"
+        sort = "rate"
     selected_podcasts = list(
         Podcast.objects.filter(id__in=selected_ids)
         .annotate(

@@ -89,7 +89,8 @@ def test_home_page_loads() -> None:
     assert b"Six Degrees to Joe Rogan" in response.content
     assert b"Find the podcast path between almost anyone." in response.content
     assert b"home-path-form" in response.content
-    assert b"home-network" in response.content
+    assert b"home-hero-art" in response.content
+    assert b"ChatGPT Image May 17" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -589,9 +590,60 @@ def test_recommendations_can_sort_by_overlap_rate() -> None:
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert "Highest overlap rate" in content
+    assert "Highest guest overlap" in content
     assert "100% overlap rate" in content
     assert content.index("Niche Match") < content.index("Broad Match")
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_default_to_highest_guest_overlap() -> None:
+    first_podcast, _, joe, marc = make_db_graph()
+    broad_match = Podcast.objects.create(name="Broad Match Default")
+    broad_episode = Episode.objects.create(
+        podcast=broad_match,
+        guid="broad-match-default",
+        title="Broad Match Default",
+        published_at=timezone.now(),
+    )
+    for person in [joe, marc]:
+        Appearance.objects.create(
+            episode=broad_episode,
+            person=person,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+    for index in range(8):
+        extra = Person.objects.create(
+            name=f"Broad Default Extra {index}",
+            normalized_name=f"broad default extra {index}",
+        )
+        Appearance.objects.create(
+            episode=broad_episode,
+            person=extra,
+            role=Appearance.Role.GUEST,
+            source="test",
+        )
+
+    niche_match = Podcast.objects.create(name="Niche Match Default")
+    niche_episode = Episode.objects.create(
+        podcast=niche_match,
+        guid="niche-match-default",
+        title="Niche Match Default",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=niche_episode,
+        person=joe,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+
+    response = Client().get("/recommendations/", {"selected": str(first_podcast.id)})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert content.index("Highest guest overlap") < content.index("Most shared guests")
+    assert content.index("Niche Match Default") < content.index("Broad Match Default")
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -640,7 +692,10 @@ def test_recommendation_shared_guests_sort_by_total_appearances() -> None:
             source="test",
         )
 
-    response = Client().get("/recommendations/", {"selected": str(first_podcast.id)})
+    response = Client().get(
+        "/recommendations/",
+        {"selected": str(first_podcast.id), "sort": "overlap"},
+    )
 
     assert response.status_code == 200
     card = response.content.decode().split("Shared Guest Ordering", 1)[1]
