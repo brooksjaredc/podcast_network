@@ -5,9 +5,17 @@
 
 {% block content %}
   <h1>Six Degrees</h1>
-  <form method="get">
+  <form class="path-query-form" method="get">
     <input name="source" value="{{ source }}" placeholder="First person">
     <input name="target" value="{{ target }}" placeholder="Second person">
+    <label>
+      <span>From</span>
+      <input type="date" name="start_date" value="{{ start_date }}" aria-label="Start date">
+    </label>
+    <label>
+      <span>To</span>
+      <input type="date" name="end_date" value="{{ end_date }}" aria-label="End date">
+    </label>
     <button type="submit">Find Path</button>
   </form>
 
@@ -33,6 +41,8 @@
         <form class="suggestion-action" method="get">
           <input type="hidden" name="source" value="{{ result.suggested_source }}">
           <input type="hidden" name="target" value="{{ result.suggested_target }}">
+          <input type="hidden" name="start_date" value="{{ start_date }}">
+          <input type="hidden" name="end_date" value="{{ end_date }}">
           <span>Use <strong>{{ result.suggestion }}</strong> and find the path?</span>
           <button type="submit">Yes, use this name</button>
         </form>

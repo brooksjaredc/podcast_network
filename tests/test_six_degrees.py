@@ -56,6 +56,50 @@ class SixDegreesGraphTests(unittest.TestCase):
         self.assertEqual(graph.edge_kind("Alice", "Podcast A"), "guest")
         self.assertEqual(graph.edge_date("Podcast A", "Alice"), "2024-01-15")
 
+    def test_shortest_path_filters_guest_edges_by_date_window(self) -> None:
+        graph = SixDegreesGraph(
+            edges=[
+                Edge("Alice", "Podcast A", "guest", date="2020-01-15"),
+                Edge("Bob", "Podcast A", "guest", date="2024-01-15"),
+                Edge("Alice", "Podcast B", "guest", date="2024-02-01"),
+                Edge("Bob", "Podcast B", "guest", date="2024-02-02"),
+            ],
+            names={"Alice", "Bob"},
+        )
+
+        result = graph.explain("Alice", "Bob", start_date="2024-01-01", end_date="2024-12-31")
+
+        self.assertTrue(result.found)
+        self.assertEqual(result.path, ("Alice", "Podcast B", "Bob"))
+
+    def test_shortest_path_filters_host_edges_by_active_range(self) -> None:
+        graph = SixDegreesGraph(
+            edges=[
+                Edge(
+                    "Alice",
+                    "Podcast A",
+                    "host",
+                    active_start="2020-01-01",
+                    active_end="2021-12-31",
+                ),
+                Edge("Bob", "Podcast A", "guest", date="2024-01-15"),
+                Edge(
+                    "Alice",
+                    "Podcast B",
+                    "host",
+                    active_start="2023-01-01",
+                    active_end="2025-12-31",
+                ),
+                Edge("Bob", "Podcast B", "guest", date="2024-02-02"),
+            ],
+            names={"Alice", "Bob"},
+        )
+
+        result = graph.explain("Alice", "Bob", start_date="2024-01-01", end_date="2024-12-31")
+
+        self.assertTrue(result.found)
+        self.assertEqual(result.path, ("Alice", "Podcast B", "Bob"))
+
     def test_explain_suggests_missing_name(self) -> None:
         graph = SixDegreesGraph(edges=[], names={"Joe Rogan", "Marc Maron"})
 

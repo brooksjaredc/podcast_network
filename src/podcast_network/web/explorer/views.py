@@ -160,21 +160,25 @@ def person_detail(request: HttpRequest, person_id: int) -> HttpResponse:
 def path(request: HttpRequest) -> HttpResponse:
     source = request.GET.get("source", "").strip()
     target = request.GET.get("target", "").strip()
+    start_date = parse_date_filter(request.GET.get("start_date"))
+    end_date = parse_date_filter(request.GET.get("end_date"))
     result = None
     path_graph = None
     path_message_parts = ()
     if source and target:
         repo = legacy_repository()
         graph = six_degrees_graph()
-        result = graph.explain(source, target)
+        result = graph.explain(source, target, start_date=start_date, end_date=end_date)
         path_message_parts = link_path_message_parts(repo, result)
-        path_graph = build_path_graph(graph, result)
+        path_graph = build_path_graph(graph, result, start_date=start_date, end_date=end_date)
     return render(
         request,
         "explorer/path.html",
         {
             "source": source,
             "target": target,
+            "start_date": start_date or "",
+            "end_date": end_date or "",
             "result": result,
             "path_message_parts": path_message_parts,
             "path_graph": path_graph,
@@ -240,6 +244,15 @@ def parse_int(value: str | None) -> int | None:
     return int(value)
 
 
+def parse_date_filter(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value[:10]).date().isoformat()
+    except ValueError:
+        return None
+
+
 def link_path_message_parts(
     repo: LegacyRepository,
     result: PathResult,
@@ -266,7 +279,13 @@ def link_path_message_part(repo: LegacyRepository, part: PathMessagePart) -> dic
     return linked_part
 
 
-def build_path_graph(graph: SixDegreesGraph, result: PathResult) -> dict[str, Any] | None:
+def build_path_graph(
+    graph: SixDegreesGraph,
+    result: PathResult,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any] | None:
     if not result.found:
         return None
 
@@ -292,6 +311,12 @@ def build_path_graph(graph: SixDegreesGraph, result: PathResult) -> dict[str, An
         left_node = nodes[index]
         right_node = nodes[index + 1]
         role = graph.edge_kind(left, right)
+        date = graph.edge_date_for_window(
+            left,
+            right,
+            start_date=start_date,
+            end_date=end_date,
+        )
         edges.append(
             {
                 "x1": left_node["x"],
@@ -305,10 +330,8 @@ def build_path_graph(graph: SixDegreesGraph, result: PathResult) -> dict[str, An
                     right_node["y"],
                 ),
                 "label": edge_label(role, left_node["kind"], right_node["kind"]),
-                "date": graph.edge_date(left, right) if role == "guest" else None,
-                "date_label": edge_date_label(graph.edge_date(left, right))
-                if role == "guest"
-                else "",
+                "date": date,
+                "date_label": edge_date_label(date),
                 "label_x": (left_node["x"] + right_node["x"]) / 2,
                 "label_y": (left_node["y"] + right_node["y"]) / 2 - 12,
             }

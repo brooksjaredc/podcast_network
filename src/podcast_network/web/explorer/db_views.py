@@ -25,6 +25,7 @@ from podcast_network.web.explorer.services import (
     COHOST_EPISODE_THRESHOLD,
     database_six_degrees_graph,
 )
+from podcast_network.web.explorer.views import build_path_graph, parse_date_filter
 
 RANKING_FIELDS = {
     "pr": ("pagerank_rank", "PageRank Rankings"),
@@ -779,22 +780,24 @@ def common(request: HttpRequest) -> HttpResponse:
 def path(request: HttpRequest) -> HttpResponse:
     source = request.GET.get("source", "").strip()
     target = request.GET.get("target", "").strip()
+    start_date = parse_date_filter(request.GET.get("start_date"))
+    end_date = parse_date_filter(request.GET.get("end_date"))
     result = None
     path_graph = None
     path_message_parts = ()
     if source and target:
-        from podcast_network.web.explorer.views import build_path_graph
-
         graph = database_six_degrees_graph()
-        result = graph.explain(source, target)
+        result = graph.explain(source, target, start_date=start_date, end_date=end_date)
         path_message_parts = link_path_message_parts(graph, result.message_parts)
-        path_graph = build_path_graph(graph, result)
+        path_graph = build_path_graph(graph, result, start_date=start_date, end_date=end_date)
     return render(
         request,
         "explorer/path.html",
         {
             "source": source,
             "target": target,
+            "start_date": start_date or "",
+            "end_date": end_date or "",
             "result": result,
             "path_message_parts": path_message_parts,
             "path_graph": path_graph,

@@ -114,6 +114,27 @@ def test_path_page_loads_real_query() -> None:
     assert b"data-path-graph" in response.content
     assert b"path_graph.js" in response.content
     assert b"Jan 15, 2024" in response.content
+    assert b'name="start_date"' in response.content
+    assert b'name="end_date"' in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_path_page_filters_by_date_window() -> None:
+    make_db_graph()
+
+    response = Client().get(
+        "/path/",
+        {
+            "source": "Joe Rogan",
+            "target": "Marc Maron",
+            "start_date": "2023-01-01",
+            "end_date": "2023-12-31",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"No connection found between Joe Rogan and Marc Maron." in response.content
+    assert b'value="2023-01-01"' in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])

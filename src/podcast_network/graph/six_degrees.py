@@ -19,6 +19,13 @@ class Edge:
     right: str
     kind: str
     date: str | None = None
+    dates: tuple[str, ...] = ()
+    active_start: str | None = None
+    active_end: str | None = None
+
+    @property
+    def event_dates(self) -> tuple[str, ...]:
+        return tuple(sorted({date for date in (*self.dates, self.date or "") if date}))
 
 
 @dataclass(frozen=True)
@@ -63,7 +70,7 @@ class SixDegreesGraph:
         self.person_ids = person_ids or {}
         self._canonical_names = canonical_name_index(names)
         self._adjacency: dict[str, dict[str, Edge]] = {}
-        for edge in edges:
+        for edge in merge_edges(edges):
             self._adjacency.setdefault(edge.left, {})[edge.right] = edge
             self._adjacency.setdefault(edge.right, {})[edge.left] = edge
 
@@ -76,7 +83,14 @@ class SixDegreesGraph:
             person_ids=load_pickle(data_dir / "sorted_pr_dict.pkl"),
         )
 
-    def shortest_path(self, source: str, target: str) -> tuple[str, ...]:
+    def shortest_path(
+        self,
+        source: str,
+        target: str,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> tuple[str, ...]:
         if source == target:
             return (source,)
 
@@ -84,7 +98,12 @@ class SixDegreesGraph:
         queue: deque[tuple[str, tuple[str, ...]]] = deque([(source, (source,))])
         while queue:
             node, path = queue.popleft()
-            for neighbor in self._ordered_neighbors(node, is_source=node == source):
+            for neighbor in self._ordered_neighbors(
+                node,
+                is_source=node == source,
+                start_date=start_date,
+                end_date=end_date,
+            ):
                 if neighbor in seen:
                     continue
                 next_path = (*path, neighbor)
@@ -95,7 +114,14 @@ class SixDegreesGraph:
 
         return ()
 
-    def explain(self, source: str, target: str) -> PathResult:
+    def explain(
+        self,
+        source: str,
+        target: str,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> PathResult:
         canonical_source = self.resolve_name(source)
         canonical_target = self.resolve_name(target)
         missing_field = self._first_missing_field(canonical_source, canonical_target)
@@ -119,7 +145,12 @@ class SixDegreesGraph:
                 ),
             )
 
-        path = self.shortest_path(canonical_source, canonical_target)
+        path = self.shortest_path(
+            canonical_source,
+            canonical_target,
+            start_date=start_date,
+            end_date=end_date,
+        )
         if not path:
             return PathResult(
                 found=False,
@@ -155,12 +186,40 @@ class SixDegreesGraph:
         return self._adjacency[left][right].kind
 
     def edge_date(self, left: str, right: str) -> str | None:
-        return self._adjacency[left][right].date
+        return self.edge_date_for_window(left, right)
 
-    def _ordered_neighbors(self, node: str, *, is_source: bool) -> list[str]:
+    def edge_date_for_window(
+        self,
+        left: str,
+        right: str,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> str | None:
+        edge = self._adjacency[left][right]
+        if edge.kind != "guest":
+            return None
+        dates = matching_dates(edge.event_dates, start_date=start_date, end_date=end_date)
+        if not dates:
+            return None
+        return dates[-1]
+
+    def _ordered_neighbors(
+        self,
+        node: str,
+        *,
+        is_source: bool,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[str]:
         neighbors = self._adjacency.get(node, {})
         if not neighbors:
             return []
+        neighbors = {
+            neighbor: edge
+            for neighbor, edge in neighbors.items()
+            if edge_matches_window(edge, start_date=start_date, end_date=end_date)
+        }
         if is_source and node in self.names:
             return sorted(neighbors, key=lambda neighbor: neighbors[neighbor].kind != "host")
         return list(neighbors)
@@ -220,9 +279,100 @@ def load_edges(path: Path) -> list[Edge]:
                     right=right,
                     kind=attrs.get("attr", "guest"),
                     date=normalize_edge_date(attrs.get("date")),
+                    active_start=normalize_edge_date(attrs.get("date"))
+                    if attrs.get("attr") == "host"
+                    else None,
+                    active_end=normalize_edge_date(attrs.get("date"))
+                    if attrs.get("attr") == "host"
+                    else None,
                 )
             )
     return edges
+
+
+def merge_edges(edges: list[Edge]) -> list[Edge]:
+    merged: dict[tuple[str, str], Edge] = {}
+    for edge in edges:
+        key = tuple(sorted((edge.left, edge.right)))
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = edge
+            continue
+        kind = "host" if "host" in (existing.kind, edge.kind) else edge.kind
+        left, right = existing.left, existing.right
+        event_dates = tuple(sorted({*existing.event_dates, *edge.event_dates}))
+        active_dates = [
+            date
+            for date in (
+                existing.active_start,
+                existing.active_end,
+                edge.active_start,
+                edge.active_end,
+                *(event_dates if kind == "host" else ()),
+            )
+            if date
+        ]
+        merged[key] = Edge(
+            left=left,
+            right=right,
+            kind=kind,
+            dates=event_dates if kind == "guest" else (),
+            active_start=min(active_dates) if active_dates else None,
+            active_end=max(active_dates) if active_dates else None,
+        )
+    return list(merged.values())
+
+
+def edge_matches_window(
+    edge: Edge,
+    *,
+    start_date: str | None,
+    end_date: str | None,
+) -> bool:
+    if not start_date and not end_date:
+        return True
+    if edge.kind == "host":
+        event_dates = edge.event_dates
+        active_start = edge.active_start or (event_dates[0] if event_dates else None)
+        active_end = edge.active_end or (event_dates[-1] if event_dates else None)
+        if not active_start and not active_end:
+            return False
+        active_start = active_start or active_end
+        active_end = active_end or active_start
+        return date_ranges_overlap(
+            active_start=active_start,
+            active_end=active_end,
+            window_start=start_date,
+            window_end=end_date,
+        )
+    return bool(matching_dates(edge.event_dates, start_date=start_date, end_date=end_date))
+
+
+def matching_dates(
+    dates: tuple[str, ...],
+    *,
+    start_date: str | None,
+    end_date: str | None,
+) -> tuple[str, ...]:
+    return tuple(
+        date
+        for date in dates
+        if (start_date is None or date >= start_date) and (end_date is None or date <= end_date)
+    )
+
+
+def date_ranges_overlap(
+    *,
+    active_start: str | None,
+    active_end: str | None,
+    window_start: str | None,
+    window_end: str | None,
+) -> bool:
+    if active_start is None or active_end is None:
+        return False
+    if window_end is not None and active_start > window_end:
+        return False
+    return not (window_start is not None and active_end < window_start)
 
 
 def load_names(path: Path) -> set[str]:
