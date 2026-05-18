@@ -12,6 +12,7 @@ from podcast_network.extraction.models import ExtractedGuestResult, GuestExtract
 from podcast_network.extraction.pipeline import (
     extract_guest_batch,
     extract_guest_batch_async,
+    persist_successful_extraction,
 )
 from podcast_network.extraction.prompt import build_episode_prompt
 from podcast_network.web.catalog.management.commands.sync_guest_extraction_batch import (
@@ -56,6 +57,40 @@ class GuestExtractionTests(TestCase):
         candidate = GuestCandidate.objects.get(extraction=extraction)
         assert candidate.name == "Jane Doe"
         assert candidate.normalized_name == "jane doe"
+
+    def test_successful_extraction_strips_nul_bytes_before_postgres(self) -> None:
+        episode = create_episode(title="A Conversation with Jane Doe")
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="openai-batch",
+            prompt_version="guest-extraction-test",
+            episodes_requested=1,
+        )
+
+        persist_successful_extraction(
+            episode=episode,
+            extraction_run=run,
+            model="gpt-5-nano",
+            prompt_version="guest-extraction-test",
+            input_text="Title\x00Description",
+            result=GuestExtractionResult(
+                guests=[
+                    ExtractedGuestResult(
+                        name="Jane\x00 Doe",
+                        confidence=0.9,
+                        evidence="Guest:\x00 Jane Doe",
+                    )
+                ],
+                raw_response={"output_text": "Jane\x00 Doe"},
+            ),
+        )
+
+        extraction = EpisodeGuestExtraction.objects.get(episode=episode)
+        candidate = GuestCandidate.objects.get(extraction=extraction)
+        assert "\x00" not in extraction.input_text
+        assert "\x00" not in extraction.raw_response["output_text"]
+        assert candidate.name == "Jane Doe"
+        assert candidate.evidence == "Guest: Jane Doe"
 
     def test_extract_guests_command_runs_with_fake_provider(self) -> None:
         episode = create_episode(title="Episode with John Smith")

@@ -269,8 +269,8 @@ def persist_failed_extraction(
         defaults={
             "extraction_run": extraction_run,
             "status": EpisodeGuestExtraction.Status.FAILED,
-            "input_text": input_text,
-            "error": error,
+            "input_text": sanitize_postgres_text(input_text),
+            "error": sanitize_postgres_text(error),
         },
     )
     return EpisodeExtractionOutcome(episode_id=episode.id, succeeded=False, error=error)
@@ -293,8 +293,8 @@ def persist_successful_extraction(
             defaults={
                 "extraction_run": extraction_run,
                 "status": EpisodeGuestExtraction.Status.SUCCEEDED,
-                "input_text": input_text,
-                "raw_response": result.raw_response,
+                "input_text": sanitize_postgres_text(input_text),
+                "raw_response": sanitize_json_for_postgres(result.raw_response),
                 "error": "",
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
@@ -343,10 +343,10 @@ def create_guest_candidates(
         [
             GuestCandidate(
                 extraction=extraction,
-                name=guest.name,
-                normalized_name=normalize_name(guest.name),
+                name=sanitize_postgres_text(guest.name),
+                normalized_name=normalize_name(sanitize_postgres_text(guest.name)),
                 confidence=guest.confidence,
-                evidence=guest.evidence,
+                evidence=sanitize_postgres_text(guest.evidence),
             )
             for guest in result.guests
         ]
@@ -355,3 +355,20 @@ def create_guest_candidates(
 
 def normalize_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def sanitize_postgres_text(value: str) -> str:
+    return value.replace("\x00", "")
+
+
+def sanitize_json_for_postgres(value):
+    if isinstance(value, str):
+        return sanitize_postgres_text(value)
+    if isinstance(value, list):
+        return [sanitize_json_for_postgres(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            sanitize_postgres_text(str(key)): sanitize_json_for_postgres(item)
+            for key, item in value.items()
+        }
+    return value
