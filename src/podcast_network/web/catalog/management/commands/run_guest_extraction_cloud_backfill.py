@@ -37,7 +37,7 @@ class Command(BaseCommand):
         parser.add_argument("--wave-size", type=int, default=4)
         parser.add_argument("--model", default=DEFAULT_EXTRACTION_MODEL)
         parser.add_argument("--prompt-version", default=PROMPT_VERSION)
-        parser.add_argument("--reasoning-effort", default="minimal")
+        parser.add_argument("--reasoning-effort", default="low")
         parser.add_argument("--run-label", default="guest-extraction-cloud-backfill")
         parser.add_argument("--poll-interval-seconds", type=int, default=300)
         parser.add_argument("--max-runtime-seconds", type=int, default=82800)

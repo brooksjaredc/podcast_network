@@ -71,10 +71,9 @@ class Command(BaseCommand):
         if openai_timeout_seconds <= 0:
             raise CommandError("--openai-timeout-seconds must be positive.")
 
-        first_pass_model = str(options["first_pass_model"])
-        second_pass_model = str(options["second_pass_model"])
         prompt_version = str(options["prompt_version"])
-        reasoning_effort = str(options["second_pass_reasoning_effort"])
+        model = self.extraction_model(options)
+        reasoning_effort = self.extraction_reasoning_effort(options)
         run_label = str(options["run_label"])
         output_dir = Path(str(options["output_dir"]))
         review_min_confidence = float(options["review_min_confidence"])
@@ -94,17 +93,10 @@ class Command(BaseCommand):
                 started=started,
                 max_runtime_seconds=max_runtime_seconds,
             )
-            remaining = count_remaining_review_episodes(
-                first_pass_model=first_pass_model,
-                second_pass_model=second_pass_model,
-                prompt_version=prompt_version,
-                review_min_confidence=review_min_confidence,
-                review_max_confidence=review_max_confidence,
-                require_no_high_confidence=not options["review_allow_high_confidence"],
-            )
-            self.stdout.write(f"Remaining episodes needing second pass: {remaining}.")
+            remaining = self.count_remaining(options=options)
+            self.stdout.write(f"{self.remaining_message()}: {remaining}.")
             if remaining == 0:
-                self.stdout.write(self.style.SUCCESS("Second-pass guest extraction complete."))
+                self.stdout.write(self.style.SUCCESS(self.completion_message()))
                 return
             if time.monotonic() - started > max_runtime_seconds:
                 self.stdout.write(
@@ -116,14 +108,9 @@ class Command(BaseCommand):
                 return
 
             wave += 1
-            episodes = select_review_episodes(
+            episodes = self.select_episodes(
                 limit=batch_size * wave_size,
-                first_pass_model=first_pass_model,
-                second_pass_model=second_pass_model,
-                prompt_version=prompt_version,
-                review_min_confidence=review_min_confidence,
-                review_max_confidence=review_max_confidence,
-                require_no_high_confidence=not options["review_allow_high_confidence"],
+                options=options,
             )
             chunks = chunked(episodes, batch_size)
             self.stdout.write(
@@ -137,12 +124,48 @@ class Command(BaseCommand):
                     wave=wave,
                     wave_batch_index=index,
                     wave_batch_count=len(chunks),
-                    model=second_pass_model,
+                    model=model,
                     prompt_version=prompt_version,
                     reasoning_effort=reasoning_effort,
                     run_label=run_label,
                     output_dir=output_dir,
                 )
+
+    def extraction_model(self, options: dict[str, object]) -> str:
+        return str(options["second_pass_model"])
+
+    def extraction_reasoning_effort(self, options: dict[str, object]) -> str:
+        return str(options["second_pass_reasoning_effort"])
+
+    def completion_message(self) -> str:
+        return "Second-pass guest extraction complete."
+
+    def remaining_message(self) -> str:
+        return "Remaining episodes needing second pass"
+
+    def phase(self) -> str:
+        return "second_pass"
+
+    def select_episodes(self, *, limit: int, options: dict[str, object]) -> list[Episode]:
+        return select_review_episodes(
+            limit=limit,
+            first_pass_model=str(options["first_pass_model"]),
+            second_pass_model=str(options["second_pass_model"]),
+            prompt_version=str(options["prompt_version"]),
+            review_min_confidence=float(options["review_min_confidence"]),
+            review_max_confidence=float(options["review_max_confidence"]),
+            require_no_high_confidence=not options["review_allow_high_confidence"],
+        )
+
+    def count_remaining(self, *, options: dict[str, object]) -> int:
+        return count_remaining_review_episodes(
+            first_pass_model=str(options["first_pass_model"]),
+            second_pass_model=str(options["second_pass_model"]),
+            prompt_version=str(options["prompt_version"]),
+            review_min_confidence=float(options["review_min_confidence"]),
+            review_max_confidence=float(options["review_max_confidence"]),
+            require_no_high_confidence=not options["review_allow_high_confidence"],
+        )
 
     def sync_active_runs(
         self,
@@ -215,9 +238,10 @@ class Command(BaseCommand):
         output_dir: Path,
     ) -> ExtractionRun:
         timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+        phase = self.phase()
         jsonl_path = (
             output_dir
-            / f"guest_extraction_{model}_{timestamp}_second_pass_wave_{wave:04d}_"
+            / f"guest_extraction_{model}_{timestamp}_{phase}_wave_{wave:04d}_"
             f"batch_{wave_batch_index:04d}.jsonl"
         )
         write_batch_jsonl(
@@ -236,7 +260,7 @@ class Command(BaseCommand):
                 metadata={
                     "run_label": run_label,
                     "prompt_version": prompt_version,
-                    "phase": "second_pass",
+                    "phase": phase,
                     "wave": str(wave),
                     "wave_batch_index": str(wave_batch_index),
                     "wave_batch_count": str(wave_batch_count),
@@ -256,7 +280,7 @@ class Command(BaseCommand):
             metadata={
                 "run_label": run_label,
                 "coordinator_label": run_label,
-                "phase": "second_pass",
+                "phase": phase,
                 "batch_id": batch.id,
                 "input_file_id": uploaded_file.id,
                 "input_jsonl_path": str(jsonl_path),

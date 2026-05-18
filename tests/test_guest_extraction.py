@@ -642,6 +642,118 @@ class GuestExtractionTests(TestCase):
 
         assert remaining == 0
 
+    def test_review_band_first_pass_rerun_selector_excludes_low_reasoning_reruns(
+        self,
+    ) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        minimal_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="openai-batch",
+            prompt_version="guest-extraction-v7",
+            episodes_requested=1,
+            metadata={"reasoning_effort": "minimal"},
+        )
+        extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=minimal_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v7",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Jane Doe",
+            normalized_name="jane doe",
+            confidence=0.82,
+        )
+
+        from podcast_network.web.catalog.management.commands.rerun_guest_extraction_review_band_cloud import (  # noqa: E501
+            rerun_review_episode_queryset,
+        )
+
+        selected = list(
+            rerun_review_episode_queryset(
+                model="gpt-5-nano",
+                prompt_version="guest-extraction-v7",
+                review_min_confidence=0.75,
+                review_max_confidence=0.90,
+                require_no_high_confidence=True,
+                source_reasoning_effort="minimal",
+                exclude_reasoning_effort="low",
+            )
+        )
+
+        assert selected == [episode]
+
+        low_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="openai-batch",
+            prompt_version="guest-extraction-v7",
+            episodes_requested=1,
+            metadata={"reasoning_effort": "low"},
+        )
+        extraction.extraction_run = low_run
+        extraction.save(update_fields=["extraction_run"])
+
+        selected_after_rerun = list(
+            rerun_review_episode_queryset(
+                model="gpt-5-nano",
+                prompt_version="guest-extraction-v7",
+                review_min_confidence=0.75,
+                review_max_confidence=0.90,
+                require_no_high_confidence=True,
+                source_reasoning_effort="minimal",
+                exclude_reasoning_effort="low",
+            )
+        )
+
+        assert selected_after_rerun == []
+
+    def test_review_band_first_pass_rerun_selector_requires_source_reasoning(
+        self,
+    ) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="openai-batch",
+            prompt_version="guest-extraction-v7",
+            episodes_requested=1,
+            metadata={"reasoning_effort": "medium"},
+        )
+        extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v7",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Jane Doe",
+            normalized_name="jane doe",
+            confidence=0.82,
+        )
+
+        from podcast_network.web.catalog.management.commands.rerun_guest_extraction_review_band_cloud import (  # noqa: E501
+            rerun_review_episode_queryset,
+        )
+
+        selected = list(
+            rerun_review_episode_queryset(
+                model="gpt-5-nano",
+                prompt_version="guest-extraction-v7",
+                review_min_confidence=0.75,
+                review_max_confidence=0.90,
+                require_no_high_confidence=True,
+                source_reasoning_effort="minimal",
+                exclude_reasoning_effort="low",
+            )
+        )
+
+        assert selected == []
+
     def test_sync_guest_appearances_cleans_names_and_skips_hosts(self) -> None:
         podcast = Podcast.objects.create(name="Hostful")
         episode = Episode.objects.create(
