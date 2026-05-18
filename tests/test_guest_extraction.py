@@ -541,6 +541,107 @@ class GuestExtractionTests(TestCase):
 
         assert selected == [episode]
 
+    def test_cloud_second_pass_selector_finds_global_review_band(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v7",
+            episodes_requested=1,
+        )
+        extraction = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v7",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=extraction,
+            name="Jane Doe",
+            normalized_name="jane doe",
+            confidence=0.82,
+        )
+
+        from podcast_network.web.catalog.management.commands.run_guest_extraction_second_pass_cloud_backfill import (  # noqa: E501
+            count_remaining_review_episodes,
+            select_review_episodes,
+        )
+
+        selected = select_review_episodes(
+            limit=10,
+            first_pass_model="gpt-5-nano",
+            second_pass_model="gpt-5-mini",
+            prompt_version="guest-extraction-v7",
+            review_min_confidence=0.75,
+            review_max_confidence=0.90,
+            require_no_high_confidence=True,
+        )
+        remaining = count_remaining_review_episodes(
+            first_pass_model="gpt-5-nano",
+            second_pass_model="gpt-5-mini",
+            prompt_version="guest-extraction-v7",
+            review_min_confidence=0.75,
+            review_max_confidence=0.90,
+            require_no_high_confidence=True,
+        )
+
+        assert selected == [episode]
+        assert remaining == 1
+
+    def test_cloud_second_pass_selector_ignores_completed_second_pass(self) -> None:
+        episode = create_episode(title="Episode with Jane Doe")
+        first_pass_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v7",
+            episodes_requested=1,
+        )
+        first_pass = EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=first_pass_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v7",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=first_pass,
+            name="Jane Doe",
+            normalized_name="jane doe",
+            confidence=0.82,
+        )
+        second_pass_run = ExtractionRun.objects.create(
+            model="gpt-5-mini",
+            provider="fake",
+            prompt_version="guest-extraction-v7",
+            episodes_requested=1,
+        )
+        EpisodeGuestExtraction.objects.create(
+            episode=episode,
+            extraction_run=second_pass_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v7",
+            model="gpt-5-mini",
+            input_text="",
+        )
+
+        from podcast_network.web.catalog.management.commands.run_guest_extraction_second_pass_cloud_backfill import (  # noqa: E501
+            count_remaining_review_episodes,
+        )
+
+        remaining = count_remaining_review_episodes(
+            first_pass_model="gpt-5-nano",
+            second_pass_model="gpt-5-mini",
+            prompt_version="guest-extraction-v7",
+            review_min_confidence=0.75,
+            review_max_confidence=0.90,
+            require_no_high_confidence=True,
+        )
+
+        assert remaining == 0
+
     def test_sync_guest_appearances_cleans_names_and_skips_hosts(self) -> None:
         podcast = Podcast.objects.create(name="Hostful")
         episode = Episode.objects.create(
