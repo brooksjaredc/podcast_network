@@ -93,6 +93,38 @@ class IngestPipelineTests(TestCase):
         assert Episode.objects.count() == 0
         assert ScrapeRun.objects.get().status == ScrapeRun.Status.SUCCEEDED
 
+    def test_ingest_feed_bounds_long_episode_fields(self) -> None:
+        feed = create_feed()
+        long_url = "https://example.com/" + ("a" * 1200)
+        rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Podcast</title>
+    <item>
+      <title>{"Long Title " * 120}</title>
+      <guid>{long_url}</guid>
+      <link>{long_url}</link>
+      <itunes:duration>{"1" * 120}</itunes:duration>
+      <enclosure url="{long_url}" type="audio/mpeg" />
+    </item>
+  </channel>
+</rss>
+""".encode()
+
+        ingest_feed(
+            feed,
+            storage=LocalRawFeedStorage(Path(self.tmpdir)),
+            fetcher=fixture_fetcher(rss),
+        )
+
+        episode = Episode.objects.get()
+        assert len(episode.guid) == 1000
+        assert len(episode.title) == 1000
+        assert len(episode.episode_url) == 1000
+        assert len(episode.enclosure_url) == 1000
+        assert len(episode.duration_raw) == 100
+        assert "..." in episode.guid
+
     def setUp(self) -> None:
         self.tmpdir = self.enterContext(PathContext())
 

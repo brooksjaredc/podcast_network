@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -286,8 +287,8 @@ def sync_podcast_metadata(feed: Feed, parsed: ParsedFeed) -> None:
         changed_fields.append("metadata")
     for field_name, value in {
         "description": parsed.description,
-        "website_url": parsed.website_url,
-        "image_url": parsed.image_url,
+        "website_url": bounded_text(parsed.website_url, 1000),
+        "image_url": bounded_text(parsed.image_url, 1000),
     }.items():
         if value and getattr(podcast, field_name) != value:
             setattr(podcast, field_name, value)
@@ -313,14 +314,14 @@ def upsert_episodes(feed: Feed, episodes: list[ParsedEpisode]) -> tuple[int, int
     for parsed in episodes:
         _, was_created = Episode.objects.update_or_create(
             podcast=feed.podcast,
-            guid=parsed.guid,
+            guid=bounded_text(parsed.guid, 1000),
             defaults={
-                "title": parsed.title,
+                "title": bounded_text(parsed.title, 1000),
                 "description": parsed.description,
                 "published_at": parsed.published_at,
-                "episode_url": parsed.episode_url,
-                "enclosure_url": parsed.enclosure_url,
-                "duration_raw": parsed.duration_raw,
+                "episode_url": bounded_text(parsed.episode_url, 1000),
+                "enclosure_url": bounded_text(parsed.enclosure_url, 1000),
+                "duration_raw": bounded_text(parsed.duration_raw, 100),
                 "explicit": parsed.explicit,
                 "raw_data": parsed.raw_data,
             },
@@ -330,6 +331,14 @@ def upsert_episodes(feed: Feed, episodes: list[ParsedEpisode]) -> tuple[int, int
         else:
             updated += 1
     return created, updated
+
+
+def bounded_text(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    digest = hashlib.sha256(value.encode()).hexdigest()[:12]
+    suffix = f"...{digest}"
+    return value[: max_length - len(suffix)] + suffix
 
 
 def finish_single_feed_run(scrape_run: ScrapeRun) -> None:
