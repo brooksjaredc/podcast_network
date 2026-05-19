@@ -69,48 +69,102 @@ def sync_person_entities(
     )
     observations = []
     appearances_seen = 0
+    observed_names_by_normalized: dict[str, Counter[str]] = defaultdict(Counter)
+    roles_by_normalized: dict[str, set[str]] = defaultdict(set)
+    processed_observation_ids: list[str] | None = [] if limit else None
     for appearance in appearances:
         appearances_seen += 1
-        observations.append(observation_from_appearance(appearance))
+        observation = observation_from_appearance(appearance)
+        observations.append(observation)
+        if processed_observation_ids is not None:
+            processed_observation_ids.append(observation.observation_id)
+        observed_names_by_normalized[observation.normalized_name][
+            observation.observed_name
+        ] += 1
+        roles_by_normalized[observation.normalized_name].add(observation.role)
+        if len(observations) >= chunk_size:
+            if not dry_run:
+                bulk_upsert_observations(observations, chunk_size=chunk_size)
+            observations = []
         if limit and appearances_seen >= limit:
             break
 
+    if observations and not dry_run:
+        bulk_upsert_observations(observations, chunk_size=chunk_size)
+
     if dry_run:
-        normalized_names = {observation.normalized_name for observation in observations}
         return EntitySyncStats(
             appearances_seen=appearances_seen,
-            observations_upserted=len(observations),
-            canonicals_upserted=len(normalized_names),
-            links_upserted=len(observations),
+            observations_upserted=appearances_seen,
+            canonicals_upserted=len(observed_names_by_normalized),
+            links_upserted=appearances_seen,
         )
 
-    bulk_upsert_observations(observations, chunk_size=chunk_size)
-    canonicals = canonical_entities_for_observations(observations)
+    canonicals = canonical_entities_for_observed_names(
+        observed_names_by_normalized=observed_names_by_normalized,
+        roles_by_normalized=roles_by_normalized,
+    )
     bulk_upsert_canonicals(canonicals, chunk_size=chunk_size)
+    links_upserted = upsert_links_for_observations(
+        observation_ids=processed_observation_ids,
+        chunk_size=chunk_size,
+    )
+    return EntitySyncStats(
+        appearances_seen=appearances_seen,
+        observations_upserted=appearances_seen,
+        canonicals_upserted=len(canonicals),
+        links_upserted=links_upserted,
+    )
+
+
+def upsert_links_for_observations(
+    *,
+    observation_ids: list[str] | None,
+    chunk_size: int,
+) -> int:
+    queryset = PersonObservation.objects.filter(provider=PersonObservation.Provider.APPEARANCE)
+    if observation_ids is not None:
+        queryset = queryset.filter(observation_id__in=observation_ids)
+    rows = queryset.order_by("observation_id").values_list(
+        "observation_id",
+        "normalized_name",
+    )
+    chunk = []
+    links_upserted = 0
+    for observation_id, normalized_name in rows.iterator(chunk_size=chunk_size):
+        chunk.append((observation_id, normalized_name))
+        if len(chunk) >= chunk_size:
+            links_upserted += upsert_link_chunk(chunk, chunk_size=chunk_size)
+            chunk = []
+    if chunk:
+        links_upserted += upsert_link_chunk(chunk, chunk_size=chunk_size)
+    return links_upserted
+
+
+def upsert_link_chunk(
+    observation_rows: list[tuple[str, str]],
+    *,
+    chunk_size: int,
+) -> int:
     preserved_links = existing_non_exact_links(
-        observation_ids=[observation.observation_id for observation in observations],
+        observation_ids=[observation_id for observation_id, _ in observation_rows],
     )
     links = []
-    for observation in observations:
-        preserved = preserved_links.get(observation.observation_id)
+    for observation_id, normalized_name in observation_rows:
+        preserved = preserved_links.get(observation_id)
         if preserved is not None:
             links.append(preserved)
             continue
         links.append(
             PersonEntityLink(
-                observation_id=observation.observation_id,
-                canonical_id=canonical_person_id(observation.normalized_name),
+                observation_id=observation_id,
+                canonical_id=canonical_person_id(normalized_name),
                 match_method="exact_normalized_name",
                 match_probability=1.0,
             )
         )
     bulk_upsert_links(links, chunk_size=chunk_size)
-    return EntitySyncStats(
-        appearances_seen=appearances_seen,
-        observations_upserted=len(observations),
-        canonicals_upserted=len(canonicals),
-        links_upserted=len(links),
-    )
+    return len(links)
 
 
 def existing_non_exact_links(observation_ids: list[str]) -> dict[str, PersonEntityLink]:
@@ -172,6 +226,20 @@ def canonical_entities_for_observations(
     for observation in observations:
         observed_names_by_normalized[observation.normalized_name][observation.observed_name] += 1
         roles_by_normalized[observation.normalized_name].add(observation.role)
+
+    return canonical_entities_for_observed_names(
+        observed_names_by_normalized=observed_names_by_normalized,
+        roles_by_normalized=roles_by_normalized,
+    )
+
+
+def canonical_entities_for_observed_names(
+    *,
+    observed_names_by_normalized: dict[str, Counter[str]],
+    roles_by_normalized: dict[str, set[str]],
+) -> list[CanonicalPersonEntity]:
+    if not observed_names_by_normalized:
+        return []
 
     persisted_stats = {
         row["normalized_name"]: row

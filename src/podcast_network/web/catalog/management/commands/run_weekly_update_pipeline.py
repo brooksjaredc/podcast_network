@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandParser
+from django.db import close_old_connections
 
 from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL
 from podcast_network.extraction.prompt import PROMPT_VERSION
@@ -114,10 +116,19 @@ class Command(BaseCommand):
             return
 
         for step in steps:
+            close_old_connections()
+            started = time.monotonic()
             self.stdout.write(self.style.MIGRATE_HEADING(f"== {step.name} =="))
             call_command(step.command, **step.options)
+            elapsed = time.monotonic() - started
+            self.stdout.write(
+                self.style.SUCCESS(f"Completed {step.name} in {elapsed:.1f}s.")
+            )
+            close_old_connections()
 
         if not options["skip_graph_warm"]:
+            close_old_connections()
+            started = time.monotonic()
             self.stdout.write(self.style.MIGRATE_HEADING("== Warm DB graph =="))
             database_six_degrees_graph.cache_clear()
             graph = database_six_degrees_graph()
@@ -127,6 +138,10 @@ class Command(BaseCommand):
                     f"{len(graph.podcast_ids)} podcasts."
                 )
             )
+            self.stdout.write(
+                self.style.SUCCESS(f"Completed Warm DB graph in {time.monotonic() - started:.1f}s.")
+            )
+            close_old_connections()
 
         self.print_todos()
         self.stdout.write(self.style.SUCCESS("Weekly update pipeline complete."))

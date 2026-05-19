@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
@@ -9,7 +8,13 @@ from django.db import transaction
 from django.db.models import Max, Min
 from django.utils import timezone
 
-from podcast_network.network_metrics import closeness_centrality, ranks, safe_hits
+from podcast_network.network_metrics import (
+    add_episode_edges,
+    closeness_centrality,
+    empty_episode_people,
+    ranks,
+    safe_hits,
+)
 from podcast_network.web.catalog.models import (
     Appearance,
     Episode,
@@ -200,15 +205,14 @@ def build_evolution_graphs(*, cutoff_at: datetime) -> EvolutionGraphs:
     undirected_people = nx.Graph()
     display_names: dict[str, str] = {}
     podcast_ids: set[int] = set()
-    episode_people: dict[int, dict[str, set[str]]] = defaultdict(
-        lambda: {Appearance.Role.GUEST: set(), Appearance.Role.HOST: set()}
-    )
     guest_appearance_count = 0
+    current_episode_id = None
+    current_people = empty_episode_people()
 
     rows = PersonEntityLink.objects.filter(
         observation__role__in=[Appearance.Role.GUEST, Appearance.Role.HOST],
         observation__episode__published_at__lt=cutoff_at,
-    ).values_list(
+    ).order_by("observation__episode_id").values_list(
         "observation__episode_id",
         "canonical_id",
         "canonical__display_name",
@@ -218,21 +222,31 @@ def build_evolution_graphs(*, cutoff_at: datetime) -> EvolutionGraphs:
     for episode_id, canonical_id, display_name, podcast_id, role in rows.iterator(
         chunk_size=20_000
     ):
+        if current_episode_id is None:
+            current_episode_id = episode_id
+        elif episode_id != current_episode_id:
+            add_episode_edges(
+                directed_people=directed_people,
+                undirected_people=undirected_people,
+                people_by_role=current_people,
+            )
+            current_episode_id = episode_id
+            current_people = empty_episode_people()
+
         directed_people.add_node(canonical_id)
         undirected_people.add_node(canonical_id)
         display_names[canonical_id] = display_name
         podcast_ids.add(podcast_id)
-        episode_people[episode_id][role].add(canonical_id)
+        current_people[role].add(canonical_id)
         if role == Appearance.Role.GUEST:
             guest_appearance_count += 1
 
-    for people_by_role in episode_people.values():
-        for guest_id in people_by_role[Appearance.Role.GUEST]:
-            for host_id in people_by_role[Appearance.Role.HOST]:
-                if guest_id == host_id:
-                    continue
-                add_weighted_edge(directed_people, guest_id, host_id)
-                add_weighted_edge(undirected_people, guest_id, host_id)
+    if current_episode_id is not None:
+        add_episode_edges(
+            directed_people=directed_people,
+            undirected_people=undirected_people,
+            people_by_role=current_people,
+        )
 
     return EvolutionGraphs(
         directed_people=directed_people,
@@ -313,13 +327,6 @@ def top_metric_ids(metrics: list[dict[object, float]], *, limit: int) -> set[str
         ordered = sorted(metric, key=lambda key: (-metric[key], str(key)))[:limit]
         ids.update(str(key) for key in ordered)
     return ids
-
-
-def add_weighted_edge(graph: nx.Graph, source: str, target: str) -> None:
-    if graph.has_edge(source, target):
-        graph[source][target]["weight"] += 1
-    else:
-        graph.add_edge(source, target, weight=1)
 
 
 def largest_component(graph: nx.Graph) -> nx.Graph:

@@ -96,6 +96,7 @@ def score_person_entity_candidates(
         queryset = queryset[:limit]
     updates = []
     seen = 0
+    scored = 0
     accepted = 0
     rejected = 0
     for pair in queryset.iterator(chunk_size=chunk_size):
@@ -117,19 +118,34 @@ def score_person_entity_candidates(
             pair.status = PersonEntityCandidatePair.Status.REJECTED
             rejected += 1
         updates.append(pair)
+        if len(updates) >= chunk_size:
+            if not dry_run:
+                bulk_update_scores(updates, chunk_size=chunk_size)
+            scored += len(updates)
+            updates = []
 
-    if not dry_run and updates:
-        PersonEntityCandidatePair.objects.bulk_update(
-            updates,
-            fields=["match_probability", "model_name", "features", "status", "updated_at"],
-            batch_size=chunk_size,
-        )
+    if updates:
+        if not dry_run:
+            bulk_update_scores(updates, chunk_size=chunk_size)
+        scored += len(updates)
     return CandidateScoringStats(
         candidates_seen=seen,
-        candidates_scored=len(updates),
+        candidates_scored=scored,
         accepted=accepted,
         rejected=rejected,
         model_name=model_name,
+    )
+
+
+def bulk_update_scores(
+    pairs: list[PersonEntityCandidatePair],
+    *,
+    chunk_size: int,
+) -> None:
+    PersonEntityCandidatePair.objects.bulk_update(
+        pairs,
+        fields=["match_probability", "model_name", "features", "status", "updated_at"],
+        batch_size=chunk_size,
     )
 
 

@@ -95,15 +95,13 @@ def build_metric_graphs() -> MetricGraphs:
     undirected_people = nx.Graph()
     podcast_similarity = nx.Graph()
     person_stats: dict[str, PersonNodeStats] = {}
-    episode_people: dict[int, dict[str, set[str]]] = defaultdict(
-        lambda: {Appearance.Role.GUEST: set(), Appearance.Role.HOST: set()}
-    )
     guest_podcasts_by_person: dict[str, set[int]] = defaultdict(set)
-    podcast_names: dict[int, str] = {}
+    current_episode_id = None
+    current_people = empty_episode_people()
 
     rows = PersonEntityLink.objects.filter(
         observation__role__in=[Appearance.Role.GUEST, Appearance.Role.HOST],
-    ).values_list(
+    ).order_by("observation__episode_id").values_list(
         "observation__episode_id",
         "canonical_id",
         "canonical__display_name",
@@ -123,6 +121,17 @@ def build_metric_graphs() -> MetricGraphs:
         role,
         published_at,
     ) in rows.iterator(chunk_size=20_000):
+        if current_episode_id is None:
+            current_episode_id = episode_id
+        elif episode_id != current_episode_id:
+            add_episode_edges(
+                directed_people=directed_people,
+                undirected_people=undirected_people,
+                people_by_role=current_people,
+            )
+            current_episode_id = episode_id
+            current_people = empty_episode_people()
+
         directed_people.add_node(canonical_id)
         undirected_people.add_node(canonical_id)
         stats = person_stats.setdefault(
@@ -140,19 +149,15 @@ def build_metric_graphs() -> MetricGraphs:
             stats.latest_episode_at is None or published_at > stats.latest_episode_at
         ):
             stats.latest_episode_at = published_at
-        episode_people[episode_id][role].add(canonical_id)
-        podcast_names[podcast_id] = podcast_name
+        current_people[role].add(canonical_id)
         podcast_similarity.add_node(podcast_id, name=podcast_name)
 
-    for people_by_role in episode_people.values():
-        guests = people_by_role[Appearance.Role.GUEST]
-        hosts = people_by_role[Appearance.Role.HOST]
-        for guest_id in guests:
-            for host_id in hosts:
-                if guest_id == host_id:
-                    continue
-                add_weighted_edge(directed_people, guest_id, host_id)
-                add_weighted_edge(undirected_people, guest_id, host_id)
+    if current_episode_id is not None:
+        add_episode_edges(
+            directed_people=directed_people,
+            undirected_people=undirected_people,
+            people_by_role=current_people,
+        )
 
     shared_guest_counts: Counter[tuple[int, int]] = Counter()
     for podcast_ids in guest_podcasts_by_person.values():
@@ -174,6 +179,26 @@ def add_weighted_edge(graph: nx.Graph, source: str, target: str) -> None:
         graph[source][target]["weight"] += 1
     else:
         graph.add_edge(source, target, weight=1)
+
+
+def empty_episode_people() -> dict[str, set[str]]:
+    return {Appearance.Role.GUEST: set(), Appearance.Role.HOST: set()}
+
+
+def add_episode_edges(
+    *,
+    directed_people: nx.DiGraph,
+    undirected_people: nx.Graph,
+    people_by_role: dict[str, set[str]],
+) -> None:
+    guests = people_by_role[Appearance.Role.GUEST]
+    hosts = people_by_role[Appearance.Role.HOST]
+    for guest_id in guests:
+        for host_id in hosts:
+            if guest_id == host_id:
+                continue
+            add_weighted_edge(directed_people, guest_id, host_id)
+            add_weighted_edge(undirected_people, guest_id, host_id)
 
 
 def person_metric_rows(*, run: NetworkMetricRun, graphs: MetricGraphs) -> list[PersonNetworkMetric]:
