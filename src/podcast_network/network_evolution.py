@@ -106,9 +106,28 @@ def calculate_network_evolution(
             )
             return EvolutionStats(run=run)
 
+        run.weeks_requested = len(weeks)
+        run.start_week = weeks[0]
+        run.end_week = weeks[-1]
+        run.metadata = {
+            "bootstrap": bootstrap,
+            "recompute": recompute,
+            "person_metric_limit": person_metric_limit,
+            "betweenness_sample_size": betweenness_sample_size,
+            "closeness_sample_size": closeness_sample_size,
+        }
+        run.save(
+            update_fields=[
+                "weeks_requested",
+                "start_week",
+                "end_week",
+                "metadata",
+            ]
+        )
+
         calculated = 0
-        with transaction.atomic():
-            for week in weeks:
+        for week in weeks:
+            with transaction.atomic():
                 snapshot = calculate_week_snapshot(
                     run=run,
                     week_start=week,
@@ -119,6 +138,8 @@ def calculate_network_evolution(
                 )
                 if snapshot is not None:
                     calculated += 1
+            run.weeks_calculated = calculated
+            run.save(update_fields=["weeks_calculated"])
 
         finish_run(
             run,
@@ -127,13 +148,7 @@ def calculate_network_evolution(
             weeks_calculated=calculated,
             start_week=weeks[0],
             end_week=weeks[-1],
-            metadata={
-                "bootstrap": bootstrap,
-                "recompute": recompute,
-                "person_metric_limit": person_metric_limit,
-                "betweenness_sample_size": betweenness_sample_size,
-                "closeness_sample_size": closeness_sample_size,
-            },
+            metadata=run.metadata,
         )
         return EvolutionStats(
             run=run,
