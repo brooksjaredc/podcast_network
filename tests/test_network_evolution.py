@@ -37,8 +37,19 @@ def test_network_evolution_bootstrap_creates_weekly_snapshots() -> None:
     assert snapshots[0].person_nodes == 2
     assert snapshots[0].person_edges == 1
     assert snapshots[0].podcast_count == 1
+    assert snapshots[0].episode_count == 1
     assert snapshots[0].guest_appearance_count == 1
-    assert PersonNetworkEvolutionMetric.objects.filter(snapshot=snapshots[0]).count() == 2
+    assert snapshots[0].new_person_count == 2
+    assert snapshots[0].new_person_edge_count == 1
+    assert snapshots[0].new_podcast_count == 1
+    metrics = list(PersonNetworkEvolutionMetric.objects.filter(snapshot=snapshots[0]))
+    assert len(metrics) == 2
+    guest_metric = next(metric for metric in metrics if metric.display_name == "Guest One")
+    assert guest_metric.guest_appearances == 1
+    assert guest_metric.host_appearances == 0
+    assert guest_metric.podcast_count == 1
+    assert guest_metric.degree_rank > 0
+    assert guest_metric.betweenness_rank > 0
 
 
 def test_network_evolution_incremental_run_adds_only_new_weeks() -> None:
@@ -50,6 +61,17 @@ def test_network_evolution_incremental_run_adds_only_new_weeks() -> None:
     assert stats.run.status == NetworkEvolutionRun.Status.SUCCEEDED
     assert stats.weeks_requested == 1
     assert NetworkEvolutionSnapshot.objects.count() == 2
+
+
+def test_network_evolution_reset_only_clears_tables() -> None:
+    create_evolution_graph()
+    calculate_network_evolution(bootstrap=True, max_weeks=1)
+
+    call_command("calculate_network_evolution", reset_only=True)
+
+    assert NetworkEvolutionRun.objects.count() == 0
+    assert NetworkEvolutionSnapshot.objects.count() == 0
+    assert PersonNetworkEvolutionMetric.objects.count() == 0
 
 
 def create_evolution_graph() -> None:

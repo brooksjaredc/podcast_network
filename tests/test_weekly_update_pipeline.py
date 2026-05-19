@@ -35,6 +35,8 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert promotion_step.options["episode_share_threshold"] == 0.20
     evolution_step = steps[-1]
     assert evolution_step.options["max_weeks"] == 1
+    assert evolution_step.options["betweenness_sample_size"] == 200
+    assert evolution_step.options["closeness_sample_size"] == 200
     er_step = steps[4]
     assert er_step.options["limit_pairs"] == 20000
 
@@ -118,6 +120,8 @@ def default_options() -> dict[str, object]:
         "entity_min_observations": 1,
         "evolution_max_weeks": 1,
         "evolution_person_metric_limit": 100,
+        "evolution_betweenness_sample_size": 200,
+        "evolution_closeness_sample_size": 200,
         "reprocess_current_prompt": False,
         "skip_scrape": False,
         "skip_llm": False,

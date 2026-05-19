@@ -499,7 +499,11 @@ class NetworkEvolutionSnapshot(models.Model):
     person_nodes = models.PositiveIntegerField(default=0)
     person_edges = models.PositiveIntegerField(default=0)
     podcast_count = models.PositiveIntegerField(default=0)
+    episode_count = models.PositiveIntegerField(default=0)
     guest_appearance_count = models.PositiveIntegerField(default=0)
+    new_person_count = models.PositiveIntegerField(default=0)
+    new_person_edge_count = models.PositiveIntegerField(default=0)
+    new_podcast_count = models.PositiveIntegerField(default=0)
     largest_component_nodes = models.PositiveIntegerField(default=0)
     largest_component_edges = models.PositiveIntegerField(default=0)
     density = models.FloatField(default=0.0)
@@ -541,10 +545,18 @@ class PersonNetworkEvolutionMetric(models.Model):
     hub = models.FloatField(default=0.0)
     authority = models.FloatField(default=0.0)
     closeness = models.FloatField(default=0.0)
+    betweenness = models.FloatField(default=0.0)
+    degree_centrality = models.FloatField(default=0.0)
     pagerank_rank = models.PositiveIntegerField(default=0)
     hub_rank = models.PositiveIntegerField(default=0)
     authority_rank = models.PositiveIntegerField(default=0)
     closeness_rank = models.PositiveIntegerField(default=0)
+    betweenness_rank = models.PositiveIntegerField(default=0)
+    degree_rank = models.PositiveIntegerField(default=0)
+    guest_appearances = models.PositiveIntegerField(default=0)
+    host_appearances = models.PositiveIntegerField(default=0)
+    podcast_count = models.PositiveIntegerField(default=0)
+    latest_episode_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -560,6 +572,8 @@ class PersonNetworkEvolutionMetric(models.Model):
             models.Index(fields=["snapshot", "hub_rank"]),
             models.Index(fields=["snapshot", "authority_rank"]),
             models.Index(fields=["snapshot", "closeness_rank"]),
+            models.Index(fields=["snapshot", "betweenness_rank"]),
+            models.Index(fields=["snapshot", "degree_rank"]),
         ]
         ordering = ["snapshot__week_start", "pagerank_rank", "display_name"]
 

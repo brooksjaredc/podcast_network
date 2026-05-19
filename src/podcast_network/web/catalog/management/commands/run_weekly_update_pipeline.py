@@ -96,6 +96,8 @@ class Command(BaseCommand):
         parser.add_argument("--entity-min-observations", type=int, default=1)
         parser.add_argument("--evolution-max-weeks", type=int, default=1)
         parser.add_argument("--evolution-person-metric-limit", type=int, default=100)
+        parser.add_argument("--evolution-betweenness-sample-size", type=int, default=200)
+        parser.add_argument("--evolution-closeness-sample-size", type=int, default=200)
         parser.add_argument(
             "--reprocess-current-prompt",
             action="store_true",
@@ -130,9 +132,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.MIGRATE_HEADING(f"== {step.name} =="))
             call_command(step.command, **step.options)
             elapsed = time.monotonic() - started
-            self.stdout.write(
-                self.style.SUCCESS(f"Completed {step.name} in {elapsed:.1f}s.")
-            )
+            self.stdout.write(self.style.SUCCESS(f"Completed {step.name} in {elapsed:.1f}s."))
             close_old_connections()
 
         if should_warm_graph(options):
@@ -158,9 +158,7 @@ class Command(BaseCommand):
     def print_plan(self, steps: list[PipelineStep]) -> None:
         self.stdout.write(self.style.MIGRATE_HEADING("Weekly update dry-run plan"))
         for step in steps:
-            options = " ".join(
-                f"{key}={value!r}" for key, value in sorted(step.options.items())
-            )
+            options = " ".join(f"{key}={value!r}" for key, value in sorted(step.options.items()))
             self.stdout.write(f"- {step.name}: call_command({step.command!r}, {options})")
 
     def print_todos(self) -> None:
@@ -229,9 +227,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     command="promote_frequent_guests_to_cohosts",
                     options={
                         "threshold": int(options["cohost_threshold"]),
-                        "episode_share_threshold": float(
-                            options["cohost_episode_share_threshold"]
-                        ),
+                        "episode_share_threshold": float(options["cohost_episode_share_threshold"]),
                         "clear_existing": True,
                     },
                 ),
@@ -265,6 +261,8 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 options={
                     "max_weeks": int(options["evolution_max_weeks"]),
                     "person_metric_limit": int(options["evolution_person_metric_limit"]),
+                    "betweenness_sample_size": int(options["evolution_betweenness_sample_size"]),
+                    "closeness_sample_size": int(options["evolution_closeness_sample_size"]),
                 },
             )
         )
@@ -272,9 +270,8 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
 
 
 def should_warm_graph(options: dict[str, object]) -> bool:
-    return (
-        str(options.get("phase", "all")) in {"all", "metrics"}
-        and not bool(options["skip_graph_warm"])
+    return str(options.get("phase", "all")) in {"all", "metrics"} and not bool(
+        options["skip_graph_warm"]
     )
 
 

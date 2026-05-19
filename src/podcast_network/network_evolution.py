@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
+from random import Random
 
 import networkx as nx
 from django.db import transaction
@@ -9,8 +11,6 @@ from django.db.models import Max, Min
 from django.utils import timezone
 
 from podcast_network.network_metrics import (
-    add_episode_edges,
-    closeness_centrality,
     empty_episode_people,
     ranks,
     safe_hits,
@@ -27,6 +27,19 @@ from podcast_network.web.catalog.models import (
 
 GRAPH_VERSION = "network-evolution-v1"
 DEFAULT_PERSON_METRIC_LIMIT = 100
+DEFAULT_BETWEENNESS_SAMPLE_SIZE = 200
+DEFAULT_CLOSENESS_SAMPLE_SIZE = 200
+
+
+@dataclass
+class EvolutionPersonStats:
+    display_name: str
+    person_ids: Counter[int] = field(default_factory=Counter)
+    guest_appearances: int = 0
+    host_appearances: int = 0
+    podcast_ids: set[int] = field(default_factory=set)
+    latest_episode_at: datetime | None = None
+    first_seen_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -37,12 +50,22 @@ class EvolutionStats:
 
 
 @dataclass(frozen=True)
+class EvolutionResetStats:
+    runs_deleted: int
+    snapshots_deleted: int
+    person_metrics_deleted: int
+
+
+@dataclass(frozen=True)
 class EvolutionGraphs:
     directed_people: nx.DiGraph
     undirected_people: nx.Graph
-    display_names: dict[str, str]
+    person_stats: dict[str, EvolutionPersonStats]
     podcast_ids: set[int]
+    podcast_first_seen_at: dict[int, datetime]
+    episode_ids: set[int]
     guest_appearance_count: int
+    edge_first_seen_at: dict[tuple[str, str], datetime]
 
 
 def calculate_network_evolution(
@@ -53,6 +76,8 @@ def calculate_network_evolution(
     recompute: bool = False,
     max_weeks: int | None = None,
     person_metric_limit: int = DEFAULT_PERSON_METRIC_LIMIT,
+    betweenness_sample_size: int = DEFAULT_BETWEENNESS_SAMPLE_SIZE,
+    closeness_sample_size: int = DEFAULT_CLOSENESS_SAMPLE_SIZE,
 ) -> EvolutionStats:
     run = NetworkEvolutionRun.objects.create(graph_version=GRAPH_VERSION)
     try:
@@ -88,6 +113,8 @@ def calculate_network_evolution(
                     run=run,
                     week_start=week,
                     person_metric_limit=person_metric_limit,
+                    betweenness_sample_size=betweenness_sample_size,
+                    closeness_sample_size=closeness_sample_size,
                     recompute=recompute,
                 )
                 if snapshot is not None:
@@ -104,6 +131,8 @@ def calculate_network_evolution(
                 "bootstrap": bootstrap,
                 "recompute": recompute,
                 "person_metric_limit": person_metric_limit,
+                "betweenness_sample_size": betweenness_sample_size,
+                "closeness_sample_size": closeness_sample_size,
             },
         )
         return EvolutionStats(
@@ -114,6 +143,16 @@ def calculate_network_evolution(
     except Exception:
         finish_run(run, status=NetworkEvolutionRun.Status.FAILED)
         raise
+
+
+def reset_network_evolution_tables() -> EvolutionResetStats:
+    stats = EvolutionResetStats(
+        runs_deleted=NetworkEvolutionRun.objects.count(),
+        snapshots_deleted=NetworkEvolutionSnapshot.objects.count(),
+        person_metrics_deleted=PersonNetworkEvolutionMetric.objects.count(),
+    )
+    NetworkEvolutionRun.objects.all().delete()
+    return stats
 
 
 def missing_evolution_weeks(
@@ -166,6 +205,8 @@ def calculate_week_snapshot(
     run: NetworkEvolutionRun,
     week_start: date,
     person_metric_limit: int,
+    betweenness_sample_size: int,
+    closeness_sample_size: int,
     recompute: bool,
 ) -> NetworkEvolutionSnapshot | None:
     if recompute:
@@ -183,18 +224,27 @@ def calculate_week_snapshot(
         person_nodes=graphs.undirected_people.number_of_nodes(),
         person_edges=graphs.undirected_people.number_of_edges(),
         podcast_count=len(graphs.podcast_ids),
+        episode_count=len(graphs.episode_ids),
         guest_appearance_count=graphs.guest_appearance_count,
+        new_person_count=new_person_count(graphs, week_start, cutoff_at),
+        new_person_edge_count=new_edge_count(graphs, week_start, cutoff_at),
+        new_podcast_count=new_podcast_count(graphs, week_start, cutoff_at),
         largest_component_nodes=component.number_of_nodes(),
         largest_component_edges=component.number_of_edges(),
         density=nx.density(component) if component else 0.0,
         average_clustering=nx.average_clustering(component) if component else 0.0,
         transitivity=nx.transitivity(component) if component else 0.0,
-        average_shortest_path_length=average_shortest_path_length(component),
+        average_shortest_path_length=average_shortest_path_length(
+            component,
+            sample_size=closeness_sample_size,
+        ),
     )
     person_rows = person_evolution_rows(
         snapshot=snapshot,
         graphs=graphs,
         limit=person_metric_limit,
+        betweenness_sample_size=betweenness_sample_size,
+        closeness_sample_size=closeness_sample_size,
     )
     PersonNetworkEvolutionMetric.objects.bulk_create(person_rows, batch_size=5000)
     return snapshot
@@ -203,57 +253,101 @@ def calculate_week_snapshot(
 def build_evolution_graphs(*, cutoff_at: datetime) -> EvolutionGraphs:
     directed_people = nx.DiGraph()
     undirected_people = nx.Graph()
-    display_names: dict[str, str] = {}
+    person_stats: dict[str, EvolutionPersonStats] = {}
     podcast_ids: set[int] = set()
+    podcast_first_seen_at: dict[int, datetime] = {}
+    episode_ids: set[int] = set()
     guest_appearance_count = 0
+    edge_first_seen_at: dict[tuple[str, str], datetime] = {}
     current_episode_id = None
+    current_episode_at = None
     current_people = empty_episode_people()
 
-    rows = PersonEntityLink.objects.filter(
-        observation__role__in=[Appearance.Role.GUEST, Appearance.Role.HOST],
-        observation__episode__published_at__lt=cutoff_at,
-    ).order_by("observation__episode_id").values_list(
-        "observation__episode_id",
-        "canonical_id",
-        "canonical__display_name",
-        "observation__podcast_id",
-        "observation__role",
+    rows = (
+        PersonEntityLink.objects.filter(
+            observation__role__in=[Appearance.Role.GUEST, Appearance.Role.HOST],
+            observation__episode__published_at__lt=cutoff_at,
+        )
+        .order_by("observation__episode_id")
+        .values_list(
+            "observation__episode_id",
+            "canonical_id",
+            "canonical__display_name",
+            "observation__person_id",
+            "observation__podcast_id",
+            "observation__role",
+            "observation__episode__published_at",
+        )
     )
-    for episode_id, canonical_id, display_name, podcast_id, role in rows.iterator(
-        chunk_size=20_000
-    ):
+    for (
+        episode_id,
+        canonical_id,
+        display_name,
+        person_id,
+        podcast_id,
+        role,
+        published_at,
+    ) in rows.iterator(chunk_size=20_000):
         if current_episode_id is None:
             current_episode_id = episode_id
+            current_episode_at = published_at
         elif episode_id != current_episode_id:
-            add_episode_edges(
+            add_evolution_episode_edges(
                 directed_people=directed_people,
                 undirected_people=undirected_people,
                 people_by_role=current_people,
+                published_at=current_episode_at,
+                edge_first_seen_at=edge_first_seen_at,
             )
             current_episode_id = episode_id
+            current_episode_at = published_at
             current_people = empty_episode_people()
 
         directed_people.add_node(canonical_id)
         undirected_people.add_node(canonical_id)
-        display_names[canonical_id] = display_name
+        episode_ids.add(episode_id)
+        stats = person_stats.setdefault(
+            canonical_id,
+            EvolutionPersonStats(display_name=display_name),
+        )
+        stats.person_ids[person_id] += 1
+        stats.podcast_ids.add(podcast_id)
+        if published_at and (
+            stats.latest_episode_at is None or published_at > stats.latest_episode_at
+        ):
+            stats.latest_episode_at = published_at
+        if published_at and (stats.first_seen_at is None or published_at < stats.first_seen_at):
+            stats.first_seen_at = published_at
         podcast_ids.add(podcast_id)
+        if published_at:
+            first_podcast_seen_at = podcast_first_seen_at.get(podcast_id)
+            if first_podcast_seen_at is None or published_at < first_podcast_seen_at:
+                podcast_first_seen_at[podcast_id] = published_at
         current_people[role].add(canonical_id)
         if role == Appearance.Role.GUEST:
+            stats.guest_appearances += 1
             guest_appearance_count += 1
+        else:
+            stats.host_appearances += 1
 
     if current_episode_id is not None:
-        add_episode_edges(
+        add_evolution_episode_edges(
             directed_people=directed_people,
             undirected_people=undirected_people,
             people_by_role=current_people,
+            published_at=current_episode_at,
+            edge_first_seen_at=edge_first_seen_at,
         )
 
     return EvolutionGraphs(
         directed_people=directed_people,
         undirected_people=undirected_people,
-        display_names=display_names,
+        person_stats=person_stats,
         podcast_ids=podcast_ids,
+        podcast_first_seen_at=podcast_first_seen_at,
+        episode_ids=episode_ids,
         guest_appearance_count=guest_appearance_count,
+        edge_first_seen_at=edge_first_seen_at,
     )
 
 
@@ -262,21 +356,31 @@ def person_evolution_rows(
     snapshot: NetworkEvolutionSnapshot,
     graphs: EvolutionGraphs,
     limit: int,
+    betweenness_sample_size: int,
+    closeness_sample_size: int,
 ) -> list[PersonNetworkEvolutionMetric]:
     directed = graphs.directed_people
     undirected = graphs.undirected_people
     pagerank = nx.pagerank(directed, weight="weight") if directed else {}
     hubs, authorities = safe_hits(directed)
-    closeness = closeness_centrality(undirected)
+    closeness = closeness_centrality(
+        undirected,
+        sample_size=closeness_sample_size,
+    )
+    betweenness = betweenness_centrality(
+        undirected,
+        sample_size=betweenness_sample_size,
+    )
+    degree = nx.degree_centrality(undirected) if undirected else {}
     tracked_ids = tracked_person_ids(limit=limit)
     if not tracked_ids:
         tracked_ids = top_metric_ids(
-            [pagerank, hubs, authorities, closeness],
+            [pagerank, hubs, authorities, closeness, betweenness, degree],
             limit=limit,
         )
     else:
         tracked_ids |= top_metric_ids(
-            [pagerank, hubs, authorities, closeness],
+            [pagerank, hubs, authorities, closeness, betweenness, degree],
             limit=max(10, limit // 4),
         )
 
@@ -284,22 +388,32 @@ def person_evolution_rows(
     hub_ranks = ranks(hubs)
     authority_ranks = ranks(authorities)
     closeness_ranks = ranks(closeness)
+    betweenness_ranks = ranks(betweenness)
+    degree_ranks = ranks(degree)
     return [
         PersonNetworkEvolutionMetric(
             snapshot=snapshot,
             canonical_id=canonical_id,
-            display_name=graphs.display_names.get(canonical_id, str(canonical_id)),
+            display_name=stats.display_name,
             pagerank=pagerank.get(canonical_id, 0.0),
             hub=hubs.get(canonical_id, 0.0),
             authority=authorities.get(canonical_id, 0.0),
             closeness=closeness.get(canonical_id, 0.0),
+            betweenness=betweenness.get(canonical_id, 0.0),
+            degree_centrality=degree.get(canonical_id, 0.0),
             pagerank_rank=pagerank_ranks.get(canonical_id, 0),
             hub_rank=hub_ranks.get(canonical_id, 0),
             authority_rank=authority_ranks.get(canonical_id, 0),
             closeness_rank=closeness_ranks.get(canonical_id, 0),
+            betweenness_rank=betweenness_ranks.get(canonical_id, 0),
+            degree_rank=degree_ranks.get(canonical_id, 0),
+            guest_appearances=stats.guest_appearances,
+            host_appearances=stats.host_appearances,
+            podcast_count=len(stats.podcast_ids),
+            latest_episode_at=stats.latest_episode_at,
         )
         for canonical_id in sorted(tracked_ids)
-        if canonical_id in graphs.display_names
+        if (stats := graphs.person_stats.get(canonical_id)) is not None
     ]
 
 
@@ -312,7 +426,14 @@ def tracked_person_ids(*, limit: int) -> set[str]:
     if latest_run_id is None:
         return set()
     ids: set[str] = set()
-    for rank_field in ["pagerank_rank", "hub_rank", "authority_rank", "closeness_rank"]:
+    for rank_field in [
+        "pagerank_rank",
+        "hub_rank",
+        "authority_rank",
+        "closeness_rank",
+        "betweenness_rank",
+        "degree_rank",
+    ]:
         ids.update(
             PersonNetworkMetric.objects.filter(run_id=latest_run_id)
             .order_by(rank_field)
@@ -329,6 +450,124 @@ def top_metric_ids(metrics: list[dict[object, float]], *, limit: int) -> set[str
     return ids
 
 
+def betweenness_centrality(
+    graph: nx.Graph,
+    *,
+    sample_size: int,
+) -> dict[object, float]:
+    if not graph:
+        return {}
+    if sample_size > 0 and graph.number_of_nodes() > sample_size:
+        return nx.betweenness_centrality(graph, k=sample_size, seed=7)
+    return nx.betweenness_centrality(graph)
+
+
+def closeness_centrality(
+    graph: nx.Graph,
+    *,
+    sample_size: int,
+) -> dict[object, float]:
+    if not graph:
+        return {}
+    if sample_size <= 0 or graph.number_of_nodes() <= sample_size:
+        return nx.closeness_centrality(graph)
+
+    nodes = sorted(graph.nodes, key=str)
+    sample_nodes = nodes[:sample_size]
+    distance_sums: Counter[object] = Counter()
+    reachable_counts: Counter[object] = Counter()
+    for source in sample_nodes:
+        lengths = nx.single_source_shortest_path_length(graph, source)
+        for target, distance in lengths.items():
+            if target == source:
+                continue
+            distance_sums[target] += distance
+            reachable_counts[target] += 1
+    return {
+        node: reachable_counts[node] / distance_sums[node] if distance_sums[node] else 0.0
+        for node in nodes
+    }
+
+
+def add_evolution_episode_edges(
+    *,
+    directed_people: nx.DiGraph,
+    undirected_people: nx.Graph,
+    people_by_role: dict[str, set[str]],
+    published_at: datetime | None,
+    edge_first_seen_at: dict[tuple[str, str], datetime],
+) -> None:
+    guests = people_by_role[Appearance.Role.GUEST]
+    hosts = people_by_role[Appearance.Role.HOST]
+    for guest_id in guests:
+        for host_id in hosts:
+            if guest_id == host_id:
+                continue
+            add_weighted_edge(directed_people, guest_id, host_id)
+            add_weighted_edge(undirected_people, guest_id, host_id)
+            if published_at is None:
+                continue
+            edge_key = tuple(sorted((guest_id, host_id)))
+            first_seen = edge_first_seen_at.get(edge_key)
+            if first_seen is None or published_at < first_seen:
+                edge_first_seen_at[edge_key] = published_at
+
+
+def add_weighted_edge(graph: nx.Graph, source: str, target: str) -> None:
+    if graph.has_edge(source, target):
+        graph[source][target]["weight"] += 1
+    else:
+        graph.add_edge(source, target, weight=1)
+
+
+def new_person_count(
+    graphs: EvolutionGraphs,
+    week_start: date,
+    cutoff_at: datetime,
+) -> int:
+    week_start_at = timezone.make_aware(
+        datetime.combine(week_start, time.min),
+        timezone.get_current_timezone(),
+    )
+    return sum(
+        1
+        for stats in graphs.person_stats.values()
+        if stats.first_seen_at is not None and week_start_at <= stats.first_seen_at < cutoff_at
+    )
+
+
+def new_edge_count(
+    graphs: EvolutionGraphs,
+    week_start: date,
+    cutoff_at: datetime,
+) -> int:
+    week_start_at = timezone.make_aware(
+        datetime.combine(week_start, time.min),
+        timezone.get_current_timezone(),
+    )
+    return sum(
+        1
+        for first_seen_at in graphs.edge_first_seen_at.values()
+        if week_start_at <= first_seen_at < cutoff_at
+    )
+
+
+def new_podcast_count(
+    graphs: EvolutionGraphs,
+    week_start: date,
+    cutoff_at: datetime,
+) -> int:
+    week_start_at = timezone.make_aware(
+        datetime.combine(week_start, time.min),
+        timezone.get_current_timezone(),
+    )
+    return sum(
+        1
+        for first_seen_at in graphs.podcast_first_seen_at.values()
+        if week_start_at <= first_seen_at < cutoff_at
+    )
+
+
 def largest_component(graph: nx.Graph) -> nx.Graph:
     if not graph:
         return graph.copy()
@@ -336,9 +575,19 @@ def largest_component(graph: nx.Graph) -> nx.Graph:
     return graph.subgraph(component_nodes).copy()
 
 
-def average_shortest_path_length(graph: nx.Graph) -> float:
+def average_shortest_path_length(graph: nx.Graph, *, sample_size: int) -> float:
     if graph.number_of_nodes() <= 1:
         return 0.0
+    if sample_size > 0 and graph.number_of_nodes() > sample_size:
+        nodes = sorted(graph.nodes, key=str)
+        sample_nodes = Random(7).sample(nodes, sample_size)
+        total_distance = 0
+        reachable_pairs = 0
+        for source in sample_nodes:
+            lengths = nx.single_source_shortest_path_length(graph, source)
+            total_distance += sum(lengths.values())
+            reachable_pairs += len(lengths) - 1
+        return total_distance / reachable_pairs if reachable_pairs else 0.0
     return nx.average_shortest_path_length(graph)
 
 

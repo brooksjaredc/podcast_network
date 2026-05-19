@@ -52,6 +52,8 @@ run_job:
         args:
           name: ${"projects/" + project_id + "/locations/" + region + "/jobs/" + job_name}
           body: {}
+          connector_params:
+            timeout: 86400
         result: execution
     - return_execution:
         return: ${execution}
