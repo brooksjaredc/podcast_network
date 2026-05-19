@@ -17,6 +17,7 @@ COPY src ./src
 COPY manage.py ./manage.py
 COPY templates ./templates
 COPY static ./static
+COPY data/models ./data/models
 
 RUN pip install --upgrade pip \
     && pip install .

@@ -5,6 +5,9 @@
 .env
 db.sqlite3
 data
+!data/
+!data/models/
+!data/models/*.joblib
 staticfiles
 __pycache__
 *.pyc
