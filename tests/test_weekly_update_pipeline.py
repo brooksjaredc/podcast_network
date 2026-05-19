@@ -34,6 +34,8 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert promotion_step.options["episode_share_threshold"] == 0.20
     evolution_step = steps[-1]
     assert evolution_step.options["max_weeks"] == 1
+    er_step = steps[4]
+    assert er_step.options["limit_pairs"] == 20000
 
 
 def test_weekly_update_plan_can_reprocess_current_prompt() -> None:

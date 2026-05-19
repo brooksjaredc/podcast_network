@@ -36,7 +36,11 @@ class Command(BaseCommand):
                 self.style.SUCCESS("Dry run complete; skipped scoring and applying matches.")
             )
             return
-        call_command("score_person_entity_candidates", trained_model=str(model_path))
+        call_command(
+            "score_person_entity_candidates",
+            trained_model=str(model_path),
+            limit=int(options["limit_pairs"]),
+        )
         call_command(
             "apply_person_entity_matches",
             model_name=CURRENT_ENTITY_MODEL_NAME,
