@@ -12,8 +12,8 @@ from podcast_network.entity_features import (
     cleaned_name_tokens,
     damerau_distance,
     person_pair_features,
-    profile_for_entity,
     repeated_first_name_suffix_stripped_tokens,
+    tokenize_name,
 )
 from podcast_network.entity_resolution import person_candidate_pair_id
 from podcast_network.web.catalog.models import (
@@ -104,10 +104,60 @@ def generate_person_entity_candidates(
 
 
 def load_profiles(*, min_observations: int) -> dict[str, EntityProfile]:
-    entities = CanonicalPersonEntity.objects.filter(
-        observation_count__gte=min_observations,
-    ).order_by("normalized_name")
-    return {entity.am_entity_id: profile_for_entity(entity) for entity in entities}
+    entities = list(
+        CanonicalPersonEntity.objects.filter(
+            observation_count__gte=min_observations,
+        ).order_by("normalized_name")
+    )
+    entity_ids = [entity.am_entity_id for entity in entities]
+    podcast_ids_by_entity: dict[str, set[int]] = defaultdict(set)
+    genres_by_entity: dict[str, set[str]] = defaultdict(set)
+    links = (
+        PersonEntityLink.objects.filter(canonical_id__in=entity_ids)
+        .values_list(
+            "canonical_id",
+            "observation__podcast_id",
+            "observation__podcast__metadata",
+        )
+        .iterator(chunk_size=10000)
+    )
+    for entity_id, podcast_id, metadata in links:
+        if podcast_id is not None:
+            podcast_ids_by_entity[entity_id].add(podcast_id)
+        genres_by_entity[entity_id].update(genres_from_metadata(metadata))
+
+    profiles = {}
+    for entity in entities:
+        tokens = tokenize_name(entity.normalized_name)
+        profiles[entity.am_entity_id] = EntityProfile(
+            entity_id=entity.am_entity_id,
+            display_name=entity.display_name,
+            normalized_name=entity.normalized_name,
+            tokens=tuple(tokens),
+            alpha_tokens=tuple(token for token in tokens if not token.isdigit()),
+            observation_count=entity.observation_count,
+            roles=tuple(entity.roles or []),
+            podcast_ids=frozenset(podcast_ids_by_entity[entity.am_entity_id]),
+            genres=frozenset(genres_by_entity[entity.am_entity_id]),
+        )
+    return profiles
+
+
+def genres_from_metadata(metadata: object) -> set[str]:
+    if not isinstance(metadata, dict):
+        return set()
+    genres = set()
+    legacy = metadata.get("legacy") or {}
+    if isinstance(legacy, dict):
+        categories = legacy.get("categories") or []
+        if isinstance(categories, list):
+            genres.update(str(category).strip().casefold() for category in categories if category)
+    apple = metadata.get("apple_podcasts") or {}
+    if isinstance(apple, dict):
+        chart_sources = apple.get("chart_sources") or []
+        if isinstance(chart_sources, list):
+            genres.update(str(source).strip().casefold() for source in chart_sources if source)
+    return {genre for genre in genres if genre}
 
 
 def candidate_pair_keys(
