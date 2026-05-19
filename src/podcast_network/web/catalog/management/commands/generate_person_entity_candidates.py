@@ -36,6 +36,15 @@ class Command(BaseCommand):
         parser.add_argument("--limit-pairs", type=int, default=10000)
         parser.add_argument("--min-observations", type=int, default=1)
         parser.add_argument("--max-block-size", type=int, default=200)
+        parser.add_argument(
+            "--max-pair-pool-size",
+            type=int,
+            default=0,
+            help=(
+                "Maximum distinct candidate pairs to hold before ranking. "
+                "Default is a bounded multiple of --limit-pairs."
+            ),
+        )
         parser.add_argument("--chunk-size", type=int, default=5000)
         parser.add_argument("--clear", action="store_true")
         parser.add_argument("--dry-run", action="store_true")
@@ -45,6 +54,7 @@ class Command(BaseCommand):
             limit_pairs=int(options["limit_pairs"]),
             min_observations=int(options["min_observations"]),
             max_block_size=int(options["max_block_size"]),
+            max_pair_pool_size=int(options["max_pair_pool_size"]),
             chunk_size=int(options["chunk_size"]),
             clear=bool(options["clear"]),
             dry_run=bool(options["dry_run"]),
@@ -63,6 +73,7 @@ def generate_person_entity_candidates(
     limit_pairs: int = 10000,
     min_observations: int = 1,
     max_block_size: int = 200,
+    max_pair_pool_size: int = 0,
     chunk_size: int = 5000,
     clear: bool = False,
     dry_run: bool = False,
@@ -72,6 +83,7 @@ def generate_person_entity_candidates(
         profiles=profiles,
         max_block_size=max_block_size,
         limit_pairs=limit_pairs,
+        max_pair_pool_size=max_pair_pool_size,
     )
     co_entity_ids_by_entity = co_entity_index(pair_keys)
     pairs = [
@@ -103,14 +115,22 @@ def candidate_pair_keys(
     profiles: dict[str, EntityProfile],
     max_block_size: int,
     limit_pairs: int,
+    max_pair_pool_size: int = 0,
 ) -> list[tuple[str, str]]:
+    pool_limit = resolved_pair_pool_limit(
+        limit_pairs=limit_pairs,
+        max_pair_pool_size=max_pair_pool_size,
+    )
     blocks: dict[str, list[str]] = defaultdict(list)
     for entity_id, profile in profiles.items():
         for key in blocking_keys_for_profile(profile):
             blocks[key].append(entity_id)
 
     pair_to_keys: dict[tuple[str, str], set[str]] = defaultdict(set)
-    for key, entity_ids in blocks.items():
+    for key, entity_ids in sorted(
+        blocks.items(),
+        key=lambda item: (len(item[1]), item[0]),
+    ):
         if len(entity_ids) < 2 or len(entity_ids) > max_block_size:
             continue
         for left_id, right_id in combinations(sorted(entity_ids), 2):
@@ -120,7 +140,34 @@ def candidate_pair_keys(
                 continue
             left, right = sorted([left_id, right_id])
             pair_to_keys[(left, right)].add(key)
+            if len(pair_to_keys) >= pool_limit:
+                return ranked_candidate_pairs(
+                    pair_to_keys=pair_to_keys,
+                    profiles=profiles,
+                    limit_pairs=limit_pairs,
+                )
 
+    return ranked_candidate_pairs(
+        pair_to_keys=pair_to_keys,
+        profiles=profiles,
+        limit_pairs=limit_pairs,
+    )
+
+
+def resolved_pair_pool_limit(*, limit_pairs: int, max_pair_pool_size: int = 0) -> int:
+    if max_pair_pool_size > 0:
+        return max_pair_pool_size
+    if limit_pairs <= 0:
+        return 250000
+    return min(max(limit_pairs * 10, limit_pairs), 250000)
+
+
+def ranked_candidate_pairs(
+    *,
+    pair_to_keys: dict[tuple[str, str], set[str]],
+    profiles: dict[str, EntityProfile],
+    limit_pairs: int,
+) -> list[tuple[str, str]]:
     ranked = sorted(
         pair_to_keys,
         key=lambda pair: candidate_sort_key(
@@ -130,6 +177,8 @@ def candidate_pair_keys(
         ),
         reverse=True,
     )
+    if limit_pairs <= 0:
+        return ranked
     return ranked[:limit_pairs]
 
 
