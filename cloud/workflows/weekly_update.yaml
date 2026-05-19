@@ -1,0 +1,57 @@
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - project_id: ${default(map.get(args, "project_id"), "podcast-network-prod")}
+          - region: ${default(map.get(args, "region"), "us-central1")}
+          - scrape_job: ${default(map.get(args, "scrape_job"), "podcast-network-weekly-scrape")}
+          - llm_job: ${default(map.get(args, "llm_job"), "podcast-network-weekly-llm")}
+          - processing_job: ${default(map.get(args, "processing_job"), "podcast-network-weekly-processing-er")}
+          - metrics_job: ${default(map.get(args, "metrics_job"), "podcast-network-weekly-metrics")}
+    - run_scrape:
+        call: run_job
+        args:
+          project_id: ${project_id}
+          region: ${region}
+          job_name: ${scrape_job}
+        result: scrape_execution
+    - run_llm:
+        call: run_job
+        args:
+          project_id: ${project_id}
+          region: ${region}
+          job_name: ${llm_job}
+        result: llm_execution
+    - run_processing:
+        call: run_job
+        args:
+          project_id: ${project_id}
+          region: ${region}
+          job_name: ${processing_job}
+        result: processing_execution
+    - run_metrics:
+        call: run_job
+        args:
+          project_id: ${project_id}
+          region: ${region}
+          job_name: ${metrics_job}
+        result: metrics_execution
+    - done:
+        return:
+          scrape: ${scrape_execution}
+          llm: ${llm_execution}
+          processing_er: ${processing_execution}
+          metrics: ${metrics_execution}
+
+run_job:
+  params: [project_id, region, job_name]
+  steps:
+    - start:
+        call: googleapis.run.v2.projects.locations.jobs.run
+        args:
+          name: ${"projects/" + project_id + "/locations/" + region + "/jobs/" + job_name}
+          body: {}
+        result: execution
+    - return_execution:
+        return: ${execution}

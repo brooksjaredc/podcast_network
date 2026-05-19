@@ -38,6 +38,15 @@ class Command(BaseCommand):
     help = "Coordinate the weekly scrape, guest extraction, processing, ER, and graph refresh."
 
     def add_arguments(self, parser: CommandParser) -> None:
+        parser.add_argument(
+            "--phase",
+            choices=["all", "scrape", "llm", "processing-er", "metrics"],
+            default="all",
+            help=(
+                "Run one phase of the weekly update. Use 'all' for the legacy "
+                "single-process coordinator."
+            ),
+        )
         parser.add_argument("--feed-timeout", type=int, default=20)
         parser.add_argument("--feed-concurrency", type=int, default=8)
         parser.add_argument("--feed-progress-every", type=int, default=50)
@@ -126,7 +135,7 @@ class Command(BaseCommand):
             )
             close_old_connections()
 
-        if not options["skip_graph_warm"]:
+        if should_warm_graph(options):
             close_old_connections()
             started = time.monotonic()
             self.stdout.write(self.style.MIGRATE_HEADING("== Warm DB graph =="))
@@ -162,8 +171,9 @@ class Command(BaseCommand):
 
 def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
     steps: list[PipelineStep] = []
+    phase = str(options.get("phase", "all"))
     coordinator_label = str(options["coordinator_label"]) or weekly_label()
-    if not options["skip_scrape"]:
+    if phase in {"all", "scrape"} and not options["skip_scrape"]:
         steps.append(
             PipelineStep(
                 name="Scrape RSS feeds",
@@ -179,7 +189,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 },
             )
         )
-    if not options["skip_llm"]:
+    if phase in {"all", "llm"} and not options["skip_llm"]:
         steps.append(
             PipelineStep(
                 name="Run OpenAI Batch API guest extraction",
@@ -201,7 +211,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 },
             )
         )
-    if not options["skip_processing"]:
+    if phase in {"all", "processing-er"} and not options["skip_processing"]:
         steps.extend(
             [
                 PipelineStep(
@@ -227,7 +237,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 ),
             ]
         )
-    if not options["skip_entity_resolution"]:
+    if phase in {"all", "processing-er"} and not options["skip_entity_resolution"]:
         steps.append(
             PipelineStep(
                 name="Refresh person entity resolution",
@@ -239,7 +249,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 },
             )
         )
-    if not options["skip_network_metrics"]:
+    if phase in {"all", "metrics"} and not options["skip_network_metrics"]:
         steps.append(
             PipelineStep(
                 name="Calculate network metrics",
@@ -247,7 +257,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 options={},
             )
         )
-    if not options["skip_network_evolution"]:
+    if phase in {"all", "metrics"} and not options["skip_network_evolution"]:
         steps.append(
             PipelineStep(
                 name="Calculate incremental network evolution",
@@ -259,6 +269,13 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
             )
         )
     return steps
+
+
+def should_warm_graph(options: dict[str, object]) -> bool:
+    return (
+        str(options.get("phase", "all")) in {"all", "metrics"}
+        and not bool(options["skip_graph_warm"])
+    )
 
 
 def weekly_label() -> str:
