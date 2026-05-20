@@ -11,6 +11,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from django.apps import apps
+from django.db import OperationalError, ProgrammingError
 
 from podcast_network.data import LegacyRepository
 from podcast_network.graph.six_degrees import load_edges
@@ -31,6 +32,57 @@ PALETTE = [
     "#7c2d12",
     "#4338ca",
 ]
+APPLE_GENRE_NAMES = {
+    "26": "Top Podcasts",
+    "1301": "Arts",
+    "1303": "Comedy",
+    "1304": "Education",
+    "1305": "Kids & Family",
+    "1306": "Music",
+    "1309": "TV & Film",
+    "1310": "Music",
+    "1314": "Religion & Spirituality",
+    "1318": "Technology",
+    "1321": "Business",
+    "1324": "Society & Culture",
+    "1325": "Government",
+    "1326": "History",
+    "1402": "Design",
+    "1459": "Mental Health",
+    "1482": "Books",
+    "1483": "Fiction",
+    "1488": "True Crime",
+    "1489": "News",
+    "1502": "Leisure",
+    "1511": "Government",
+    "1512": "Health & Fitness",
+    "1545": "Sports",
+}
+SPOTIFY_CATEGORY_NAMES = {
+    "arts": "Arts",
+    "business": "Business",
+    "comedy": "Comedy",
+    "education": "Education",
+    "fiction": "Fiction",
+    "health-fitness": "Health & Fitness",
+    "history": "History",
+    "kids-family": "Kids & Family",
+    "leisure": "Leisure",
+    "music": "Music",
+    "news": "News",
+    "religion-spirituality": "Religion & Spirituality",
+    "society-culture": "Society & Culture",
+    "sports": "Sports",
+    "technology": "Technology",
+    "true-crime": "True Crime",
+    "tv-film": "TV & Film",
+}
+NON_CATEGORY_CHART_SOURCES = {
+    "genre:26",
+    "manual-target-search",
+    "spotify:top-podcasts",
+    "spotify:trending",
+}
 
 
 def generate_all_plots() -> list[Path]:
@@ -67,6 +119,7 @@ def generate_all_plots() -> list[Path]:
             "PageRank Distribution",
             "PageRank",
             log_x=True,
+            log_y=True,
         ),
         histogram_chart(
             "auth_histogram.svg",
@@ -74,6 +127,7 @@ def generate_all_plots() -> list[Path]:
             "Authority Distribution",
             "Authority",
             log_x=True,
+            log_y=True,
         ),
         histogram_chart(
             "hub_histogram.svg",
@@ -81,12 +135,14 @@ def generate_all_plots() -> list[Path]:
             "Hub Distribution",
             "Hub",
             log_x=True,
+            log_y=True,
         ),
         histogram_chart(
             "close_histogram.svg",
             node_values()["closeness"],
             "Closeness Distribution",
             "Closeness",
+            log_y=True,
         ),
         histogram_chart(
             "degree_histogram.svg",
@@ -94,6 +150,7 @@ def generate_all_plots() -> list[Path]:
             "Degree Centrality Distribution",
             "Degree Centrality",
             log_x=True,
+            log_y=True,
         ),
         histogram_chart(
             "bt_histogram.svg",
@@ -101,6 +158,7 @@ def generate_all_plots() -> list[Path]:
             "Betweenness Distribution",
             "Betweenness",
             log_x=True,
+            log_y=True,
         ),
         histogram_chart(
             "leader_histogram.svg",
@@ -172,19 +230,31 @@ def generate_interactive_plots(repo: LegacyRepository) -> list[Path]:
             "Bias",
         ),
         plotly_heatmap("category_mixing.html", category_mixing(repo), "Category Mixing"),
-        plotly_histogram("pr_histogram.html", values["pr"], "PageRank Distribution"),
-        plotly_histogram("auth_histogram.html", values["auth"], "Authority Distribution"),
-        plotly_histogram("hub_histogram.html", values["hub"], "Hub Distribution"),
-        plotly_histogram("close_histogram.html", values["closeness"], "Closeness Distribution"),
+        plotly_histogram("pr_histogram.html", values["pr"], "PageRank Distribution", log_y=True),
+        plotly_histogram(
+            "auth_histogram.html",
+            values["auth"],
+            "Authority Distribution",
+            log_y=True,
+        ),
+        plotly_histogram("hub_histogram.html", values["hub"], "Hub Distribution", log_y=True),
+        plotly_histogram(
+            "close_histogram.html",
+            values["closeness"],
+            "Closeness Distribution",
+            log_y=True,
+        ),
         plotly_histogram(
             "degree_histogram.html",
             values["degree_cen"],
             "Degree Centrality Distribution",
+            log_y=True,
         ),
         plotly_histogram(
             "bt_histogram.html",
             values["betweenness"],
             "Betweenness Distribution",
+            log_y=True,
         ),
         plotly_histogram(
             "leader_histogram.html",
@@ -254,6 +324,41 @@ def generate_interactive_plots(repo: LegacyRepository) -> list[Path]:
 
 
 def node_values() -> pd.DataFrame:
+    try:
+        ensure_django_ready()
+        from podcast_network.network_metrics import latest_succeeded_metric_run
+        from podcast_network.web.catalog.models import PersonNetworkMetric
+
+        run = latest_succeeded_metric_run()
+        if run is None:
+            return legacy_node_values()
+        rows = list(
+            PersonNetworkMetric.objects.filter(run=run).values(
+                "pagerank",
+                "authority",
+                "hub",
+                "closeness",
+                "degree_centrality",
+                "betweenness",
+            )
+        )
+    except (OperationalError, ProgrammingError):
+        return legacy_node_values()
+
+    if not rows:
+        return legacy_node_values()
+    frame = pd.DataFrame(rows)
+    frame = frame.rename(
+        columns={
+            "pagerank": "pr",
+            "degree_centrality": "degree_cen",
+        }
+    )
+    frame["auth"] = frame["authority"]
+    return frame
+
+
+def legacy_node_values() -> pd.DataFrame:
     return pd.read_csv(LEGACY_ANALYSIS_DIR / "node_values.csv", sep="\t", index_col=0)
 
 
@@ -416,14 +521,23 @@ def display_labels(frame: pd.DataFrame, ordered_ids: list[str]) -> dict[str, str
 
 
 def podcast_category_counts(repo: LegacyRepository) -> dict[str, float]:
+    counts = database_podcast_category_counts()
+    if counts:
+        return counts
     return dict(Counter(podcast.categories[0] for podcast in repo.podcasts if podcast.categories))
 
 
 def people_category_counts(repo: LegacyRepository) -> dict[str, float]:
+    counts = database_people_category_counts()
+    if counts:
+        return counts
     return dict(Counter(person.top_category or "Unknown" for person in repo.people))
 
 
 def category_bias(repo: LegacyRepository) -> dict[str, float]:
+    db_bias = database_category_bias()
+    if db_bias:
+        return db_bias
     values: dict[str, list[float]] = defaultdict(list)
     for podcast in repo.podcasts:
         if not podcast.categories:
@@ -440,6 +554,9 @@ def category_bias(repo: LegacyRepository) -> dict[str, float]:
 
 
 def category_mixing(repo: LegacyRepository) -> dict[tuple[str, str], float]:
+    mixing = database_category_mixing()
+    if mixing:
+        return mixing
     people_by_name = repo.people_by_name
     podcasts_by_name = repo.podcasts_by_name
     counts: Counter[tuple[str, str]] = Counter()
@@ -452,6 +569,155 @@ def category_mixing(repo: LegacyRepository) -> dict[tuple[str, str], float]:
         podcast_category = podcast.categories[0]
         counts[(podcast_category, guest_category)] += duration.count or 1
     return dict(counts)
+
+
+def database_podcast_category_counts() -> dict[str, float]:
+    try:
+        ensure_django_ready()
+        from podcast_network.web.catalog.models import Podcast
+
+        counts: Counter[str] = Counter()
+        for metadata in Podcast.objects.values_list("metadata", flat=True).iterator(
+            chunk_size=2000
+        ):
+            category = primary_podcast_category(metadata)
+            if category:
+                counts[category] += 1
+    except (OperationalError, ProgrammingError):
+        return {}
+    return dict(counts)
+
+
+def database_people_category_counts() -> dict[str, float]:
+    top_categories = database_person_top_categories()
+    return dict(Counter(top_categories.values()))
+
+
+def database_category_bias() -> dict[str, float]:
+    try:
+        ensure_django_ready()
+        from podcast_network.web.catalog.models import Podcast
+
+        values: dict[str, list[float]] = defaultdict(list)
+        for metadata in Podcast.objects.values_list("metadata", flat=True).iterator(
+            chunk_size=2000
+        ):
+            category = primary_podcast_category(metadata)
+            bias = podcast_category_bias(metadata)
+            if category and bias is not None:
+                values[category].append(bias)
+    except (OperationalError, ProgrammingError):
+        return {}
+    return {
+        category: sum(category_values) / len(category_values)
+        for category, category_values in values.items()
+    }
+
+
+def database_category_mixing() -> dict[tuple[str, str], float]:
+    top_categories = database_person_top_categories()
+    if not top_categories:
+        return {}
+    try:
+        ensure_django_ready()
+        from podcast_network.web.catalog.models import Appearance
+
+        counts: Counter[tuple[str, str]] = Counter()
+        rows = Appearance.objects.filter(role=Appearance.Role.GUEST).values_list(
+            "person_id",
+            "episode__podcast__metadata",
+        )
+        for person_id, podcast_metadata in rows.iterator(chunk_size=20_000):
+            guest_category = top_categories.get(person_id)
+            podcast_category = primary_podcast_category(podcast_metadata)
+            if guest_category and podcast_category:
+                counts[(podcast_category, guest_category)] += 1
+    except (OperationalError, ProgrammingError):
+        return {}
+    return dict(counts)
+
+
+def database_person_top_categories() -> dict[int, str]:
+    try:
+        ensure_django_ready()
+        from podcast_network.web.catalog.models import Appearance
+
+        counts_by_person: dict[int, Counter[str]] = defaultdict(Counter)
+        rows = Appearance.objects.filter(role=Appearance.Role.GUEST).values_list(
+            "person_id",
+            "episode__podcast__metadata",
+        )
+        for person_id, podcast_metadata in rows.iterator(chunk_size=20_000):
+            category = primary_podcast_category(podcast_metadata)
+            if category:
+                counts_by_person[person_id][category] += 1
+    except (OperationalError, ProgrammingError):
+        return {}
+    return {
+        person_id: counts.most_common(1)[0][0]
+        for person_id, counts in counts_by_person.items()
+        if counts
+    }
+
+
+def primary_podcast_category(metadata: object) -> str:
+    categories = podcast_categories(metadata)
+    return categories[0] if categories else ""
+
+
+def podcast_categories(metadata: object) -> list[str]:
+    if not isinstance(metadata, dict):
+        return []
+
+    legacy_categories = metadata.get("legacy", {}).get("categories")
+    if isinstance(legacy_categories, list):
+        categories = [str(category).strip() for category in legacy_categories if category]
+        if categories:
+            return unique(categories)
+
+    categories = []
+    apple_sources = metadata.get("apple_podcasts", {}).get("chart_sources") or []
+    if isinstance(apple_sources, list):
+        categories.extend(category_from_chart_source(source) for source in apple_sources)
+    spotify_sources = metadata.get("spotify_charts", {}).get("chart_sources") or []
+    if isinstance(spotify_sources, list):
+        categories.extend(category_from_chart_source(source) for source in spotify_sources)
+    return unique(category for category in categories if category)
+
+
+def category_from_chart_source(source: object) -> str:
+    source_text = str(source).strip()
+    if not source_text or source_text in NON_CATEGORY_CHART_SOURCES:
+        return ""
+    if source_text.startswith("genre:"):
+        genre_id = source_text.removeprefix("genre:")
+        return APPLE_GENRE_NAMES.get(genre_id, f"Apple Genre {genre_id}")
+    if source_text.startswith("spotify:"):
+        slug = source_text.removeprefix("spotify:")
+        return SPOTIFY_CATEGORY_NAMES.get(slug, slug.replace("-", " ").title())
+    return ""
+
+
+def podcast_category_bias(metadata: object) -> float | None:
+    if not isinstance(metadata, dict):
+        return None
+    raw_bias = metadata.get("legacy", {}).get("cat_bias")
+    if raw_bias in (None, ""):
+        return None
+    try:
+        return float(raw_bias)
+    except (TypeError, ValueError):
+        return None
+
+
+def unique(values: Iterable[str]) -> list[str]:
+    output = []
+    seen = set()
+    for value in values:
+        if value not in seen:
+            output.append(value)
+            seen.add(value)
+    return output
 
 
 def podcast_similarity_graph() -> nx.Graph:
@@ -517,6 +783,7 @@ def histogram_chart(
     xlabel: str,
     *,
     log_x: bool = False,
+    log_y: bool = False,
 ) -> Path:
     cleaned = [float(value) for value in values if pd.notna(value) and float(value) > 0]
     if log_x:
@@ -533,12 +800,13 @@ def histogram_chart(
         index = min(int(((value - lo) / (hi - lo)) * bins), bins - 1)
         counts[index] += 1
     left, top, chart_w, chart_h = 80, 70, 760, 270
-    max_count = max(counts) or 1
+    plotted_counts = [math.log10(count + 1) for count in counts] if log_y else counts
+    max_count = max(plotted_counts) or 1
     bar_w = chart_w / bins
     parts = svg_header(title)
     parts.append(axis(left, top, chart_w, chart_h, xlabel))
-    for index, count in enumerate(counts):
-        height = (count / max_count) * chart_h
+    for index, plotted_count in enumerate(plotted_counts):
+        height = (plotted_count / max_count) * chart_h
         x = left + index * bar_w
         y = top + chart_h - height
         parts.append(rect(x + 1, y, bar_w - 2, height, PALETTE[index % len(PALETTE)]))
@@ -665,7 +933,13 @@ def plotly_bar(
     return write_plotly(filename, fig)
 
 
-def plotly_histogram(filename: str, values: Iterable[float], title: str) -> Path:
+def plotly_histogram(
+    filename: str,
+    values: Iterable[float],
+    title: str,
+    *,
+    log_y: bool = False,
+) -> Path:
     cleaned = [float(value) for value in values if pd.notna(value)]
     frame = pd.DataFrame({"value": cleaned})
     fig = px.histogram(
@@ -678,6 +952,8 @@ def plotly_histogram(filename: str, values: Iterable[float], title: str) -> Path
         color_discrete_sequence=[PALETTE[0]],
     )
     fig.update_layout(yaxis_title="Count")
+    if log_y:
+        fig.update_yaxes(type="log")
     return write_plotly(filename, fig)
 
 
