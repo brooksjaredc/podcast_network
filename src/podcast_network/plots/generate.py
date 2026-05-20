@@ -10,6 +10,7 @@ import networkx as nx
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from django.apps import apps
 
 from podcast_network.data import LegacyRepository
 from podcast_network.graph.six_degrees import load_edges
@@ -114,7 +115,7 @@ def generate_all_plots() -> list[Path]:
         line_chart(
             "evolution_global.svg",
             evolution_frame(),
-            ["num_people", "num_podcasts", "avg_path", "density"],
+            ["People", "Podcasts", "Episodes", "Guest appearances"],
             "Network Evolution",
         ),
         line_chart("evolution_pr.svg", score_frame("pr_evol.csv"), None, "PageRank Evolution"),
@@ -197,30 +198,45 @@ def generate_interactive_plots(repo: LegacyRepository) -> list[Path]:
         plotly_line(
             "evolution_global.html",
             evolution_frame(),
-            ["num_people", "num_podcasts"],
+            ["People", "Podcasts", "Episodes", "Guest appearances"],
             "Network Evolution",
             y_title="Count",
+            log_y=True,
         ),
         plotly_line(
             "evolution_structure.html",
             evolution_frame(),
-            ["avg_path", "density", "avg_clust", "transitivity"],
+            ["Average path length", "Density", "Clustering", "Transitivity"],
             "Network Structure Evolution",
             y_title="Measure",
         ),
-        plotly_line("evolution_pr.html", score_frame("pr_evol.csv"), None, "PageRank Evolution"),
+        plotly_line(
+            "evolution_pr.html",
+            score_frame("pr_evol.csv"),
+            None,
+            "PageRank Evolution",
+            sorted_hover=True,
+        ),
         plotly_line(
             "evolution_authority.html",
             score_frame("auths_evol.csv"),
             None,
             "Authority Evolution",
+            sorted_hover=True,
         ),
-        plotly_line("evolution_hub.html", score_frame("hubs_evol.csv"), None, "Hub Evolution"),
+        plotly_line(
+            "evolution_hub.html",
+            score_frame("hubs_evol.csv"),
+            None,
+            "Hub Evolution",
+            sorted_hover=True,
+        ),
         plotly_line(
             "evolution_closeness.html",
             score_frame("close_evol.csv"),
             None,
             "Closeness Evolution",
+            sorted_hover=True,
         ),
         plotly_histogram(
             "predictions_histogram.html",
@@ -242,11 +258,161 @@ def node_values() -> pd.DataFrame:
 
 
 def evolution_frame() -> pd.DataFrame:
-    return pd.read_csv(LEGACY_ANALYSIS_DIR / "evolution_of_measures.csv", sep="\t", index_col=0)
+    ensure_django_ready()
+    from podcast_network.web.catalog.models import NetworkEvolutionSnapshot
+
+    rows = list(
+        NetworkEvolutionSnapshot.objects.order_by("week_start").values(
+            "week_start",
+            "person_nodes",
+            "person_edges",
+            "podcast_count",
+            "episode_count",
+            "guest_appearance_count",
+            "new_person_count",
+            "new_person_edge_count",
+            "new_podcast_count",
+            "largest_component_nodes",
+            "largest_component_edges",
+            "density",
+            "average_clustering",
+            "transitivity",
+            "average_shortest_path_length",
+        )
+    )
+    if not rows:
+        return legacy_evolution_frame()
+
+    frame = pd.DataFrame(rows)
+    return pd.DataFrame(
+        {
+            "dates": pd.to_datetime(frame["week_start"]),
+            "People": frame["person_nodes"],
+            "Podcasts": frame["podcast_count"],
+            "Episodes": frame["episode_count"],
+            "Guest appearances": frame["guest_appearance_count"],
+            "Person edges": frame["person_edges"],
+            "Largest component people": frame["largest_component_nodes"],
+            "Largest component edges": frame["largest_component_edges"],
+            "New people": frame["new_person_count"],
+            "New edges": frame["new_person_edge_count"],
+            "New podcasts": frame["new_podcast_count"],
+            "Average path length": frame["average_shortest_path_length"],
+            "Density": frame["density"],
+            "Clustering": frame["average_clustering"],
+            "Transitivity": frame["transitivity"],
+        }
+    )
 
 
 def score_frame(name: str) -> pd.DataFrame:
-    return pd.read_csv(LEGACY_ANALYSIS_DIR / name, sep="\t", index_col=0)
+    ensure_django_ready()
+    from podcast_network.web.catalog.models import (
+        NetworkEvolutionSnapshot,
+        PersonNetworkEvolutionMetric,
+    )
+
+    metric = evolution_metric_name(name)
+    value_field = metric
+    rank_field = f"{metric}_rank" if metric != "degree_centrality" else "degree_rank"
+
+    latest_snapshot = NetworkEvolutionSnapshot.objects.order_by("-week_start").first()
+    if latest_snapshot is None:
+        return pd.read_csv(LEGACY_ANALYSIS_DIR / name, sep="\t", index_col=0)
+
+    tracked_ids = list(
+        PersonNetworkEvolutionMetric.objects.filter(snapshot=latest_snapshot)
+        .order_by(rank_field, "display_name")
+        .values_list("canonical_id", flat=True)[:10]
+    )
+    if not tracked_ids:
+        return empty_score_frame()
+
+    rows = list(
+        PersonNetworkEvolutionMetric.objects.filter(canonical_id__in=tracked_ids)
+        .select_related("snapshot")
+        .order_by("snapshot__week_start")
+        .values(
+            "canonical_id",
+            "display_name",
+            value_field,
+            rank_field,
+            "snapshot__week_start",
+        )
+    )
+    if not rows:
+        return empty_score_frame()
+
+    long_frame = pd.DataFrame(rows)
+    labels = display_labels(long_frame, tracked_ids)
+    long_frame["person"] = long_frame["canonical_id"].map(labels)
+    long_frame["dates"] = pd.to_datetime(long_frame["snapshot__week_start"])
+    pivot = long_frame.pivot_table(
+        index="dates",
+        columns="person",
+        values=value_field,
+        aggfunc="first",
+    ).reset_index()
+    ordered_columns = [
+        labels[canonical_id]
+        for canonical_id in tracked_ids
+        if labels.get(canonical_id) in pivot.columns
+    ]
+    return pivot[["dates", *ordered_columns]].rename_axis(columns=None)
+
+
+def legacy_evolution_frame() -> pd.DataFrame:
+    frame = pd.read_csv(LEGACY_ANALYSIS_DIR / "evolution_of_measures.csv", sep="\t", index_col=0)
+    return frame.rename(
+        columns={
+            "num_people": "People",
+            "num_podcasts": "Podcasts",
+            "avg_path": "Average path length",
+            "avg_clust": "Clustering",
+            "density": "Density",
+            "transitivity": "Transitivity",
+        }
+    )
+
+
+def evolution_metric_name(name: str) -> str:
+    mapping = {
+        "pr_evol.csv": "pagerank",
+        "auths_evol.csv": "authority",
+        "hubs_evol.csv": "hub",
+        "close_evol.csv": "closeness",
+        "bt_evol.csv": "betweenness",
+        "degree_evol.csv": "degree_centrality",
+    }
+    return mapping.get(name, Path(name).stem)
+
+
+def empty_score_frame() -> pd.DataFrame:
+    return pd.DataFrame({"dates": []})
+
+
+def ensure_django_ready() -> None:
+    if apps.ready:
+        return
+    import django
+
+    django.setup()
+
+
+def display_labels(frame: pd.DataFrame, ordered_ids: list[str]) -> dict[str, str]:
+    names_by_id = (
+        frame.sort_values("snapshot__week_start")
+        .groupby("canonical_id")["display_name"]
+        .last()
+        .to_dict()
+    )
+    raw_names = [names_by_id.get(canonical_id, canonical_id) for canonical_id in ordered_ids]
+    duplicates = {name for name, count in Counter(raw_names).items() if count > 1}
+    labels = {}
+    for canonical_id in ordered_ids:
+        name = names_by_id.get(canonical_id, canonical_id)
+        labels[canonical_id] = f"{name} ({canonical_id[-6:]})" if name in duplicates else name
+    return labels
 
 
 def podcast_category_counts(repo: LegacyRepository) -> dict[str, float]:
@@ -318,11 +484,7 @@ def bar_chart(
     log_scale: bool = False,
 ) -> Path:
     items = sorted(values.items(), key=lambda item: item[1], reverse=True)[:14]
-    plot_values = (
-        [(label, math.log10(value + 1)) for label, value in items]
-        if log_scale
-        else items
-    )
+    plot_values = [(label, math.log10(value + 1)) for label, value in items] if log_scale else items
     max_value = max((value for _, value in plot_values), default=1)
     left, top, chart_w, chart_h = 80, 70, 760, 270
     bar_w = chart_w / max(len(plot_values), 1)
@@ -391,6 +553,7 @@ def line_chart(
     title: str,
 ) -> Path:
     columns = columns or [column for column in frame.columns if column != "dates"][:10]
+    columns = [column for column in columns if column in frame.columns]
     left, top, chart_w, chart_h = 80, 70, 760, 270
     parts = svg_header(title)
     parts.append(axis(left, top, chart_w, chart_h, "value"))
@@ -525,8 +688,13 @@ def plotly_line(
     title: str,
     *,
     y_title: str = "Value",
+    log_y: bool = False,
+    sorted_hover: bool = False,
 ) -> Path:
     columns = columns or [column for column in frame.columns if column != "dates"][:10]
+    columns = [column for column in columns if column in frame.columns]
+    if not columns:
+        columns = [column for column in frame.columns if column != "dates"][:10]
     long_frame = frame[["dates", *columns]].melt(
         id_vars="dates",
         var_name="series",
@@ -538,12 +706,20 @@ def plotly_line(
         y="value",
         color="series",
         title=title,
-        hover_name="series",
-        hover_data={"dates": True, "value": ":.6f", "series": False},
         color_discrete_sequence=PALETTE,
     )
+    if sorted_hover:
+        fig.update_traces(hoverinfo="none", hovertemplate=None)
+    else:
+        fig.update_traces(hovertemplate="%{fullData.name}<extra></extra>")
     fig.update_layout(xaxis_title="Date", yaxis_title=y_title, hovermode="x unified")
-    return write_plotly(filename, fig)
+    if log_y:
+        fig.update_yaxes(type="log")
+    return write_plotly(
+        filename,
+        fig,
+        post_script=sorted_hover_script(plotly_div_id(filename)) if sorted_hover else None,
+    )
 
 
 def plotly_heatmap(
@@ -563,9 +739,7 @@ def plotly_heatmap(
             y=categories,
             colorscale="Teal",
             hovertemplate=(
-                "Podcast category: %{x}<br>"
-                "Guest category: %{y}<br>"
-                "Appearances: %{z}<extra></extra>"
+                "Podcast category: %{x}<br>Guest category: %{y}<br>Appearances: %{z}<extra></extra>"
             ),
         )
     )
@@ -602,10 +776,7 @@ def plotly_network(filename: str, graph: nx.Graph, title: str) -> Path:
             "colorbar": {"title": "Degree"},
             "line": {"width": 0.5, "color": "#ffffff"},
         },
-        text=[
-            f"{node}<br>Degree: {graph.degree[node]}"
-            for node in nodes
-        ],
+        text=[f"{node}<br>Degree: {graph.degree[node]}" for node in nodes],
         hovertemplate="%{text}<extra></extra>",
     )
     fig = go.Figure(data=[edge_trace, node_trace])
@@ -618,7 +789,7 @@ def plotly_network(filename: str, graph: nx.Graph, title: str) -> Path:
     return write_plotly(filename, fig)
 
 
-def write_plotly(filename: str, fig: go.Figure) -> Path:
+def write_plotly(filename: str, fig: go.Figure, *, post_script: str | None = None) -> Path:
     output = PLOTS_DIR / filename
     fig.update_layout(
         template="plotly_white",
@@ -636,12 +807,13 @@ def write_plotly(filename: str, fig: go.Figure) -> Path:
         full_html=True,
         div_id=plotly_div_id(filename),
         config={"displaylogo": False, "responsive": True},
+        post_script=post_script,
     )
     html_text = output.read_text(encoding="utf-8")
     html_text = html_text.replace(
-        "<head><meta charset=\"utf-8\" /></head>",
+        '<head><meta charset="utf-8" /></head>',
         (
-            "<head><meta charset=\"utf-8\" />"
+            '<head><meta charset="utf-8" />'
             "<style>"
             "html,body{margin:0;padding:10px 4px 0 4px;overflow:hidden;}"
             ".plotly-graph-div{height:calc(100vh - 10px)!important;}"
@@ -657,10 +829,99 @@ def plotly_div_id(filename: str) -> str:
     return f"podcast-network-{stem}"
 
 
+def sorted_hover_script(div_id: str) -> str:
+    return f"""
+(function() {{
+  const graph = document.getElementById("{div_id}");
+  if (!graph) return;
+
+  const style = document.createElement("style");
+  style.textContent = [
+    "#{div_id} .hoverlayer .hovertext{{display:none;}}",
+    "#{div_id}-sorted-hover{{position:absolute;z-index:20;display:none;",
+    "pointer-events:none;background:rgba(255,255,255,0.96);",
+    "border:1px solid rgba(31,41,55,0.16);border-radius:6px;",
+    "box-shadow:0 10px 28px rgba(15,23,42,0.16);",
+    "padding:8px 10px;color:#1f2937;font:13px system-ui,sans-serif;",
+    "line-height:1.35;max-width:260px;}}",
+    "#{div_id}-sorted-hover .title{{font-weight:600;margin-bottom:5px;}}",
+    "#{div_id}-sorted-hover .row{{display:flex;align-items:center;gap:7px;",
+    "white-space:nowrap;}}",
+    "#{div_id}-sorted-hover .swatch{{width:9px;height:9px;border-radius:999px;",
+    "flex:0 0 auto;}}"
+  ].join("");
+  document.head.appendChild(style);
+
+  const tooltip = document.createElement("div");
+  tooltip.id = "{div_id}-sorted-hover";
+  graph.parentElement.style.position = graph.parentElement.style.position || "relative";
+  graph.parentElement.appendChild(tooltip);
+
+  function formatDate(value) {{
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString(undefined, {{
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    }});
+  }}
+
+  function escapeHtml(value) {{
+    return String(value).replace(/[&<>"']/g, function(character) {{
+      return {{
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }}[character];
+    }});
+  }}
+
+  function colorFor(point) {{
+    const color = point.fullData && point.fullData.line && point.fullData.line.color;
+    return color || "#64748b";
+  }}
+
+  graph.on("plotly_hover", function(eventData) {{
+    const points = (eventData.points || [])
+      .filter((point) => Number.isFinite(Number(point.y)))
+      .sort((left, right) => Number(right.y) - Number(left.y));
+    if (!points.length) {{
+      tooltip.style.display = "none";
+      return;
+    }}
+
+    const rows = points.map(function(point) {{
+      return "<div class=\\"row\\"><span class=\\"swatch\\" style=\\"background:" +
+        escapeHtml(colorFor(point)) + "\\"></span><span>" +
+        escapeHtml(point.fullData.name) + "</span></div>";
+    }}).join("");
+    tooltip.innerHTML = "<div class=\\"title\\">" + formatDate(points[0].x) +
+      "</div>" + rows;
+    tooltip.style.display = "block";
+
+    const graphRect = graph.getBoundingClientRect();
+    const pointer = eventData.event || {{}};
+    let left = (pointer.clientX || graphRect.left) - graphRect.left + 14;
+    let top = (pointer.clientY || graphRect.top) - graphRect.top + 14;
+    const maxLeft = graph.clientWidth - tooltip.offsetWidth - 8;
+    const maxTop = graph.clientHeight - tooltip.offsetHeight - 8;
+    tooltip.style.left = Math.max(8, Math.min(left, maxLeft)) + "px";
+    tooltip.style.top = Math.max(8, Math.min(top, maxTop)) + "px";
+  }});
+
+  graph.on("plotly_unhover", function() {{
+    tooltip.style.display = "none";
+  }});
+}})();
+"""
+
+
 def svg_header(title: str, *, width: int = WIDTH, height: int = HEIGHT) -> list[str]:
     return [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
-        'role="img">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img">',
         f"<title>{html.escape(title)}</title>",
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         text(30, 34, title, 22, "#1f2937"),
@@ -673,7 +934,7 @@ def axis(left: float, top: float, width: float, height: float, label: str) -> st
         f'y2="{top + height}" stroke="#475467"/>'
         f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + height}" '
         'stroke="#475467"/>'
-        f'{text(left + width / 2, top + height + 46, label, 12, "#667085", "middle")}'
+        f"{text(left + width / 2, top + height + 46, label, 12, '#667085', 'middle')}"
     )
 
 

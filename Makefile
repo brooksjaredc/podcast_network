@@ -6,7 +6,7 @@ CLOUD_SQL_INSTANCE ?= podcast-network-db
 CLOUD_RUN_SERVICE ?= podcast-network-web
 IMAGE ?= us-central1-docker.pkg.dev/$(GCP_PROJECT)/podcast-network/web:latest
 
-.PHONY: install dev migrate test lint check cloud-sql-proxy cloud-status deploy
+.PHONY: install dev migrate test lint check cloud-sql-proxy sync-cloud-db cloud-status deploy
 
 install:
 	python3.13 -m venv .venv
@@ -27,7 +27,10 @@ lint:
 check: lint test
 
 cloud-sql-proxy:
-	cloud-sql-proxy $(GCP_PROJECT):$(GCP_REGION):$(CLOUD_SQL_INSTANCE) --port 5433
+	cloud-sql-proxy --gcloud-auth $(GCP_PROJECT):$(GCP_REGION):$(CLOUD_SQL_INSTANCE) --port 5433
+
+sync-cloud-db:
+	scripts/sync_cloud_db.sh
 
 cloud-status:
 	gcloud run services describe $(CLOUD_RUN_SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION)
