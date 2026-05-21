@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import html
+import json
 import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable
+from itertools import combinations
 from pathlib import Path
 
 import networkx as nx
@@ -313,12 +315,16 @@ def generate_interactive_plots(repo: LegacyRepository) -> list[Path]:
             [prediction.prob for prediction in repo.predictions],
             "Prediction Probabilities",
         ),
-        plotly_network(
+        cytoscape_network(
             "network_podcasts.html",
-            podcast_similarity_graph(),
-            "Podcast Similarity Graph",
+            podcast_network_payload(),
+            "Podcast Network Graph",
         ),
-        plotly_network("network_people.html", people_graph(repo), "People Graph Sample"),
+        cytoscape_network(
+            "network_people.html",
+            people_network_payload(repo),
+            "People Network Graph",
+        ),
     ]
     return outputs
 
@@ -741,6 +747,356 @@ def people_graph(repo: LegacyRepository) -> nx.Graph:
     return graph
 
 
+def podcast_network_payload(*, limit: int = 240, max_edges: int = 750) -> dict:
+    payload = database_podcast_network_payload(limit=limit, max_edges=max_edges)
+    if payload["nodes"]:
+        return payload
+    return graph_payload(
+        podcast_similarity_graph(),
+        title="Podcast Network Graph",
+        default_top_n=160,
+        default_min_edge=1,
+    )
+
+
+def people_network_payload(
+    repo: LegacyRepository, *, limit: int = 240, max_edges: int = 850
+) -> dict:
+    payload = database_people_network_payload(limit=limit, max_edges=max_edges)
+    if payload["nodes"]:
+        return payload
+    return graph_payload(
+        people_graph(repo),
+        title="People Network Graph",
+        default_top_n=180,
+        default_min_edge=1,
+    )
+
+
+def database_podcast_network_payload(*, limit: int, max_edges: int) -> dict:
+    try:
+        ensure_django_ready()
+        from podcast_network.network_metrics import latest_succeeded_metric_run
+        from podcast_network.web.catalog.models import (
+            Appearance,
+            PersonEntityLink,
+            PodcastNetworkMetric,
+        )
+
+        run = latest_succeeded_metric_run()
+        if run is None:
+            return empty_network_payload("Podcast Network Graph")
+        metrics = list(
+            PodcastNetworkMetric.objects.filter(run=run)
+            .select_related("podcast")
+            .order_by("degree_rank", "podcast__name")[:limit]
+        )
+        podcast_ids = [metric.podcast_id for metric in metrics]
+        podcast_id_set = set(podcast_ids)
+        nodes = []
+        for metric in metrics:
+            nodes.append(
+                {
+                    "id": str(metric.podcast_id),
+                    "label": metric.podcast.name,
+                    "displayLabel": metric.podcast.name if metric.degree_rank <= 28 else "",
+                    "rank": metric.degree_rank,
+                    "score": metric.degree_centrality,
+                    "size": 3.5 + min(math.sqrt(metric.shared_guest_edges + 1) * 0.75, 11),
+                    "detail": f"shared guest edges: {metric.shared_guest_edges}",
+                }
+            )
+
+        podcast_ids_by_guest: dict[str, set[int]] = defaultdict(set)
+        rows = (
+            PersonEntityLink.objects.filter(
+                observation__role=Appearance.Role.GUEST,
+                observation__podcast_id__in=podcast_id_set,
+            )
+            .values_list("canonical_id", "observation__podcast_id")
+            .distinct()
+        )
+        for canonical_id, podcast_id in rows.iterator(chunk_size=20_000):
+            podcast_ids_by_guest[canonical_id].add(podcast_id)
+
+        edge_counts: Counter[tuple[int, int]] = Counter()
+        for shared_podcast_ids in podcast_ids_by_guest.values():
+            if len(shared_podcast_ids) < 2:
+                continue
+            for source, target in combinations(sorted(shared_podcast_ids), 2):
+                if source in podcast_id_set and target in podcast_id_set:
+                    edge_counts[(source, target)] += 1
+        edges = [
+            {
+                "id": f"{source}-{target}",
+                "source": str(source),
+                "target": str(target),
+                "weight": weight,
+                "label": f"{weight} shared guests",
+            }
+            for (source, target), weight in edge_counts.most_common(max_edges)
+        ]
+    except (OperationalError, ProgrammingError):
+        return empty_network_payload("Podcast Network Graph")
+
+    return network_payload(
+        title="Podcast Network Graph",
+        nodes=nodes,
+        edges=edges,
+        default_top_n=180,
+        default_min_edge=2,
+    )
+
+
+def database_people_network_payload(*, limit: int, max_edges: int) -> dict:
+    try:
+        ensure_django_ready()
+        from podcast_network.network_metrics import latest_succeeded_metric_run
+        from podcast_network.web.catalog.models import (
+            Appearance,
+            PersonEntityLink,
+            PersonNetworkMetric,
+        )
+
+        run = latest_succeeded_metric_run()
+        if run is None:
+            return empty_network_payload("People Network Graph")
+        metrics = list(
+            PersonNetworkMetric.objects.filter(run=run).order_by("pagerank_rank", "display_name")[
+                :limit
+            ]
+        )
+        canonical_ids = [metric.canonical_id for metric in metrics]
+        canonical_id_set = set(canonical_ids)
+        nodes = []
+        for metric in metrics:
+            nodes.append(
+                {
+                    "id": metric.canonical_id,
+                    "label": metric.display_name,
+                    "displayLabel": metric.display_name if metric.pagerank_rank <= 28 else "",
+                    "rank": metric.pagerank_rank,
+                    "score": metric.pagerank,
+                    "size": 3.5
+                    + min(
+                        math.sqrt(metric.guest_appearances + metric.host_appearances + 1) * 0.34,
+                        12,
+                    ),
+                    "detail": (
+                        f"guest appearances: {metric.guest_appearances} | "
+                        f"host appearances: {metric.host_appearances}"
+                    ),
+                }
+            )
+
+        edge_counts: Counter[tuple[str, str]] = Counter()
+        current_episode_id = None
+        people_by_role = {Appearance.Role.GUEST: set(), Appearance.Role.HOST: set()}
+        rows = (
+            PersonEntityLink.objects.filter(
+                canonical_id__in=canonical_id_set,
+                observation__role__in=[Appearance.Role.GUEST, Appearance.Role.HOST],
+            )
+            .order_by("observation__episode_id")
+            .values_list("observation__episode_id", "canonical_id", "observation__role")
+        )
+        for episode_id, canonical_id, role in rows.iterator(chunk_size=20_000):
+            if current_episode_id is None:
+                current_episode_id = episode_id
+            elif episode_id != current_episode_id:
+                add_people_payload_edges(edge_counts, people_by_role)
+                current_episode_id = episode_id
+                people_by_role = {Appearance.Role.GUEST: set(), Appearance.Role.HOST: set()}
+            people_by_role[role].add(canonical_id)
+        if current_episode_id is not None:
+            add_people_payload_edges(edge_counts, people_by_role)
+
+        edges = [
+            {
+                "id": f"{source}-{target}",
+                "source": source,
+                "target": target,
+                "weight": weight,
+                "label": f"{weight} host/guest links",
+            }
+            for (source, target), weight in edge_counts.most_common(max_edges)
+        ]
+    except (OperationalError, ProgrammingError):
+        return empty_network_payload("People Network Graph")
+
+    return network_payload(
+        title="People Network Graph",
+        nodes=nodes,
+        edges=edges,
+        default_top_n=180,
+        default_min_edge=1,
+    )
+
+
+def add_people_payload_edges(
+    edge_counts: Counter[tuple[str, str]],
+    people_by_role: dict[str, set[str]],
+) -> None:
+    for guest_id in people_by_role.get("guest", set()):
+        for host_id in people_by_role.get("host", set()):
+            if guest_id == host_id:
+                continue
+            edge_counts[tuple(sorted((guest_id, host_id)))] += 1
+
+
+def graph_payload(
+    graph: nx.Graph,
+    *,
+    title: str,
+    default_top_n: int,
+    default_min_edge: int,
+) -> dict:
+    nodes = [
+        {
+            "id": str(node),
+            "label": str(node),
+            "displayLabel": str(node) if index < 28 else "",
+            "rank": index + 1,
+            "score": graph.degree[node],
+            "size": 3.5 + min(math.sqrt(graph.degree[node] + 1) * 1.25, 12),
+            "detail": f"degree: {graph.degree[node]}",
+        }
+        for index, node in enumerate(
+            sorted(graph.nodes, key=lambda item: graph.degree[item], reverse=True)
+        )
+    ]
+    edges = [
+        {
+            "id": f"{source}-{target}",
+            "source": str(source),
+            "target": str(target),
+            "weight": float(data.get("weight", 1)),
+            "label": f"{compact(float(data.get('weight', 1)))} weight",
+        }
+        for source, target, data in graph.edges(data=True)
+    ]
+    return network_payload(
+        title=title,
+        nodes=nodes,
+        edges=edges,
+        default_top_n=default_top_n,
+        default_min_edge=default_min_edge,
+    )
+
+
+def empty_network_payload(title: str) -> dict:
+    return network_payload(title=title, nodes=[], edges=[], default_top_n=0, default_min_edge=1)
+
+
+def network_payload(
+    *,
+    title: str,
+    nodes: list[dict],
+    edges: list[dict],
+    default_top_n: int,
+    default_min_edge: int,
+) -> dict:
+    max_edge_weight = max((edge["weight"] for edge in edges), default=1)
+    positions = network_positions(nodes, edges, default_top_n, default_min_edge)
+    for node in nodes:
+        node["color"] = "#2563eb" if node["rank"] <= 25 else "#0f766e"
+        node["search"] = node["label"].casefold()
+        node["x"] = positions.get(node["id"], (0.0, 0.0))[0]
+        node["y"] = positions.get(node["id"], (0.0, 0.0))[1]
+    return {
+        "title": title,
+        "nodes": nodes,
+        "edges": edges,
+        "maxRank": max((node["rank"] for node in nodes), default=0),
+        "maxEdgeWeight": max_edge_weight,
+        "defaultTopN": min(default_top_n, len(nodes)),
+        "defaultMinEdge": default_min_edge,
+    }
+
+
+def network_positions(
+    nodes: list[dict],
+    edges: list[dict],
+    default_top_n: int,
+    default_min_edge: int,
+) -> dict[str, tuple[float, float]]:
+    visible_ids = {node["id"] for node in nodes if node["rank"] <= default_top_n}
+    graph = nx.Graph()
+    graph.add_nodes_from(visible_ids)
+    graph.add_weighted_edges_from(
+        (edge["source"], edge["target"], edge["weight"])
+        for edge in edges
+        if edge["weight"] >= default_min_edge
+        and edge["source"] in visible_ids
+        and edge["target"] in visible_ids
+    )
+    if graph.number_of_edges() == 0:
+        return circle_positions([node["id"] for node in nodes])
+
+    core_nodes = {node for edge in graph.edges for node in edge}
+    core = graph.subgraph(core_nodes).copy()
+    layout = nx.spring_layout(
+        core,
+        seed=7,
+        weight=None,
+        k=4.8 / math.sqrt(max(core.number_of_nodes(), 1)),
+        iterations=350,
+        scale=380,
+    )
+    positions = balance_component_spacing(
+        core,
+        {node_id: (float(x), float(y)) for node_id, (x, y) in layout.items()},
+        component_spacing=0.62,
+        node_spacing=1.75,
+    )
+    remaining = [node["id"] for node in nodes if node["id"] not in positions]
+    positions.update(circle_positions(remaining, radius=430))
+    return positions
+
+
+def balance_component_spacing(
+    graph: nx.Graph,
+    positions: dict[str, tuple[float, float]],
+    *,
+    component_spacing: float,
+    node_spacing: float,
+) -> dict[str, tuple[float, float]]:
+    if not positions:
+        return positions
+    x_center = sum(x for x, _ in positions.values()) / len(positions)
+    y_center = sum(y for _, y in positions.values()) / len(positions)
+    adjusted = {}
+    for component in nx.connected_components(graph):
+        component_positions = [positions[node] for node in component if node in positions]
+        if not component_positions:
+            continue
+        component_x = sum(x for x, _ in component_positions) / len(component_positions)
+        component_y = sum(y for _, y in component_positions) / len(component_positions)
+        target_x = x_center + (component_x - x_center) * component_spacing
+        target_y = y_center + (component_y - y_center) * component_spacing
+        for node in component:
+            if node not in positions:
+                continue
+            x, y = positions[node]
+            adjusted[node] = (
+                target_x + (x - component_x) * node_spacing,
+                target_y + (y - component_y) * node_spacing,
+            )
+    return adjusted
+
+
+def circle_positions(node_ids: list[str], *, radius: float = 360) -> dict[str, tuple[float, float]]:
+    if not node_ids:
+        return {}
+    return {
+        node_id: (
+            math.cos((index / len(node_ids)) * math.tau) * radius,
+            math.sin((index / len(node_ids)) * math.tau) * radius,
+        )
+        for index, node_id in enumerate(node_ids)
+    }
+
+
 def bar_chart(
     filename: str,
     values: dict[str, float],
@@ -1063,6 +1419,284 @@ def plotly_network(filename: str, graph: nx.Graph, title: str) -> Path:
         yaxis={"visible": False},
     )
     return write_plotly(filename, fig)
+
+
+def cytoscape_network(filename: str, payload: dict, title: str) -> Path:
+    output = PLOTS_DIR / filename
+    graph_json = json.dumps(payload).replace("</", "<\\/")
+    output.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)}</title>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+<style>
+html,body{{
+  margin:0;height:100%;font-family:system-ui,sans-serif;color:#1f2937;
+  background:#fff;overflow:hidden;
+}}
+.network-shell{{height:100%;display:grid;grid-template-rows:auto 1fr;}}
+.toolbar{{
+  display:flex;align-items:center;gap:12px;padding:10px 12px;
+  border-bottom:1px solid #e5e7eb;background:#fff;
+}}
+.toolbar input[type="search"]{{
+  width:220px;max-width:28vw;border:1px solid #cbd5e1;border-radius:6px;
+  padding:7px 9px;font:13px system-ui,sans-serif;
+}}
+.control{{
+  display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;
+  white-space:nowrap;
+}}
+.control input[type="range"]{{width:112px;}}
+.stat{{margin-left:auto;font-size:12px;color:#64748b;white-space:nowrap;}}
+.network-body{{position:relative;min-height:0;}}
+#cy{{position:absolute;inset:0;}}
+.panel{{
+  position:absolute;right:12px;top:12px;width:240px;max-height:calc(100% - 24px);
+  overflow:auto;background:rgba(255,255,255,.94);
+  border:1px solid rgba(31,41,55,.14);border-radius:8px;
+  box-shadow:0 10px 26px rgba(15,23,42,.14);padding:10px;
+}}
+.panel h2{{font-size:14px;line-height:1.2;margin:0 0 6px 0;}}
+.panel p{{font-size:12px;line-height:1.35;margin:4px 0;color:#475569;}}
+@media (max-width: 720px){{
+  .toolbar{{gap:8px;flex-wrap:wrap;}}
+  .toolbar input[type="search"]{{width:100%;max-width:none;}}
+  .stat{{margin-left:0;}}
+  .panel{{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:38%;}}
+}}
+</style>
+</head>
+<body>
+<div class="network-shell">
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Search">
+    <label class="control">
+      Top <input id="topN" type="range"> <span id="topNValue"></span>
+    </label>
+    <label class="control">
+      Min edge <input id="minEdge" type="range"> <span id="minEdgeValue"></span>
+    </label>
+    <button id="fit" type="button">Fit</button>
+    <span id="stats" class="stat"></span>
+  </div>
+  <div class="network-body">
+    <div id="cy"></div>
+    <aside class="panel">
+      <h2 id="detailTitle">{html.escape(title)}</h2>
+      <p id="detailBody"></p>
+    </aside>
+  </div>
+</div>
+<script>
+const payload = {graph_json};
+const topN = document.getElementById("topN");
+const topNValue = document.getElementById("topNValue");
+const minEdge = document.getElementById("minEdge");
+const minEdgeValue = document.getElementById("minEdgeValue");
+const search = document.getElementById("search");
+const stats = document.getElementById("stats");
+const detailTitle = document.getElementById("detailTitle");
+const detailBody = document.getElementById("detailBody");
+
+topN.min = Math.min(25, payload.maxRank || 25);
+topN.max = payload.maxRank || 25;
+topN.step = 5;
+topN.value = payload.defaultTopN || topN.max;
+minEdge.min = 1;
+minEdge.max = Math.max(1, payload.maxEdgeWeight || 1);
+minEdge.step = 1;
+minEdge.value = Math.min(payload.defaultMinEdge || 1, minEdge.max);
+
+const cy = cytoscape({{
+  container: document.getElementById("cy"),
+  wheelSensitivity: 0.18,
+  minZoom: 0.15,
+  maxZoom: 10,
+  style: [
+    {{ selector: "node", style: {{
+      "background-color": "data(color)",
+      "border-color": "#ffffff",
+      "border-width": 1,
+      "width": "data(renderSize)",
+      "height": "data(renderSize)",
+      "label": "data(displayLabel)",
+      "font-size": "data(renderFontSize)",
+      "color": "#334155",
+      "text-outline-color": "#ffffff",
+      "text-outline-width": "data(renderTextOutlineWidth)",
+      "text-max-width": 86,
+      "text-wrap": "wrap",
+      "text-valign": "bottom",
+      "text-margin-y": "data(renderTextMargin)"
+    }} }},
+    {{ selector: "edge", style: {{
+      "line-color": "#64748b",
+      "opacity": 0.5,
+      "width": `mapData(weight, 1, ${{Math.max(1, payload.maxEdgeWeight || 1)}}, 0.8, 6.5)`,
+      "curve-style": "bezier"
+    }} }},
+    {{ selector: ".faded", style: {{ "opacity": 0.08 }} }},
+    {{ selector: ".selected", style: {{
+      "border-color": "#111827",
+      "border-width": 3,
+      "opacity": 1,
+      "z-index": 20
+    }} }},
+    {{ selector: "edge.selected", style: {{
+      "line-color": "#111827",
+      "opacity": 0.85,
+      "width": 1,
+      "z-index": 18
+    }} }}
+  ]
+}});
+
+function elementsForFilters() {{
+  const rankLimit = Number(topN.value);
+  const edgeLimit = Number(minEdge.value);
+  const candidateNodes = payload.nodes.filter((node) => node.rank <= rankLimit);
+  const candidateNodeIds = new Set(candidateNodes.map((node) => node.id));
+  const edges = payload.edges.filter((edge) =>
+    edge.weight >= edgeLimit
+    && candidateNodeIds.has(edge.source)
+    && candidateNodeIds.has(edge.target)
+  );
+  const connectedNodeIds = new Set(edges.flatMap((edge) => [edge.source, edge.target]));
+  const nodes = candidateNodes.filter((node) => connectedNodeIds.has(node.id) || node.rank <= 18);
+  return [
+    ...nodes.map((node) => ({{
+      group: "nodes",
+      data: {{
+        ...node,
+        renderSize: node.size,
+        renderFontSize: 8,
+        renderTextMargin: 4,
+        renderTextOutlineWidth: 1.5
+      }},
+      position: {{ x: node.x, y: node.y }}
+    }})),
+    ...edges.map((edge) => ({{ group: "edges", data: edge }}))
+  ];
+}}
+
+function renderGraph() {{
+  topNValue.textContent = topN.value;
+  minEdgeValue.textContent = minEdge.value;
+  cy.elements().remove();
+  cy.add(elementsForFilters());
+  cy.layout({{
+    name: "preset",
+    animate: false
+  }}).run();
+  window.requestAnimationFrame(() => {{
+    cy.fit(undefined, 28);
+    syncScreenScale();
+  }});
+  stats.textContent = `${{cy.nodes().length}} nodes / ${{cy.edges().length}} edges`;
+  applySearch();
+}}
+
+let scaleSyncQueued = false;
+function syncScreenScale() {{
+  scaleSyncQueued = false;
+  const zoom = Math.max(cy.zoom(), 0.01);
+  cy.nodes().forEach((node) => {{
+    const baseSize = Number(node.data("size")) || 8;
+    node.data({{
+      renderSize: clamp(baseSize / zoom, 3.5, 24),
+      renderFontSize: clamp(8 / zoom, 4.5, 10),
+      renderTextMargin: clamp(4 / zoom, 2, 7),
+      renderTextOutlineWidth: clamp(1.5 / zoom, 0.75, 2)
+    }});
+  }});
+}}
+
+function queueScaleSync() {{
+  if (scaleSyncQueued) return;
+  scaleSyncQueued = true;
+  window.requestAnimationFrame(syncScreenScale);
+}}
+
+function applySearch() {{
+  const query = search.value.trim().toLowerCase();
+  cy.elements().removeClass("faded selected");
+  if (!query) return;
+  const matches = cy.nodes().filter((node) => node.data("search").includes(query));
+  if (!matches.length) return;
+  cy.elements().addClass("faded");
+  matches.removeClass("faded").addClass("selected");
+  matches.neighborhood().removeClass("faded").addClass("selected");
+  cy.animate({{
+    fit: {{ eles: matches.union(matches.neighborhood()), padding: 54 }},
+    duration: 180
+  }});
+}}
+
+cy.on("tap", "node", (event) => {{
+  const node = event.target;
+  cy.elements().removeClass("faded selected");
+  cy.elements().addClass("faded");
+  node.removeClass("faded").addClass("selected");
+  node.neighborhood().removeClass("faded").addClass("selected");
+  detailTitle.textContent = node.data("label");
+  detailBody.textContent = `Rank ${{node.data("rank")}} / ${{node.data("detail")}}`;
+}});
+
+cy.on("tap", "edge", (event) => {{
+  const edge = event.target;
+  cy.elements().removeClass("faded selected");
+  cy.elements().addClass("faded");
+  edge.removeClass("faded").addClass("selected");
+  edge.connectedNodes().removeClass("faded").addClass("selected");
+  detailTitle.textContent = edge.connectedNodes()
+    .map((node) => node.data("label"))
+    .join(" - ");
+  detailBody.textContent = edge.data("label");
+}});
+
+cy.on("tap", (event) => {{
+  if (event.target !== cy) return;
+  cy.elements().removeClass("faded selected");
+  detailTitle.textContent = payload.title;
+  detailBody.textContent = "";
+}});
+
+document.getElementById("fit").addEventListener("click", () => cy.fit(undefined, 28));
+topN.addEventListener("input", renderGraph);
+minEdge.addEventListener("input", renderGraph);
+search.addEventListener("input", applySearch);
+cy.on("zoom", queueScaleSync);
+window.addEventListener("resize", () => {{
+  cy.resize().fit(undefined, 28);
+  queueScaleSync();
+}});
+
+function clamp(value, minValue, maxValue) {{
+  return Math.max(minValue, Math.min(value, maxValue));
+}}
+
+function escapeHtml(value) {{
+  return String(value).replace(/[&<>"']/g, (character) => ({{
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }}[character]));
+}}
+
+renderGraph();
+</script>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    return output
 
 
 def write_plotly(filename: str, fig: go.Figure, *, post_script: str | None = None) -> Path:

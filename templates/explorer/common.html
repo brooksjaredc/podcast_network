@@ -24,9 +24,7 @@
       <thead>
         <tr>
           <th>Guest</th>
-          <th>{{ first_podcast.name }} Time</th>
           <th>{{ first_podcast.name }} Appearances</th>
-          <th>{{ second_podcast.name }} Time</th>
           <th>{{ second_podcast.name }} Appearances</th>
         </tr>
       </thead>
@@ -34,13 +32,11 @@
         {% for person in common_people %}
           <tr>
             <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td>{{ person.first_appearances }}</td>
+            <td>{{ person.second_appearances }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">No common guests found.</td></tr>
+          <tr><td colspan="3">No common guests found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -66,15 +66,13 @@ RANKING_DEFINITIONS = [
     {
         "name": "Betweenness",
         "description": (
-            "Highlights people who sit on paths between otherwise separate parts "
-            "of the network."
+            "Highlights people who sit on paths between otherwise separate parts of the network."
         ),
     },
     {
         "name": "Closeness",
         "description": (
-            "Highlights people who are, on average, a short network distance "
-            "from everyone else."
+            "Highlights people who are, on average, a short network distance from everyone else."
         ),
     },
 ]
@@ -240,9 +238,7 @@ def recommendations(request: HttpRequest) -> HttpResponse:
     )
     selected_ids = [podcast.id for podcast in selected_podcasts]
     excluded_podcasts = list(
-        Podcast.objects.filter(id__in=excluded_ids)
-        .exclude(id__in=selected_ids)
-        .order_by("name")
+        Podcast.objects.filter(id__in=excluded_ids).exclude(id__in=selected_ids).order_by("name")
     )
     excluded_ids = [podcast.id for podcast in excluded_podcasts]
 
@@ -627,9 +623,7 @@ def recommendation_explanations(
     )
     for recommendation_id, person_id in candidate_guest_rows:
         for selected_id in selected_podcasts_by_guest.get(person_id, set()):
-            overlaps.setdefault(recommendation_id, {}).setdefault(selected_id, set()).add(
-                person_id
-            )
+            overlaps.setdefault(recommendation_id, {}).setdefault(selected_id, set()).add(person_id)
 
     appearance_counts = {
         (row["episode__podcast_id"], row["person_id"]): row["appearances_count"]
@@ -729,9 +723,9 @@ def shared_guests_by_podcast(
         if len(guests_by_podcast.get(podcast_id, [])) >= 5:
             continue
         person = Person(id=person_id, name=row["person__name"])
-        person.shared_appearance_count = selected_counts.get(person_id, 0) + row[
-            "appearances_count"
-        ]
+        person.shared_appearance_count = (
+            selected_counts.get(person_id, 0) + row["appearances_count"]
+        )
         guests_by_podcast.setdefault(podcast_id, []).append(person)
     return guests_by_podcast
 
@@ -744,25 +738,7 @@ def common(request: HttpRequest) -> HttpResponse:
     second_podcast = podcast_or_none(second_id)
     common_people = []
     if first_podcast and second_podcast:
-        first_people = Person.objects.filter(
-            appearances__role=Appearance.Role.GUEST,
-            appearances__episode__podcast=first_podcast,
-        )
-        common_people = (
-            Person.objects.filter(
-                id__in=first_people.values("id"),
-                appearances__role=Appearance.Role.GUEST,
-                appearances__episode__podcast=second_podcast,
-            )
-            .annotate(
-                appearances_count=Count(
-                    "appearances",
-                    filter=guest_filter("appearances"),
-                )
-            )
-            .order_by("-appearances_count", "name")
-            .distinct()[:500]
-        )
+        common_people = common_guest_rows(first_podcast.id, second_podcast.id)
     return render(
         request,
         "explorer/common.html",
@@ -775,6 +751,87 @@ def common(request: HttpRequest) -> HttpResponse:
             "common_people": common_people,
         },
     )
+
+
+def common_guest_rows(first_podcast_id: int, second_podcast_id: int) -> list[dict]:
+    if PersonEntityLink.objects.exists():
+        rows = canonical_common_guest_rows(first_podcast_id, second_podcast_id)
+        if rows:
+            return rows
+    return raw_common_guest_rows(first_podcast_id, second_podcast_id)
+
+
+def canonical_common_guest_rows(first_podcast_id: int, second_podcast_id: int) -> list[dict]:
+    first = canonical_guest_counts(first_podcast_id)
+    second = canonical_guest_counts(second_podcast_id)
+    shared_ids = first.keys() & second.keys()
+    rows = [
+        {
+            "id": first[canonical_id]["person_id"] or second[canonical_id]["person_id"],
+            "name": first[canonical_id]["name"] or second[canonical_id]["name"],
+            "first_appearances": first[canonical_id]["count"],
+            "second_appearances": second[canonical_id]["count"],
+        }
+        for canonical_id in shared_ids
+        if first[canonical_id]["person_id"] or second[canonical_id]["person_id"]
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (-(row["first_appearances"] + row["second_appearances"]), row["name"]),
+    )[:500]
+
+
+def canonical_guest_counts(podcast_id: int) -> dict[str, dict]:
+    counts: dict[str, dict] = {}
+    rows = (
+        PersonEntityLink.objects.filter(
+            observation__role=Appearance.Role.GUEST,
+            observation__podcast_id=podcast_id,
+        )
+        .values_list(
+            "canonical_id",
+            "canonical__display_name",
+            "observation__person_id",
+        )
+        .iterator(chunk_size=10_000)
+    )
+    for canonical_id, display_name, person_id in rows:
+        counts.setdefault(
+            canonical_id,
+            {"name": display_name, "person_id": person_id, "count": 0},
+        )
+        counts[canonical_id]["count"] += 1
+    return counts
+
+
+def raw_common_guest_rows(first_podcast_id: int, second_podcast_id: int) -> list[dict]:
+    first = raw_guest_counts(first_podcast_id)
+    second = raw_guest_counts(second_podcast_id)
+    rows = [
+        {
+            "id": person_id,
+            "name": first[person_id]["name"] or second[person_id]["name"],
+            "first_appearances": first[person_id]["count"],
+            "second_appearances": second[person_id]["count"],
+        }
+        for person_id in first.keys() & second.keys()
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (-(row["first_appearances"] + row["second_appearances"]), row["name"]),
+    )[:500]
+
+
+def raw_guest_counts(podcast_id: int) -> dict[int, dict]:
+    rows = (
+        Appearance.objects.filter(
+            role=Appearance.Role.GUEST,
+            episode__podcast_id=podcast_id,
+        )
+        .values("person_id", "person__name")
+        .annotate(count=Count("id"))
+    )
+    return {row["person_id"]: {"name": row["person__name"], "count": row["count"]} for row in rows}
 
 
 def path(request: HttpRequest) -> HttpResponse:
@@ -860,17 +917,13 @@ def host_people_by_podcast(podcast_ids: list[int]) -> dict[int, list[Person]]:
         if key in seen:
             continue
         seen.add(key)
-        people_by_podcast.setdefault(podcast_id, []).append(
-            Person(id=person_id, name=person_name)
-        )
+        people_by_podcast.setdefault(podcast_id, []).append(Person(id=person_id, name=person_name))
     for podcast_id, person_id, person_name in frequent_guest_cohost_rows(podcast_ids):
         key = (podcast_id, person_id)
         if key in seen:
             continue
         seen.add(key)
-        people_by_podcast.setdefault(podcast_id, []).append(
-            Person(id=person_id, name=person_name)
-        )
+        people_by_podcast.setdefault(podcast_id, []).append(Person(id=person_id, name=person_name))
     return people_by_podcast
 
 
