@@ -28,7 +28,143 @@
     </section>
   {% endfor %}
 
-  {% if page.title == "Predictions" %}
+  {% if page.title == "Predictions" and prediction_run %}
+    <div class="stats">
+      <div class="stat">
+        <strong>{{ prediction_run.metadata.rows_written }}</strong>
+        <span>top predictions</span>
+      </div>
+      <div class="stat">
+        <strong>{{ prediction_run.metadata.candidate_count }}</strong>
+        <span>candidate pairs scored</span>
+      </div>
+      <div class="stat">
+        <strong>{{ prediction_run.metadata.scored_podcast_count }}</strong>
+        <span>podcasts scored</span>
+      </div>
+      <div class="stat">
+        <strong>{{ prediction_run.metadata.max_degree }}</strong>
+        <span>maximum network degree</span>
+      </div>
+    </div>
+
+    <section>
+      <h2>Score Distribution</h2>
+      {% if score_histogram_plot %}
+        {{ score_histogram_plot|json_script:"prediction-score-histogram-data" }}
+        <div class="plot interactive-plot">
+          <div
+            id="prediction-score-histogram"
+            class="prediction-score-histogram"
+            aria-label="Prediction score histogram"
+          ></div>
+        </div>
+        <script src="{% static 'plots/plotly.min.js' %}"></script>
+        <script>
+          {
+            const payload = JSON.parse(
+              document.getElementById("prediction-score-histogram-data").textContent
+            );
+            Plotly.newPlot(
+              "prediction-score-histogram",
+              payload.data,
+              payload.layout,
+              payload.config
+            );
+          }
+        </script>
+      {% else %}
+        <p class="muted">
+          The full-candidate score distribution will appear after the next scoring run.
+        </p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Recent New Links</h2>
+      {% if audit_run %}
+        <p class="muted">
+          Published {{ audit_run.metadata.week_start|slice:":10" }} through
+          {{ audit_run.metadata.week_end|slice:":10" }};
+          {{ audit_run.metadata.repeat_pair_excluded_count }} repeat links excluded;
+          {{ audit_run.metadata.scored_link_count }} of {{ audit_run.metadata.new_link_count }}
+          first-time links were in the prior candidate universe.
+        </p>
+      {% endif %}
+      {% if recent_link_rows %}
+        <table>
+          <thead>
+            <tr>
+              <th>Published</th>
+              <th>Podcast</th>
+              <th>Guest</th>
+              <th>Prior Rank</th>
+              <th>Prior Score</th>
+              <th>Prediction Run</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in recent_link_rows %}
+              <tr>
+                <td>{{ row.link_published_at|date:"M j, Y" }}</td>
+                <td><a href="{% url 'explorer:podcast_detail' row.podcast_id %}">{{ row.podcast_name }}</a></td>
+                <td>
+                  {% if row.person_id %}
+                    <a href="{% url 'explorer:person_detail' row.person_id %}">{{ row.guest_name }}</a>
+                  {% else %}
+                    {{ row.guest_name }}
+                  {% endif %}
+                </td>
+                {% if row.score != None %}
+                  <td>{{ row.rank }}</td>
+                  <td>{{ row.score|floatformat:3 }}</td>
+                  <td>{{ audit_run.run_id }}</td>
+                {% else %}
+                  <td colspan="3" class="muted">Not in prior candidate universe</td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No recent new-link matches have an earlier prediction run yet.</p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Top Predictions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Podcast</th>
+            <th>Guest</th>
+            <th>Score</th>
+            <th>Shared Neighbor Score</th>
+            <th>Guest Appearances</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in predictions|slice:":200" %}
+            <tr>
+              <td>{{ item.rank }}</td>
+              <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast_name }}</a></td>
+              <td>
+                {% if item.person_id %}
+                  <a href="{% url 'explorer:person_detail' item.person_id %}">{{ item.guest_name }}</a>
+                {% else %}
+                  {{ item.guest_name }}
+                {% endif %}
+              </td>
+              <td>{{ item.score|floatformat:3 }}</td>
+              <td>{{ item.shared_neighbor_score|floatformat:0 }}</td>
+              <td>{{ item.guest_appearance_count|floatformat:0 }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% elif page.title == "Predictions" %}
     <h2>True Positives in Test Set</h2>
     <table>
       <thead><tr><th>Podcast</th><th>Guest</th><th>Test Probability</th></tr></thead>

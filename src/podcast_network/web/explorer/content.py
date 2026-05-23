@@ -243,11 +243,9 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                 {
                     "heading": "Future Link Predictions",
                     "body": (
-                        "The legacy project trained a model to estimate likely future podcast "
-                        "and guest pairs. These tables preserve that generated output while "
-                        "the model pipeline is modernized."
+                        "The current model scores podcast and guest pairs that are close in "
+                        "the historical network but have not yet appeared together."
                     ),
-                    "plot": "plots/predictions_histogram.html",
                 },
             ],
         },

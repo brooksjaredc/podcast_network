@@ -29,18 +29,20 @@ TODO_NOTES = (
     "Add scheduled host/co-host extraction refresh for newly discovered podcasts.",
     "Add single-name resolution once the cheaper/contextual strategy is settled.",
     "Add entity-resolution active-learning sampling for new uncertain pairs.",
-    "Add future-guest feature rebuild, model retraining, and prediction publishing.",
     "Add optional plot/static artifact regeneration once plots read from Postgres metrics.",
 )
 
 
 class Command(BaseCommand):
-    help = "Coordinate the weekly scrape, guest extraction, processing, ER, and graph refresh."
+    help = (
+        "Coordinate the weekly scrape, guest extraction, processing, ER, "
+        "graph refresh, and future-link predictions."
+    )
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--phase",
-            choices=["all", "scrape", "llm", "processing-er", "metrics"],
+            choices=["all", "scrape", "llm", "processing-er", "metrics", "predictions"],
             default="all",
             help=(
                 "Run one phase of the weekly update. Use 'all' for the legacy "
@@ -99,6 +101,14 @@ class Command(BaseCommand):
         parser.add_argument("--evolution-betweenness-sample-size", type=int, default=200)
         parser.add_argument("--evolution-closeness-sample-size", type=int, default=200)
         parser.add_argument(
+            "--future-link-model-path",
+            default="data/models/future_link_exact_lr_unweighted_onecut.joblib",
+        )
+        parser.add_argument("--future-link-gcs-model-uri", default="")
+        parser.add_argument("--future-link-top-n", type=int, default=1000)
+        parser.add_argument("--future-link-batch-size", type=int, default=200000)
+        parser.add_argument("--future-link-max-degree", type=int, default=3)
+        parser.add_argument(
             "--reprocess-current-prompt",
             action="store_true",
             help=(
@@ -112,6 +122,7 @@ class Command(BaseCommand):
         parser.add_argument("--skip-entity-resolution", action="store_true")
         parser.add_argument("--skip-network-metrics", action="store_true")
         parser.add_argument("--skip-network-evolution", action="store_true")
+        parser.add_argument("--skip-future-link-predictions", action="store_true")
         parser.add_argument("--skip-graph-warm", action="store_true")
         parser.add_argument(
             "--dry-run",
@@ -266,6 +277,33 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 },
             )
         )
+    if phase in {"all", "predictions"} and not options["skip_future_link_predictions"]:
+        model_options = future_link_model_options(options)
+        run_id = coordinator_label
+        steps.extend(
+            [
+                PipelineStep(
+                    name="Audit newly published future links",
+                    command="audit_future_link_weekly_new_links",
+                    options={
+                        **model_options,
+                        "run_id": run_id,
+                        "max_degree": int(options["future_link_max_degree"]),
+                    },
+                ),
+                PipelineStep(
+                    name="Score current future-link predictions",
+                    command="score_future_link_predictions",
+                    options={
+                        **model_options,
+                        "run_id": run_id,
+                        "top_n": int(options["future_link_top_n"]),
+                        "batch_size": int(options["future_link_batch_size"]),
+                        "max_degree": int(options["future_link_max_degree"]),
+                    },
+                ),
+            ]
+        )
     return steps
 
 
@@ -277,3 +315,19 @@ def should_warm_graph(options: dict[str, object]) -> bool:
 
 def weekly_label() -> str:
     return f"weekly-update-{datetime.now(tz=UTC).strftime('%Y%m%d')}"
+
+
+def future_link_model_options(options: dict[str, object]) -> dict[str, str]:
+    model_path = str(options["future_link_model_path"])
+    gcs_model_uri = str(options["future_link_gcs_model_uri"])
+    if gcs_model_uri:
+        model_path = ""
+    if not model_path and not gcs_model_uri:
+        raise ValueError(
+            "Future-link predictions need --future-link-model-path or "
+            "--future-link-gcs-model-uri, or use --skip-future-link-predictions."
+        )
+    return {
+        "model_path": model_path,
+        "gcs_model_uri": gcs_model_uri,
+    }

@@ -5,7 +5,17 @@ from django.test import Client, override_settings
 from django.utils import timezone
 
 from podcast_network.network_metrics import calculate_and_store_network_metrics
-from podcast_network.web.catalog.models import Appearance, Episode, Person, Podcast
+from podcast_network.web.catalog.models import (
+    Appearance,
+    CanonicalPersonEntity,
+    Episode,
+    FutureLinkPrediction,
+    FutureLinkPredictionRun,
+    FutureLinkWeeklyAuditLink,
+    FutureLinkWeeklyAuditRun,
+    Person,
+    Podcast,
+)
 from podcast_network.web.explorer.services import database_six_degrees_graph
 
 
@@ -93,10 +103,43 @@ def test_home_page_loads() -> None:
 
     assert response.status_code == 200
     assert b"Six Degrees to Joe Rogan" in response.content
+    assert b'href="https://brooksjaredc.github.io"' in response.content
+    assert b"Created by Jared Brooks" in response.content
     assert b"Find the podcast path between almost anyone." in response.content
     assert b"home-path-form" in response.content
+    assert b"Joe Rogan to Hillary Clinton" in response.content
+    assert b"Conan O'Brien to Jordan Peterson" in response.content
+    assert b"Oprah Winfrey to Bill Burr" in response.content
     assert b"home-hero-art" in response.content
     assert b"ChatGPT Image May 17" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_home_page_counts_visible_database_graph_nodes() -> None:
+    make_db_graph()
+    filtered_podcast = Podcast.objects.create(name="日本語番組")
+    filtered_person = Person.objects.create(
+        name="Filtered Person",
+        normalized_name="filtered person",
+    )
+    filtered_episode = Episode.objects.create(
+        podcast=filtered_podcast,
+        guid="filtered-episode",
+        title="Filtered Episode",
+    )
+    Appearance.objects.create(
+        episode=filtered_episode,
+        person=filtered_person,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    database_six_degrees_graph.cache_clear()
+
+    response = Client().get("/")
+
+    assert response.status_code == 200
+    assert b"<strong>2</strong><span>podcasts</span>" in response.content
+    assert b"<strong>4</strong><span>people</span>" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -788,9 +831,171 @@ def test_recommendation_explanation_guests_sort_by_total_appearances() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_advanced_predictions_loads() -> None:
+    podcast = Podcast.objects.create(name="Prediction Test Podcast")
+    person = Person.objects.create(
+        name="Prediction Test Guest",
+        normalized_name="prediction test guest",
+    )
+    episode = Episode.objects.create(
+        podcast=podcast,
+        guid="prediction-test-episode",
+        title="Prediction Test Episode",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=episode,
+        person=person,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    call_command("sync_person_entities")
+    canonical = CanonicalPersonEntity.objects.create(
+        am_entity_id="person_prediction_test_other",
+        display_name="Prediction Other Guest",
+        normalized_name="prediction other guest",
+    )
+    linked_canonical_id = person.observations.first().entity_link.canonical_id
+    linked_canonical = CanonicalPersonEntity.objects.get(am_entity_id=linked_canonical_id)
+    run = FutureLinkPredictionRun.objects.create(
+        run_id="test-prediction-run",
+        cutoff_at=timezone.now(),
+        feature_names=["shared_neighbor_score", "guest_appearance_count"],
+        score_histogram=[{"lower": 0.0, "upper": 0.1, "count": 1}],
+        metadata={"score_histogram": [{"lower": 0.0, "upper": 0.1, "count": 1}]},
+        candidate_count=1,
+        scored_podcast_count=1,
+        rows_written=1,
+        max_degree=3,
+    )
+    FutureLinkPrediction.objects.create(
+        run=run,
+        rank=1,
+        score=0.42,
+        podcast=podcast,
+        canonical=canonical,
+        distance=3,
+        features={"shared_neighbor_score": 5, "guest_appearance_count": 7},
+    )
+    audit_run = FutureLinkWeeklyAuditRun.objects.create(
+        run_id="test-audit-run",
+        week_start=timezone.now() - timedelta(days=7),
+        week_end=timezone.now(),
+        window_days=7,
+        score_histogram=[{"lower": 0.0, "upper": 0.1, "count": 1}],
+        metadata={"score_histogram": [{"lower": 0.0, "upper": 0.1, "count": 1}]},
+        published_pair_count=1,
+        new_link_count=1,
+        scored_link_count=1,
+        candidate_eligible_count=1,
+        max_degree=3,
+    )
+    FutureLinkWeeklyAuditLink.objects.create(
+        run=audit_run,
+        rank=1,
+        score=0.42,
+        podcast=podcast,
+        canonical=linked_canonical,
+        link_published_at=timezone.now(),
+        first_episode_published_at=timezone.now(),
+        latest_episode_published_at=timezone.now(),
+        distance=3,
+        candidate_eligible=True,
+    )
+
     response = Client().get("/advanced/predictions/")
 
     assert response.status_code == 200
     assert b"Future Link Predictions" in response.content
     assert b"plot.ly" not in response.content
-    assert b"plots/predictions_histogram.html" in response.content
+    assert b"Score Distribution" in response.content
+    assert b"Top Predictions" in response.content
+    assert f"/people/{person.id}/".encode() in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_podcast_detail_shows_future_link_predictions() -> None:
+    podcast = Podcast.objects.create(name="Predicted Guest Podcast")
+    person = Person.objects.create(name="Predicted Guest", normalized_name="predicted guest")
+    episode = Episode.objects.create(
+        podcast=podcast,
+        guid="predicted-guest-source",
+        title="Predicted Guest Source",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=episode,
+        person=person,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    call_command("sync_person_entities")
+    canonical = person.observations.first().entity_link.canonical
+    run = FutureLinkPredictionRun.objects.create(
+        run_id="podcast-detail-prediction-run",
+        cutoff_at=timezone.now(),
+        candidate_count=1,
+        scored_podcast_count=1,
+        rows_written=1,
+        max_degree=3,
+    )
+    FutureLinkPrediction.objects.create(
+        run=run,
+        rank=1,
+        score=0.77,
+        podcast=podcast,
+        canonical=canonical,
+        distance=3,
+    )
+
+    response = Client().get(f"/podcasts/{podcast.id}/")
+
+    assert response.status_code == 200
+    assert b"Predicted Guest" in response.content
+    assert f"/people/{person.id}/".encode() in response.content
+    assert b"0.770" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_person_detail_shows_future_link_predictions() -> None:
+    podcast = Podcast.objects.create(name="Predicted Podcast")
+    person = Person.objects.create(
+        name="Podcast Prediction Person",
+        normalized_name="podcast prediction person",
+    )
+    episode = Episode.objects.create(
+        podcast=podcast,
+        guid="podcast-prediction-source",
+        title="Podcast Prediction Source",
+        published_at=timezone.now(),
+    )
+    Appearance.objects.create(
+        episode=episode,
+        person=person,
+        role=Appearance.Role.GUEST,
+        source="test",
+    )
+    call_command("sync_person_entities")
+    canonical = person.observations.first().entity_link.canonical
+    run = FutureLinkPredictionRun.objects.create(
+        run_id="person-detail-prediction-run",
+        cutoff_at=timezone.now(),
+        candidate_count=1,
+        scored_podcast_count=1,
+        rows_written=1,
+        max_degree=3,
+    )
+    FutureLinkPrediction.objects.create(
+        run=run,
+        rank=1,
+        score=0.88,
+        podcast=podcast,
+        canonical=canonical,
+        distance=3,
+    )
+
+    response = Client().get(f"/people/{person.id}/")
+
+    assert response.status_code == 200
+    assert b"Predicted Podcast" in response.content
+    assert f"/podcasts/{podcast.id}/".encode() in response.content
+    assert b"0.880" in response.content

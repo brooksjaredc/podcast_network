@@ -188,6 +188,14 @@ class SixDegreesGraph:
     def edge_date(self, left: str, right: str) -> str | None:
         return self.edge_date_for_window(left, right)
 
+    @property
+    def podcast_count(self) -> int:
+        return len(self.podcast_ids)
+
+    @property
+    def person_count(self) -> int:
+        return len(self.names)
+
     def edge_date_for_window(
         self,
         left: str,

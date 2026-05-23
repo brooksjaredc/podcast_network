@@ -12,6 +12,7 @@ dependencies = [
   "django>=5.2,<6.0",
   "feedparser>=6.0,<7.0",
   "gunicorn>=23.0,<24.0",
+  "google-cloud-storage>=2.18,<4.0",
   "networkx>=3.5,<4.0",
   "numpy>=2.0,<3.0",
   "openai>=1.99,<3.0",

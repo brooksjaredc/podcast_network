@@ -51,10 +51,24 @@
   <h2>Predicted Guests</h2>
   <table>
     <thead>
-      <tr><th>Guest</th><th>Probability</th></tr>
+      <tr><th>Rank</th><th>Guest</th><th>Score</th></tr>
     </thead>
     <tbody>
-        <tr><td colspan="2">No predictions loaded.</td></tr>
+      {% for prediction in predictions %}
+        <tr>
+          <td>#{{ prediction.rank }}</td>
+          <td>
+            {% if prediction.person_id %}
+              <a href="{% url 'explorer:person_detail' prediction.person_id %}">{{ prediction.guest_name }}</a>
+            {% else %}
+              {{ prediction.guest_name }}
+            {% endif %}
+          </td>
+          <td>{{ prediction.score|floatformat:3 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3">No predictions loaded.</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 {% endblock %}

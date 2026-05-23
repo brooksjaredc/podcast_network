@@ -94,10 +94,18 @@
   <h2>Podcast Predictions</h2>
   <table>
     <thead>
-      <tr><th>Podcast</th><th>Probability</th></tr>
+      <tr><th>Rank</th><th>Podcast</th><th>Score</th></tr>
     </thead>
     <tbody>
-        <tr><td colspan="2">No predictions loaded.</td></tr>
+      {% for prediction in predictions %}
+        <tr>
+          <td>#{{ prediction.rank }}</td>
+          <td><a href="{% url 'explorer:podcast_detail' prediction.podcast_id %}">{{ prediction.podcast_name }}</a></td>
+          <td>{{ prediction.score|floatformat:3 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3">No predictions loaded.</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 {% endblock %}

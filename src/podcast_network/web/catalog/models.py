@@ -343,6 +343,133 @@ class PersonEntityPairLabel(models.Model):
         return f"{self.pair_id_snapshot}: {self.label}"
 
 
+class FutureLinkPredictionRun(models.Model):
+    run_id = models.CharField(max_length=120, unique=True)
+    cutoff_at = models.DateTimeField()
+    model_path = models.CharField(max_length=1000, blank=True)
+    gcs_model_uri = models.CharField(max_length=1000, blank=True)
+    model_type = models.CharField(max_length=100, blank=True)
+    feature_names = models.JSONField(default=list, blank=True)
+    score_histogram = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    candidate_count = models.PositiveIntegerField(default=0)
+    scored_podcast_count = models.PositiveIntegerField(default=0)
+    rows_written = models.PositiveIntegerField(default=0)
+    max_degree = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["cutoff_at"]),
+            models.Index(fields=["created_at"]),
+        ]
+        ordering = ["-cutoff_at", "-created_at"]
+
+    def __str__(self) -> str:
+        return self.run_id
+
+
+class FutureLinkPrediction(models.Model):
+    run = models.ForeignKey(
+        FutureLinkPredictionRun,
+        on_delete=models.CASCADE,
+        related_name="predictions",
+    )
+    rank = models.PositiveIntegerField()
+    score = models.FloatField()
+    podcast = models.ForeignKey(Podcast, on_delete=models.CASCADE, related_name="+")
+    canonical = models.ForeignKey(CanonicalPersonEntity, on_delete=models.CASCADE, related_name="+")
+    distance = models.PositiveIntegerField()
+    features = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "podcast", "canonical"],
+                name="unique_future_link_prediction_pair_per_run",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "rank"]),
+            models.Index(fields=["run", "score"]),
+            models.Index(fields=["podcast"]),
+            models.Index(fields=["canonical"]),
+        ]
+        ordering = ["run", "rank"]
+
+    def __str__(self) -> str:
+        return f"{self.run_id}: {self.rank}"
+
+
+class FutureLinkWeeklyAuditRun(models.Model):
+    run_id = models.CharField(max_length=120, unique=True)
+    week_start = models.DateTimeField()
+    week_end = models.DateTimeField()
+    window_days = models.PositiveIntegerField(default=7)
+    model_path = models.CharField(max_length=1000, blank=True)
+    gcs_model_uri = models.CharField(max_length=1000, blank=True)
+    model_type = models.CharField(max_length=100, blank=True)
+    feature_names = models.JSONField(default=list, blank=True)
+    score_histogram = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    published_pair_count = models.PositiveIntegerField(default=0)
+    repeat_pair_excluded_count = models.PositiveIntegerField(default=0)
+    new_link_count = models.PositiveIntegerField(default=0)
+    scored_link_count = models.PositiveIntegerField(default=0)
+    candidate_eligible_count = models.PositiveIntegerField(default=0)
+    max_degree = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["week_end"]),
+            models.Index(fields=["created_at"]),
+        ]
+        ordering = ["-week_end", "-created_at"]
+
+    def __str__(self) -> str:
+        return self.run_id
+
+
+class FutureLinkWeeklyAuditLink(models.Model):
+    run = models.ForeignKey(
+        FutureLinkWeeklyAuditRun,
+        on_delete=models.CASCADE,
+        related_name="links",
+    )
+    rank = models.PositiveIntegerField(null=True, blank=True)
+    score = models.FloatField(null=True, blank=True)
+    podcast = models.ForeignKey(Podcast, on_delete=models.CASCADE, related_name="+")
+    canonical = models.ForeignKey(CanonicalPersonEntity, on_delete=models.CASCADE, related_name="+")
+    link_published_at = models.DateTimeField()
+    first_episode_published_at = models.DateTimeField()
+    latest_episode_published_at = models.DateTimeField()
+    distance = models.PositiveIntegerField(null=True, blank=True)
+    candidate_eligible = models.BooleanField(default=False)
+    was_existing_before_cutoff = models.BooleanField(default=False)
+    was_host_before_cutoff = models.BooleanField(default=False)
+    features = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "podcast", "canonical"],
+                name="unique_future_link_weekly_audit_pair_per_run",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["run", "rank"]),
+            models.Index(fields=["run", "score"]),
+            models.Index(fields=["link_published_at"]),
+            models.Index(fields=["podcast"]),
+            models.Index(fields=["canonical"]),
+        ]
+        ordering = ["run", "rank", "-link_published_at"]
+
+    def __str__(self) -> str:
+        return f"{self.run_id}: {self.podcast_id} -> {self.canonical_id}"
+
+
 class NetworkMetricRun(models.Model):
     class Status(models.TextChoices):
         RUNNING = "running", "Running"
