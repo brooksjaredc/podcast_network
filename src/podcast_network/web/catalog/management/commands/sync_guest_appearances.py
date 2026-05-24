@@ -32,6 +32,7 @@ class SyncStats:
     skipped_host_candidates: int = 0
     skipped_single_name_candidates: int = 0
     single_name_people_pruned: int = 0
+    extraction_run_label: str = ""
 
 
 class Command(BaseCommand):
@@ -43,6 +44,14 @@ class Command(BaseCommand):
         parser.add_argument("--second-pass-model", default="gpt-5-mini")
         parser.add_argument("--min-confidence", type=float, default=0.90)
         parser.add_argument("--limit", type=int, default=0)
+        parser.add_argument(
+            "--extraction-run-label",
+            default="",
+            help=(
+                "Only materialize episode extractions from runs with this coordinator label. "
+                "Use this for weekly incremental updates."
+            ),
+        )
         parser.add_argument(
             "--clear",
             action="store_true",
@@ -72,6 +81,7 @@ class Command(BaseCommand):
             second_pass_model=str(options["second_pass_model"]),
             min_confidence=float(options["min_confidence"]),
             limit=int(options["limit"]),
+            extraction_run_label=str(options["extraction_run_label"]),
             sync_hosts=not bool(options["skip_host_sync"]),
             prune_single_name_people=not bool(options["keep_single_name_people"]),
         )
@@ -99,37 +109,44 @@ def sync_guest_appearances(
     second_pass_model: str,
     min_confidence: float,
     limit: int = 0,
+    extraction_run_label: str = "",
     sync_hosts: bool = True,
     prune_single_name_people: bool = True,
 ) -> SyncStats:
     stats = SyncStats()
+    stats.extraction_run_label = extraction_run_label
     people_by_normalized = {
         person.normalized_name: person
         for person in Person.objects.only("id", "name", "normalized_name")
     }
     people_by_name = {person.name: person for person in people_by_normalized.values()}
     host_normalized_by_podcast = podcast_host_index()
+
+    episode_extractions = EpisodeGuestExtraction.objects.filter(
+        prompt_version=prompt_version,
+        status=EpisodeGuestExtraction.Status.SUCCEEDED,
+    )
+    if extraction_run_label:
+        episode_extractions = episode_extractions.filter(
+            extraction_run__metadata__coordinator_label=extraction_run_label,
+        )
+    episode_ids = (
+        episode_extractions.values_list("episode_id", flat=True).distinct().order_by("episode_id")
+    )
+    if limit:
+        episode_ids = episode_ids[:limit]
+    episode_ids = list(episode_ids)
+
     if sync_hosts:
         sync_host_appearances(
             people_by_normalized=people_by_normalized,
             people_by_name=people_by_name,
             host_normalized_by_podcast=host_normalized_by_podcast,
             stats=stats,
+            episode_ids=episode_ids if extraction_run_label else None,
         )
 
-    episode_ids = (
-        EpisodeGuestExtraction.objects.filter(
-            prompt_version=prompt_version,
-            status=EpisodeGuestExtraction.Status.SUCCEEDED,
-        )
-        .values_list("episode_id", flat=True)
-        .distinct()
-        .order_by("episode_id")
-    )
-    if limit:
-        episode_ids = episode_ids[:limit]
-
-    for episode_id in episode_ids.iterator(chunk_size=2000):
+    for episode_id in episode_ids:
         stats.episodes_seen += 1
         extraction = preferred_extraction(
             episode_id=episode_id,
@@ -195,13 +212,26 @@ def sync_host_appearances(
     people_by_name: dict[str, Person],
     host_normalized_by_podcast: dict[int, set[str]],
     stats: SyncStats,
+    episode_ids: list[int] | None = None,
 ) -> None:
-    for podcast in Podcast.objects.only("id").iterator(chunk_size=1000):
+    episodes_by_podcast: dict[int, list[int]] | None = None
+    podcasts = Podcast.objects.only("id")
+    if episode_ids is not None:
+        episodes_by_podcast = {}
+        for episode_id, podcast_id in Episode.objects.filter(id__in=episode_ids).values_list(
+            "id",
+            "podcast_id",
+        ):
+            episodes_by_podcast.setdefault(podcast_id, []).append(episode_id)
+        podcasts = podcasts.filter(id__in=episodes_by_podcast)
+    for podcast in podcasts.iterator(chunk_size=1000):
         host_names = explicit_host_names(podcast)
         if not host_names:
             continue
-        episode_ids = list(
-            Episode.objects.filter(podcast=podcast).values_list("id", flat=True)
+        podcast_episode_ids = (
+            episodes_by_podcast[podcast.id]
+            if episodes_by_podcast is not None
+            else list(Episode.objects.filter(podcast=podcast).values_list("id", flat=True))
         )
         for host_name in host_names:
             display_name = clean_person_display_name(host_name)
@@ -225,7 +255,7 @@ def sync_host_appearances(
                     source="podcast-metadata",
                     confidence=1.0,
                 )
-                for episode_id in episode_ids
+                for episode_id in podcast_episode_ids
             ]
             created = Appearance.objects.bulk_create(appearances, ignore_conflicts=True)
             stats.host_appearances_created += len(created)

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import podcast_network.plots.generate as plot_generate
 from podcast_network.plots.generate import generate_all_plots, plotly_div_id
 

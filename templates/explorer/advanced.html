@@ -18,11 +18,11 @@
       <p>{{ section.body }}</p>
       {% if section.plot %}
         <div class="plot interactive-plot">
-          <iframe src="{% static section.plot %}" title="{{ section.heading }}" loading="lazy"></iframe>
+          <iframe src="{{ section.plot_url }}" title="{{ section.heading }}" loading="lazy"></iframe>
         </div>
       {% elif section.image %}
         <div class="plot">
-          <img src="{% static section.image %}" alt="{{ section.heading }}">
+          <img src="{{ section.image_url }}" alt="{{ section.heading }}">
         </div>
       {% endif %}
     </section>

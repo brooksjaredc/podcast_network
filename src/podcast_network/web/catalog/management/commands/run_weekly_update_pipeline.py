@@ -29,7 +29,6 @@ TODO_NOTES = (
     "Add scheduled host/co-host extraction refresh for newly discovered podcasts.",
     "Add single-name resolution once the cheaper/contextual strategy is settled.",
     "Add entity-resolution active-learning sampling for new uncertain pairs.",
-    "Add optional plot/static artifact regeneration once plots read from Postgres metrics.",
 )
 
 
@@ -42,7 +41,15 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--phase",
-            choices=["all", "scrape", "llm", "processing-er", "metrics", "predictions"],
+            choices=[
+                "all",
+                "scrape",
+                "llm",
+                "processing-er",
+                "metrics",
+                "predictions",
+                "plots",
+            ],
             default="all",
             help=(
                 "Run one phase of the weekly update. Use 'all' for the legacy "
@@ -108,6 +115,8 @@ class Command(BaseCommand):
         parser.add_argument("--future-link-top-n", type=int, default=1000)
         parser.add_argument("--future-link-batch-size", type=int, default=200000)
         parser.add_argument("--future-link-max-degree", type=int, default=3)
+        parser.add_argument("--plot-output-dir", default="static/plots")
+        parser.add_argument("--plot-gcs-output-uri", default="")
         parser.add_argument(
             "--reprocess-current-prompt",
             action="store_true",
@@ -123,6 +132,7 @@ class Command(BaseCommand):
         parser.add_argument("--skip-network-metrics", action="store_true")
         parser.add_argument("--skip-network-evolution", action="store_true")
         parser.add_argument("--skip-future-link-predictions", action="store_true")
+        parser.add_argument("--skip-static-plots", action="store_true")
         parser.add_argument("--skip-graph-warm", action="store_true")
         parser.add_argument(
             "--dry-run",
@@ -231,6 +241,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                         "first_pass_model": str(options["first_pass_model"]),
                         "second_pass_model": str(options["second_pass_model"]),
                         "min_confidence": float(options["min_guest_confidence"]),
+                        "extraction_run_label": coordinator_label,
                     },
                 ),
                 PipelineStep(
@@ -303,6 +314,17 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     },
                 ),
             ]
+        )
+    if phase in {"all", "predictions", "plots"} and not options["skip_static_plots"]:
+        steps.append(
+            PipelineStep(
+                name="Regenerate static plots",
+                command="generate_static_plots",
+                options={
+                    "output_dir": str(options["plot_output_dir"]),
+                    "gcs_output_uri": str(options["plot_gcs_output_uri"]),
+                },
+            )
         )
     return steps
 

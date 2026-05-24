@@ -912,6 +912,32 @@ def test_advanced_predictions_loads() -> None:
     assert f"/people/{person.id}/".encode() in response.content
 
 
+@override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
+def test_advanced_pages_use_dynamic_plot_asset_route() -> None:
+    response = Client().get("/advanced/")
+
+    assert response.status_code == 200
+    assert b"/advanced/plots/network_podcasts.html" in response.content
+    assert b"/static/plots/network_podcasts.html" not in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
+def test_plot_asset_route_serves_local_fallback() -> None:
+    response = Client().get("/advanced/plots/plotly.min.js")
+
+    assert response.status_code == 200
+    assert response["X-Frame-Options"] == "SAMEORIGIN"
+    assert response["Content-Type"] in {"text/javascript", "application/javascript"}
+    assert b"Plotly" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
+def test_plot_asset_route_rejects_unsafe_paths() -> None:
+    response = Client().get("/advanced/plots/../settings.py")
+
+    assert response.status_code == 404
+
+
 @override_settings(ALLOWED_HOSTS=["testserver"])
 def test_podcast_detail_shows_future_link_predictions() -> None:
     podcast = Podcast.objects.create(name="Predicted Guest Podcast")

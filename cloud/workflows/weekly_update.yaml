@@ -9,6 +9,7 @@ main:
           - llm_job: ${default(map.get(args, "llm_job"), "podcast-network-weekly-llm")}
           - processing_job: ${default(map.get(args, "processing_job"), "podcast-network-weekly-processing-er")}
           - metrics_job: ${default(map.get(args, "metrics_job"), "podcast-network-weekly-metrics")}
+          - predictions_job: ${default(map.get(args, "predictions_job"), "podcast-network-weekly-predictions")}
     - run_scrape:
         call: run_job
         args:
@@ -37,12 +38,20 @@ main:
           region: ${region}
           job_name: ${metrics_job}
         result: metrics_execution
+    - run_predictions:
+        call: run_job
+        args:
+          project_id: ${project_id}
+          region: ${region}
+          job_name: ${predictions_job}
+        result: predictions_execution
     - done:
         return:
           scrape: ${scrape_execution}
           llm: ${llm_execution}
           processing_er: ${processing_execution}
           metrics: ${metrics_execution}
+          predictions: ${predictions_execution}
 
 run_job:
   params: [project_id, region, job_name]

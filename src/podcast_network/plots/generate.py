@@ -164,11 +164,7 @@ def generate_all_plots() -> list[Path]:
         ),
         histogram_chart(
             "leader_histogram.svg",
-            [
-                value
-                for podcast in repo.podcasts
-                for value in (podcast.hub_leader_score, podcast.bt_diff_leader_score)
-            ],
+            leadership_scores(repo),
             "Podcast Leadership Scores",
             "Score",
         ),
@@ -194,7 +190,7 @@ def generate_all_plots() -> list[Path]:
         ),
         histogram_chart(
             "predictions_histogram.svg",
-            [prediction.prob for prediction in repo.predictions],
+            prediction_probabilities(repo),
             "Prediction Probabilities",
             "Predicted Probability",
         ),
@@ -260,11 +256,7 @@ def generate_interactive_plots(repo: LegacyRepository) -> list[Path]:
         ),
         plotly_histogram(
             "leader_histogram.html",
-            [
-                value
-                for podcast in repo.podcasts
-                for value in (podcast.hub_leader_score, podcast.bt_diff_leader_score)
-            ],
+            leadership_scores(repo),
             "Podcast Leadership Scores",
         ),
         plotly_line(
@@ -312,7 +304,7 @@ def generate_interactive_plots(repo: LegacyRepository) -> list[Path]:
         ),
         plotly_histogram(
             "predictions_histogram.html",
-            [prediction.prob for prediction in repo.predictions],
+            prediction_probabilities(repo),
             "Prediction Probabilities",
         ),
         cytoscape_network(
@@ -727,6 +719,11 @@ def unique(values: Iterable[str]) -> list[str]:
 
 
 def podcast_similarity_graph() -> nx.Graph:
+    graph = database_podcast_similarity_graph()
+    if graph.number_of_nodes():
+        return graph
+    if not (LEGACY_ANALYSIS_DIR / "podcast_similarities.csv").exists():
+        return nx.Graph()
     df = pd.read_csv(LEGACY_ANALYSIS_DIR / "podcast_similarities.csv", sep="\t", index_col=0)
     graph = nx.Graph()
     for row in df.sort_values("score", ascending=False).head(90).itertuples():
@@ -735,6 +732,11 @@ def podcast_similarity_graph() -> nx.Graph:
 
 
 def people_graph(repo: LegacyRepository) -> nx.Graph:
+    graph = database_people_graph()
+    if graph.number_of_nodes():
+        return graph
+    if not (LEGACY_ANALYSIS_DIR / "six_degrees.edgelist").exists():
+        return nx.Graph()
     top_names = {person.name for person in sorted(repo.people, key=lambda item: item.pr_rank)[:180]}
     graph = nx.Graph()
     for edge in load_edges(LEGACY_ANALYSIS_DIR / "six_degrees.edgelist"):
@@ -744,6 +746,90 @@ def people_graph(repo: LegacyRepository) -> nx.Graph:
         ranked = {person.name: person.pr_rank for person in repo.people}
         keep = sorted(graph.nodes, key=lambda node: ranked.get(node, 999_999))[:240]
         graph = graph.subgraph(keep).copy()
+    return graph
+
+
+def leadership_scores(repo: LegacyRepository) -> list[float]:
+    try:
+        return [
+            value
+            for podcast in repo.podcasts
+            for value in (podcast.hub_leader_score, podcast.bt_diff_leader_score)
+        ]
+    except FileNotFoundError:
+        return []
+
+
+def prediction_probabilities(repo: LegacyRepository) -> list[float]:
+    try:
+        ensure_django_ready()
+        from podcast_network.web.catalog.models import FutureLinkPrediction, FutureLinkPredictionRun
+
+        run = FutureLinkPredictionRun.objects.order_by("-created_at").first()
+        if run is not None:
+            return list(
+                FutureLinkPrediction.objects.filter(run=run).values_list("score", flat=True)
+            )
+    except (OperationalError, ProgrammingError):
+        pass
+    try:
+        return [prediction.prob for prediction in repo.predictions]
+    except FileNotFoundError:
+        return []
+
+
+def database_podcast_similarity_graph(*, limit: int = 90) -> nx.Graph:
+    graph = nx.Graph()
+    try:
+        ensure_django_ready()
+        from podcast_network.network_metrics import latest_succeeded_metric_run
+        from podcast_network.web.catalog.models import PodcastNetworkMetric
+
+        run = latest_succeeded_metric_run()
+        if run is None:
+            return graph
+        metrics = list(
+            PodcastNetworkMetric.objects.filter(run=run)
+            .select_related("podcast")
+            .order_by("degree_rank", "podcast__name")[:limit]
+        )
+        podcast_ids = {metric.podcast_id for metric in metrics}
+        podcast_names = {metric.podcast_id: metric.podcast.name for metric in metrics}
+        for metric in metrics:
+            graph.add_node(metric.podcast.name)
+        edges = (
+            PodcastNetworkMetric.objects.filter(run=run, podcast_id__in=podcast_ids)
+            .values_list("podcast_id", "podcast__name")
+        )
+        # The compact SVG uses the same Postgres-backed payload for the interactive graph;
+        # this simple graph only needs representative nodes when edge weights are not stored
+        # directly in the metric table.
+        for _podcast_id, _podcast_name in edges:
+            pass
+        payload = database_podcast_network_payload(limit=limit, max_edges=180)
+        for edge in payload["edges"]:
+            source_name = podcast_names.get(int(edge["source"]), edge["source"])
+            target_name = podcast_names.get(int(edge["target"]), edge["target"])
+            graph.add_edge(source_name, target_name, weight=float(edge["weight"]))
+    except (OperationalError, ProgrammingError):
+        return nx.Graph()
+    return graph
+
+
+def database_people_graph(*, limit: int = 180) -> nx.Graph:
+    graph = nx.Graph()
+    try:
+        payload = database_people_network_payload(limit=limit, max_edges=300)
+        labels = {node["id"]: node["label"] for node in payload["nodes"]}
+        for label in labels.values():
+            graph.add_node(label)
+        for edge in payload["edges"]:
+            source = labels.get(edge["source"])
+            target = labels.get(edge["target"])
+            if source and target:
+                graph.add_edge(source, target, weight=float(edge["weight"]))
+    except (OperationalError, ProgrammingError):
+        return nx.Graph()
     return graph
 
 

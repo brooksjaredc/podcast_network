@@ -243,8 +243,16 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                 {
                     "heading": "Future Link Predictions",
                     "body": (
-                        "The current model scores podcast and guest pairs that are close in "
-                        "the historical network but have not yet appeared together."
+                        "These future link predictions are best understood as an exploratory "
+                        "experiment, not a serious forecasting product. Guest booking depends on "
+                        "many non-network factors: publicity cycles, availability, personal "
+                        "relationships, current events, agents, geography, and randomness. The "
+                        "dataset is also extremely imbalanced, and timing is especially hard: a "
+                        "guest may be a plausible fit for a podcast long before they actually "
+                        "appear. This feature was built mostly out of curiosity, to see how much "
+                        "signal exists in the network structure itself. It can be useful for "
+                        "inspecting patterns and model behavior, but the scores should not be "
+                        "taken as confident predictions or recommendations."
                     ),
                 },
             ],

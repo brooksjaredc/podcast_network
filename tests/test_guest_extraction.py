@@ -916,6 +916,115 @@ class GuestExtractionTests(TestCase):
         assert Appearance.objects.filter(role=Appearance.Role.HOST).count() == 1
         assert not Appearance.objects.filter(role=Appearance.Role.GUEST).exists()
 
+    def test_sync_guest_appearances_can_scope_to_extraction_run_label(self) -> None:
+        podcast = Podcast.objects.create(name="Weekly Scoped")
+        first_episode = Episode.objects.create(
+            podcast=podcast,
+            guid="weekly-1",
+            title="Weekly guest",
+            description="A test episode.",
+        )
+        second_episode = Episode.objects.create(
+            podcast=podcast,
+            guid="other-1",
+            title="Older guest",
+            description="A test episode.",
+        )
+        host_run = ExtractionRun.objects.create(
+            model="gpt-5-mini",
+            provider="openai",
+            prompt_version="podcast-host-extraction-v1",
+            episodes_requested=1,
+        )
+        host_extraction = PodcastHostExtraction.objects.create(
+            podcast=podcast,
+            extraction_run=host_run,
+            status=PodcastHostExtraction.Status.SUCCEEDED,
+            prompt_version="podcast-host-extraction-v1",
+            model="gpt-5-mini",
+            input_text="",
+        )
+        HostCandidate.objects.create(
+            extraction=host_extraction,
+            name="Jane Host",
+            normalized_name="jane host",
+            kind=HostCandidate.Kind.HOST,
+            confidence=0.95,
+        )
+        weekly_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v6",
+            episodes_requested=1,
+            metadata={"coordinator_label": "weekly-update-test"},
+        )
+        older_run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="fake",
+            prompt_version="guest-extraction-v6",
+            episodes_requested=1,
+            metadata={"coordinator_label": "older-run"},
+        )
+        weekly_extraction = EpisodeGuestExtraction.objects.create(
+            episode=first_episode,
+            extraction_run=weekly_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v6",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        older_extraction = EpisodeGuestExtraction.objects.create(
+            episode=second_episode,
+            extraction_run=older_run,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+            prompt_version="guest-extraction-v6",
+            model="gpt-5-nano",
+            input_text="",
+        )
+        GuestCandidate.objects.create(
+            extraction=weekly_extraction,
+            name="Weekly Guest",
+            normalized_name="weekly guest",
+            confidence=0.99,
+        )
+        GuestCandidate.objects.create(
+            extraction=older_extraction,
+            name="Older Guest",
+            normalized_name="older guest",
+            confidence=0.99,
+        )
+
+        call_command(
+            "sync_guest_appearances",
+            "--prompt-version",
+            "guest-extraction-v6",
+            "--min-confidence",
+            "0.90",
+            "--extraction-run-label",
+            "weekly-update-test",
+        )
+
+        assert Appearance.objects.filter(
+            episode=first_episode,
+            person__normalized_name="weekly guest",
+            role=Appearance.Role.GUEST,
+        ).exists()
+        assert not Appearance.objects.filter(
+            episode=second_episode,
+            person__normalized_name="older guest",
+            role=Appearance.Role.GUEST,
+        ).exists()
+        assert Appearance.objects.filter(
+            episode=first_episode,
+            person__normalized_name="jane host",
+            role=Appearance.Role.HOST,
+        ).exists()
+        assert not Appearance.objects.filter(
+            episode=second_episode,
+            person__normalized_name="jane host",
+            role=Appearance.Role.HOST,
+        ).exists()
+
 
 class AsyncGuestExtractionTests(TransactionTestCase):
     def test_async_extraction_respects_concurrency_and_persists_results(self) -> None:

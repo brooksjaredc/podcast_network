@@ -81,14 +81,14 @@ RANKING_DEFINITIONS = [
 
 
 def home(request: HttpRequest) -> HttpResponse:
-    graph = database_six_degrees_graph()
+    stats = home_network_stats()
     return render(
         request,
         "explorer/home.html",
         {
-            "podcast_count": graph.podcast_count,
-            "person_count": graph.person_count,
-            "duration_count": Appearance.objects.filter(role=Appearance.Role.GUEST).count(),
+            "podcast_count": stats["podcast_count"],
+            "person_count": stats["person_count"],
+            "duration_count": stats["guest_appearance_count"],
         },
     )
 
@@ -1037,6 +1037,28 @@ def english_podcasts(podcasts) -> list[Podcast]:
 
 def guest_filter(prefix: str):
     return Q(**{f"{prefix}__role": Appearance.Role.GUEST})
+
+
+def home_network_stats() -> dict[str, int]:
+    podcast_ids = [
+        podcast_id
+        for podcast_id, podcast_name in Podcast.objects.filter(episodes__appearances__isnull=False)
+        .values_list("id", "name")
+        .distinct()
+        if is_likely_english_podcast_name(podcast_name)
+    ]
+    if not podcast_ids:
+        return {
+            "podcast_count": 0,
+            "person_count": 0,
+            "guest_appearance_count": 0,
+        }
+    appearances = Appearance.objects.filter(episode__podcast_id__in=podcast_ids)
+    return {
+        "podcast_count": len(podcast_ids),
+        "person_count": appearances.values("person_id").distinct().count(),
+        "guest_appearance_count": appearances.filter(role=Appearance.Role.GUEST).count(),
+    }
 
 
 def podcast_or_none(podcast_id: int | None) -> Podcast | None:

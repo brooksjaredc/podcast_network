@@ -22,6 +22,7 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
         "calculate_network_evolution",
         "audit_future_link_weekly_new_links",
         "score_future_link_predictions",
+        "generate_static_plots",
     ]
     batch_step = steps[1]
     assert batch_step.options["new_episodes_only"] is True
@@ -29,6 +30,8 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert batch_step.options["max_first_pass_batches"] == 0
     assert batch_step.options["first_pass_reasoning_effort"] == "low"
     assert batch_step.options["coordinator_label"].startswith("weekly-update-")
+    sync_step = steps[2]
+    assert sync_step.options["extraction_run_label"].startswith("weekly-update-")
     scrape_step = steps[0]
     assert scrape_step.options["raw_snapshot_storage"] == "none"
     assert scrape_step.options["max_episodes_per_feed"] == 500
@@ -49,6 +52,8 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert audit_step.options["run_id"].startswith("weekly-update-")
     prediction_step = steps[8]
     assert prediction_step.options["top_n"] == 1000
+    plot_step = steps[9]
+    assert plot_step.options["output_dir"] == "static/plots"
 
 
 def test_weekly_update_plan_can_reprocess_current_prompt() -> None:
@@ -73,7 +78,9 @@ def test_weekly_update_plan_can_run_independent_cloud_job_phases() -> None:
         "predictions": [
             "audit_future_link_weekly_new_links",
             "score_future_link_predictions",
+            "generate_static_plots",
         ],
+        "plots": ["generate_static_plots"],
     }
 
     for phase, expected_commands in expected_commands_by_phase.items():
@@ -113,7 +120,7 @@ def test_weekly_update_todos_document_future_processing_hooks() -> None:
     assert any("topic-only false positives" in note for note in TODO_NOTES)
     assert any("single-name resolution" in note for note in TODO_NOTES)
     assert not any("future-guest feature rebuild" in note for note in TODO_NOTES)
-    assert any("plots read from Postgres" in note for note in TODO_NOTES)
+    assert not any("plots read from Postgres" in note for note in TODO_NOTES)
 
 
 def default_options() -> dict[str, object]:
@@ -152,6 +159,8 @@ def default_options() -> dict[str, object]:
         "future_link_top_n": 1000,
         "future_link_batch_size": 200000,
         "future_link_max_degree": 3,
+        "plot_output_dir": "static/plots",
+        "plot_gcs_output_uri": "",
         "reprocess_current_prompt": False,
         "skip_scrape": False,
         "skip_llm": False,
@@ -160,6 +169,7 @@ def default_options() -> dict[str, object]:
         "skip_network_metrics": False,
         "skip_network_evolution": False,
         "skip_future_link_predictions": False,
+        "skip_static_plots": False,
         "skip_graph_warm": False,
         "phase": "all",
     }
