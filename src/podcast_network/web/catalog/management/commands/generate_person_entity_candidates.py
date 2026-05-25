@@ -16,6 +16,7 @@ from podcast_network.entities.features import (
     tokenize_name,
 )
 from podcast_network.entities.resolution import person_candidate_pair_id
+from podcast_network.operational_safety import require_destructive_confirmation
 from podcast_network.web.catalog.models import (
     CanonicalPersonEntity,
     PersonEntityCandidatePair,
@@ -47,9 +48,19 @@ class Command(BaseCommand):
         )
         parser.add_argument("--chunk-size", type=int, default=5000)
         parser.add_argument("--clear", action="store_true")
+        parser.add_argument(
+            "--confirm-destructive",
+            action="store_true",
+            help="Required with --clear when running against Postgres.",
+        )
         parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args: object, **options: object) -> None:
+        if options["clear"]:
+            require_destructive_confirmation(
+                action="generate_person_entity_candidates --clear",
+                confirmed=bool(options["confirm_destructive"]),
+            )
         stats = generate_person_entity_candidates(
             limit_pairs=int(options["limit_pairs"]),
             min_observations=int(options["min_observations"]),

@@ -9,6 +9,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 from psycopg import sql
 
+from podcast_network.operational_safety import require_destructive_confirmation
+
 CATALOG_TABLES = [
     "catalog_podcast",
     "catalog_scraperun",
@@ -52,6 +54,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Append to existing Postgres rows instead of truncating catalog tables first.",
         )
+        parser.add_argument(
+            "--confirm-destructive",
+            action="store_true",
+            help="Required before truncating catalog tables in Postgres.",
+        )
 
     def handle(self, *args, **options) -> None:
         if connection.vendor != "postgresql":
@@ -64,7 +71,13 @@ class Command(BaseCommand):
         source = sqlite3.connect(sqlite_path)
         source.row_factory = sqlite3.Row
         try:
-            self.copy_tables(source, truncate=not options["no_truncate"])
+            truncate = not options["no_truncate"]
+            if truncate:
+                require_destructive_confirmation(
+                    action="copy_sqlite_to_postgres table truncation",
+                    confirmed=bool(options["confirm_destructive"]),
+                )
+            self.copy_tables(source, truncate=truncate)
         finally:
             source.close()
 

@@ -14,6 +14,7 @@ from podcast_network.extraction.batch import BATCH_ENDPOINT, write_batch_jsonl
 from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL
 from podcast_network.extraction.pipeline import finalize_extraction_run
 from podcast_network.extraction.prompt import PROMPT_VERSION
+from podcast_network.pipeline_progress import update_pipeline_step_progress
 from podcast_network.web.catalog.management.commands.backfill_guest_extractions import (
     nonnegative_int,
     positive_int,
@@ -313,6 +314,17 @@ class Command(BaseCommand):
         while run.status == ExtractionRun.Status.RUNNING:
             batch = client.batches.retrieve(str(run.metadata["batch_id"]))
             counts = getattr(batch, "request_counts", None)
+            update_pipeline_step_progress(
+                run_label=extraction_run_label(run),
+                command="run_guest_extraction_batch_backfill",
+                metadata={
+                    "extraction_run_id": run.id,
+                    "phase": run.metadata.get("phase"),
+                    "batch_id": batch.id,
+                    "batch_status": batch.status,
+                    "request_counts": request_counts_metadata(counts),
+                },
+            )
             self.stdout.write(
                 f"{timezone.now().isoformat()} - Run {run.id} batch {batch.id}: "
                 f"{batch.status}; requests={counts}."
@@ -362,6 +374,18 @@ class Command(BaseCommand):
         run.metadata = metadata
         run.save(update_fields=["metadata"])
         finalize_extraction_run(run=run, outcomes=outcomes)
+        update_pipeline_step_progress(
+            run_label=extraction_run_label(run),
+            command="run_guest_extraction_batch_backfill",
+            metadata={
+                "extraction_run_id": run.id,
+                "phase": run.metadata.get("phase"),
+                "batch_id": batch.id,
+                "batch_status": "completed",
+                "episodes_succeeded": run.episodes_succeeded,
+                "episodes_failed": run.episodes_failed,
+            },
+        )
         self.stdout.write(
             self.style.SUCCESS(
                 f"Synced run {run.id}: {run.episodes_succeeded} succeeded, "
@@ -379,6 +403,15 @@ class Command(BaseCommand):
             "batch_errors": errors.model_dump(mode="json") if errors else None,
         }
         run.save(update_fields=["status", "finished_at", "metadata"])
+        update_pipeline_step_progress(
+            run_label=extraction_run_label(run),
+            command="run_guest_extraction_batch_backfill",
+            metadata={
+                "extraction_run_id": run.id,
+                "batch_id": batch.id,
+                "batch_status": batch.status,
+            },
+        )
         self.stdout.write(self.style.ERROR(f"Run {run.id} failed: batch {batch.status}."))
         if errors:
             for error in errors.data:
@@ -404,3 +437,20 @@ class Command(BaseCommand):
         if first_pass_run_id is not None:
             queryset = queryset.filter(metadata__review_band_run_id=first_pass_run_id)
         return queryset.order_by("started_at").first()
+
+
+def request_counts_metadata(counts: object) -> dict[str, object]:
+    if counts is None:
+        return {}
+    if hasattr(counts, "model_dump"):
+        dumped = counts.model_dump(mode="json")
+        return dumped if isinstance(dumped, dict) else {}
+    return {
+        key: getattr(counts, key)
+        for key in ["total", "completed", "failed"]
+        if hasattr(counts, key)
+    }
+
+
+def extraction_run_label(run: ExtractionRun) -> str:
+    return str(run.metadata.get("coordinator_label") or run.metadata.get("run_label") or "")

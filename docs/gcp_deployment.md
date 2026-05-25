@@ -143,3 +143,13 @@ temporary path and durable `input_jsonl_gcs_uri`, `output_jsonl_gcs_uri`, and op
 Future-link prediction/audit runs record model artifact `model_sha256`,
 `model_size_bytes`, and the current `git_sha` in run metadata. Trained person-entity
 candidate scoring stores the same model checksum fields in candidate pair features.
+
+Destructive management-command options such as `sync_guest_appearances --clear`,
+`generate_person_entity_candidates --clear`, and the default truncating mode of
+`copy_sqlite_to_postgres` require `--confirm-destructive` when running against Postgres.
+For one-off controlled automation, `PODCAST_NETWORK_ALLOW_DESTRUCTIVE=true` can also
+provide that confirmation.
+
+Heavy management commands support `--statement-timeout-ms` to set a Postgres
+`statement_timeout` for the duration of the command. The default `0` leaves the
+connection unchanged.

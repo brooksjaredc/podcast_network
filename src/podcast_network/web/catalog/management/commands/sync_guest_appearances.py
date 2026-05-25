@@ -8,6 +8,10 @@ from django.db import IntegrityError
 from podcast_network.cleaning import clean_person_display_name, is_single_token_person_name
 from podcast_network.extraction.pipeline import normalize_name
 from podcast_network.extraction.prompt import PROMPT_VERSION
+from podcast_network.operational_safety import (
+    database_statement_timeout,
+    require_destructive_confirmation,
+)
 from podcast_network.web.catalog.models import (
     Appearance,
     Episode,
@@ -54,6 +58,7 @@ class Command(BaseCommand):
         parser.add_argument("--min-confidence", type=float, default=0.90)
         parser.add_argument("--limit", type=int, default=0)
         parser.add_argument("--chunk-size", type=int, default=5000)
+        parser.add_argument("--statement-timeout-ms", type=int, default=0)
         parser.add_argument(
             "--extraction-run-label",
             default="",
@@ -68,6 +73,11 @@ class Command(BaseCommand):
             help="Delete existing materialized LLM guest and metadata host appearances first.",
         )
         parser.add_argument(
+            "--confirm-destructive",
+            action="store_true",
+            help="Required with --clear when running against Postgres.",
+        )
+        parser.add_argument(
             "--skip-host-sync",
             action="store_true",
             help="Do not create host appearances from podcast metadata.",
@@ -80,22 +90,27 @@ class Command(BaseCommand):
 
     def handle(self, *args: object, **options: object) -> None:
         if options["clear"]:
+            require_destructive_confirmation(
+                action="sync_guest_appearances --clear",
+                confirmed=bool(options["confirm_destructive"]),
+            )
             deleted, _ = Appearance.objects.filter(
                 source__in=["llm-guest-extraction", "podcast-metadata"],
             ).delete()
             self.stdout.write(f"Deleted {deleted} existing materialized appearance rows.")
 
-        stats = sync_guest_appearances(
-            prompt_version=str(options["prompt_version"]),
-            first_pass_model=str(options["first_pass_model"]),
-            second_pass_model=str(options["second_pass_model"]),
-            min_confidence=float(options["min_confidence"]),
-            limit=int(options["limit"]),
-            chunk_size=int(options["chunk_size"]),
-            extraction_run_label=str(options["extraction_run_label"]),
-            sync_hosts=not bool(options["skip_host_sync"]),
-            prune_single_name_people=not bool(options["keep_single_name_people"]),
-        )
+        with database_statement_timeout(int(options["statement_timeout_ms"])):
+            stats = sync_guest_appearances(
+                prompt_version=str(options["prompt_version"]),
+                first_pass_model=str(options["first_pass_model"]),
+                second_pass_model=str(options["second_pass_model"]),
+                min_confidence=float(options["min_confidence"]),
+                limit=int(options["limit"]),
+                chunk_size=int(options["chunk_size"]),
+                extraction_run_label=str(options["extraction_run_label"]),
+                sync_hosts=not bool(options["skip_host_sync"]),
+                prune_single_name_people=not bool(options["keep_single_name_people"]),
+            )
         self.stdout.write(
             self.style.SUCCESS(
                 "Synced guest appearances: "

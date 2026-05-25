@@ -10,6 +10,7 @@ from podcast_network.web.catalog.models import (
     FutureLinkWeeklyAuditRun,
     NetworkEvolutionRun,
     NetworkMetricRun,
+    PipelineRun,
     ScrapeRun,
 )
 
@@ -27,11 +28,30 @@ class Command(BaseCommand):
     def handle(self, *args: object, **options: object) -> None:
         run_label = str(options["run_label"])
         self.stdout.write(self.style.MIGRATE_HEADING(f"Weekly update status: {run_label}"))
+        self.print_pipeline_status(run_label)
         self.print_scrape_status(run_label)
         self.print_extraction_status(run_label)
         self.print_processing_status(run_label)
         self.print_prediction_status(run_label)
         self.print_metric_status(run_label)
+
+    def print_pipeline_status(self, run_label: str) -> None:
+        self.stdout.write(self.style.MIGRATE_HEADING("Pipeline"))
+        run = PipelineRun.objects.filter(run_label=run_label).order_by("-started_at").first()
+        if run is None:
+            self.stdout.write("No pipeline run found.")
+            return
+        self.stdout.write(
+            f"- PipelineRun {run.id}: {run.status}, phase={run.phase}, "
+            f"started={run.started_at}, finished={run.finished_at}"
+        )
+        for step in run.steps.order_by("sequence"):
+            progress = format_progress_metadata(step.metadata)
+            suffix = f", progress={progress}" if progress else ""
+            self.stdout.write(
+                f"  - {step.sequence}. {step.command}: {step.status}, "
+                f"elapsed={step.elapsed_seconds}{suffix}"
+            )
 
     def print_scrape_status(self, run_label: str) -> None:
         runs = ScrapeRun.objects.filter(run_label=run_label).order_by("-started_at")
@@ -142,3 +162,23 @@ class Command(BaseCommand):
                 f"weeks={evolution_run.weeks_calculated}/{evolution_run.weeks_requested}, "
                 f"finished={evolution_run.finished_at}"
             )
+
+
+def format_progress_metadata(metadata: dict[str, object]) -> str:
+    if not metadata:
+        return ""
+    preferred_keys = [
+        "processed",
+        "total",
+        "succeeded",
+        "failed",
+        "batch_status",
+        "candidate_count",
+        "rows_written",
+    ]
+    parts = [
+        f"{key}={metadata[key]}"
+        for key in preferred_keys
+        if key in metadata and metadata[key] not in {"", None}
+    ]
+    return ", ".join(parts)

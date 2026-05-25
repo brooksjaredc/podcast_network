@@ -21,6 +21,7 @@ from podcast_network.future_links.features import (
     selected_feature_values,
 )
 from podcast_network.future_links.prediction import LinkCandidate, build_historical_link_data
+from podcast_network.operational_safety import database_statement_timeout
 from podcast_network.paths import PROJECT_ROOT
 from podcast_network.web.catalog.models import (
     Appearance,
@@ -43,8 +44,13 @@ class Command(BaseCommand):
         parser.add_argument("--window-days", type=int, default=7)
         parser.add_argument("--max-degree", type=int, default=3)
         parser.add_argument("--include-hosts", action="store_true")
+        parser.add_argument("--statement-timeout-ms", type=int, default=0)
 
     def handle(self, *args: object, **options: object) -> None:
+        with database_statement_timeout(int(options["statement_timeout_ms"])):
+            self.handle_with_timeout(*args, **options)
+
+    def handle_with_timeout(self, *args: object, **options: object) -> None:
         if not options["model_path"] and not options["gcs_model_uri"]:
             raise ValueError("Provide --model-path or --gcs-model-uri.")
         window_days = int(options["window_days"])

@@ -5,6 +5,8 @@ from pathlib import Path
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandParser
 
+from podcast_network.operational_safety import database_statement_timeout
+
 CURRENT_ENTITY_MODEL = Path("data/models/person_entity_xgboost_namefreq_groups_v1.joblib")
 CURRENT_ENTITY_MODEL_NAME = "person-entity-xgboost-namefreq-groups-v1"
 
@@ -18,9 +20,14 @@ class Command(BaseCommand):
         parser.add_argument("--limit-pairs", type=int, default=10000)
         parser.add_argument("--min-observations", type=int, default=1)
         parser.add_argument("--chunk-size", type=int, default=5000)
+        parser.add_argument("--statement-timeout-ms", type=int, default=0)
         parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args: object, **options: object) -> None:
+        with database_statement_timeout(int(options["statement_timeout_ms"])):
+            self.handle_with_timeout(*args, **options)
+
+    def handle_with_timeout(self, *args: object, **options: object) -> None:
         model_path = Path(str(options["model"]))
         if not model_path.exists():
             self.stderr.write(self.style.ERROR(f"Model not found: {model_path}"))

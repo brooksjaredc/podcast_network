@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from io import StringIO
+
+from django.core.management import call_command
+
+from podcast_network.pipeline_progress import update_pipeline_step_progress
 from podcast_network.web.catalog.management.commands.run_weekly_update_pipeline import (
     TODO_NOTES,
     build_pipeline_steps,
@@ -139,6 +144,50 @@ def test_pipeline_run_ledger_records_steps() -> None:
     assert pipeline_run.metadata["step_count"] == len(steps)
     assert first_step.status == PipelineStepRun.Status.SUCCEEDED
     assert first_step.elapsed_seconds == 1.25
+
+
+def test_pipeline_step_progress_updates_running_step() -> None:
+    options = default_options()
+    options["coordinator_label"] = "weekly-update-progress-test"
+    options["phase"] = "scrape"
+    steps = build_pipeline_steps(options)
+    pipeline_run = start_pipeline_run(options=options, steps=steps)
+    step = pipeline_run.steps.get(command="ingest_feeds")
+    step.status = PipelineStepRun.Status.RUNNING
+    step.save(update_fields=["status"])
+
+    updated = update_pipeline_step_progress(
+        run_label="weekly-update-progress-test",
+        command="ingest_feeds",
+        metadata={"processed": 25, "total": 100, "failed": 1},
+    )
+
+    step.refresh_from_db()
+    assert updated is True
+    assert step.metadata["processed"] == 25
+    assert step.metadata["total"] == 100
+    assert step.metadata["failed"] == 1
+    assert "last_progress_at" in step.metadata
+
+
+def test_weekly_update_status_prints_pipeline_progress() -> None:
+    options = default_options()
+    options["coordinator_label"] = "weekly-update-status-test"
+    options["phase"] = "scrape"
+    pipeline_run = start_pipeline_run(options=options, steps=build_pipeline_steps(options))
+    step = pipeline_run.steps.get(command="ingest_feeds")
+    step.status = PipelineStepRun.Status.RUNNING
+    step.metadata = {"processed": 50, "total": 100, "succeeded": 49, "failed": 1}
+    step.save(update_fields=["status", "metadata"])
+    stdout = StringIO()
+
+    call_command("weekly_update_status", "--run-label", "weekly-update-status-test", stdout=stdout)
+
+    output = stdout.getvalue()
+    assert "PipelineRun" in output
+    assert "ingest_feeds" in output
+    assert "processed=50" in output
+    assert "failed=1" in output
 
 
 def test_weekly_update_only_warms_graph_for_metric_phase() -> None:

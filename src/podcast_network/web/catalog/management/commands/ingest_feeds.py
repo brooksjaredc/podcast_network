@@ -9,6 +9,7 @@ from podcast_network.ingest.storage import (
     LocalRawFeedStorage,
     NoopRawFeedStorage,
 )
+from podcast_network.pipeline_progress import update_pipeline_step_progress
 from podcast_network.web.catalog.models import Feed, Podcast
 
 
@@ -126,6 +127,16 @@ class Command(BaseCommand):
         )
 
         def progress(processed: int, succeeded: int, failed: int) -> None:
+            update_pipeline_step_progress(
+                run_label=str(options["run_label"]),
+                command="ingest_feeds",
+                metadata={
+                    "processed": processed,
+                    "succeeded": succeeded,
+                    "failed": failed,
+                    "total": len(feeds),
+                },
+            )
             if progress_every and processed % progress_every == 0:
                 self.stdout.write(
                     f"Processed {processed}/{len(feeds)} feeds: "
@@ -140,7 +151,7 @@ class Command(BaseCommand):
             max_episodes_per_feed=max_episodes_per_feed or None,
             concurrency=concurrency,
             run_label=str(options["run_label"]),
-            progress_callback=progress if progress_every else None,
+            progress_callback=progress,
         )
         self.stdout.write(
             self.style.SUCCESS(

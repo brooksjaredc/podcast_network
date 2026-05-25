@@ -22,7 +22,9 @@ from podcast_network.future_links.features import (
     selected_feature_values,
 )
 from podcast_network.future_links.prediction import build_historical_link_data, podcasts_to_score
+from podcast_network.operational_safety import database_statement_timeout
 from podcast_network.paths import PROJECT_ROOT
+from podcast_network.pipeline_progress import update_pipeline_step_progress
 from podcast_network.web.catalog.models import (
     CanonicalPersonEntity,
     FutureLinkPrediction,
@@ -47,8 +49,13 @@ class Command(BaseCommand):
         parser.add_argument("--include-inactive-podcasts", action="store_true")
         parser.add_argument("--include-hosts", action="store_true")
         parser.add_argument("--min-podcast-guest-count", type=int, default=1)
+        parser.add_argument("--statement-timeout-ms", type=int, default=0)
 
     def handle(self, *args: object, **options: object) -> None:
+        with database_statement_timeout(int(options["statement_timeout_ms"])):
+            self.handle_with_timeout(*args, **options)
+
+    def handle_with_timeout(self, *args: object, **options: object) -> None:
         if not options["model_path"] and not options["gcs_model_uri"]:
             raise ValueError("Provide --model-path or --gcs-model-uri.")
         top_n = int(options["top_n"])
@@ -134,6 +141,15 @@ class Command(BaseCommand):
                     )
                     batch_features = []
                     batch_candidates = []
+                    update_pipeline_step_progress(
+                        run_label=run_id,
+                        command="score_future_link_predictions",
+                        metadata={
+                            "candidate_count": candidate_count,
+                            "scored_podcast_count": len(podcast_ids),
+                            "heap_size": len(heap),
+                        },
+                    )
                     self.stdout.write(f"Scored {candidate_count:,} candidates...")
 
             if batch_features:
@@ -188,6 +204,15 @@ class Command(BaseCommand):
                 metadata=metadata,
                 rows=rows,
                 feature_names=feature_names,
+            )
+            update_pipeline_step_progress(
+                run_label=run_id,
+                command="score_future_link_predictions",
+                metadata={
+                    "candidate_count": candidate_count,
+                    "scored_podcast_count": len(podcast_ids),
+                    "rows_written": len(rows),
+                },
             )
 
             self.stdout.write(
