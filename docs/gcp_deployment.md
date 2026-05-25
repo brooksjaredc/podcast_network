@@ -70,6 +70,8 @@ Create secrets:
 printf 'REPLACE_ME' | gcloud secrets create django-secret-key --data-file=-
 printf 'REPLACE_ME' | gcloud secrets create openai-api-key --data-file=-
 printf 'REPLACE_ME' | gcloud secrets create database-url --data-file=-
+# Optional generic JSON webhook used by send_weekly_update_alert.
+printf 'REPLACE_ME' | gcloud secrets create weekly-update-alert-webhook-url --data-file=-
 ```
 
 For Cloud SQL Unix sockets, `DATABASE_URL` should look like:
@@ -108,7 +110,7 @@ gcloud run jobs create weekly-update \
   --region us-central1 \
   --set-cloudsql-instances PROJECT_ID:us-central1:podcast-network-db \
   --set-env-vars PODCAST_NETWORK_RAW_SNAPSHOT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/raw-feed-snapshots,PODCAST_NETWORK_BATCH_ARTIFACT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/openai-batches \
-  --set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest \
+  --set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest,PODCAST_NETWORK_WEEKLY_UPDATE_ALERT_WEBHOOK_URL=weekly-update-alert-webhook-url:latest \
   --command python \
   --args manage.py,run_weekly_update_pipeline \
   --task-timeout 86400 \
@@ -121,6 +123,10 @@ Before scheduling the job, run the command in dry-run mode and then with tight l
 ```bash
 gcloud run jobs execute weekly-update \
   --region us-central1 \
+  --args manage.py,production_preflight,--require-postgres,--require-production-settings,--require-gcs-artifacts,--future-link-gcs-model-uri,gs://PROJECT_ID-podcast-network-artifacts/future-link-training/MODEL/future_link_online_logistic.joblib
+
+gcloud run jobs execute weekly-update \
+  --region us-central1 \
   --args manage.py,run_weekly_update_pipeline,--dry-run
 
 gcloud run jobs execute weekly-update \
@@ -130,6 +136,13 @@ gcloud run jobs execute weekly-update \
 
 The regular weekly job is meant for incremental updates. Heavy historical backfills should
 remain separate jobs with explicit limits, not part of the regular web service startup.
+
+The Cloud Workflow runs `production_preflight` before scraping and
+`weekly_update_status --fail-on-problem` after predictions. A failure in either command
+fails the workflow execution instead of leaving the issue hidden in logs.
+It also calls `send_weekly_update_alert` after success or failure. You can pass
+`alert_webhook_url` as a workflow argument or configure
+`PODCAST_NETWORK_WEEKLY_UPDATE_ALERT_WEBHOOK_URL` on the alert/status Cloud Run job.
 
 To persist raw RSS snapshots from Cloud Run, pass `--raw-snapshot-storage gcs` to the
 scrape phase or weekly coordinator. The snapshot rows in Postgres will then point at

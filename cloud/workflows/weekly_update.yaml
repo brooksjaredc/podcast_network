@@ -6,6 +6,9 @@ main:
           - project_id: ${default(map.get(args, "project_id"), "podcast-network-prod")}
           - region: ${default(map.get(args, "region"), "us-central1")}
           - scrape_job: ${default(map.get(args, "scrape_job"), "podcast-network-weekly-scrape")}
+          - preflight_job: ${default(map.get(args, "preflight_job"), scrape_job)}
+          - status_job: ${default(map.get(args, "status_job"), scrape_job)}
+          - alert_job: ${default(map.get(args, "alert_job"), status_job)}
           - llm_job: ${default(map.get(args, "llm_job"), "podcast-network-weekly-llm")}
           - processing_job: ${default(map.get(args, "processing_job"), "podcast-network-weekly-processing-er")}
           - metrics_job: ${default(map.get(args, "metrics_job"), "podcast-network-weekly-metrics")}
@@ -15,98 +18,184 @@ main:
           - raw_snapshot_storage: ${default(map.get(args, "raw_snapshot_storage"), "gcs")}
           - raw_snapshot_gcs_uri: ${default(map.get(args, "raw_snapshot_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/raw-feed-snapshots")}
           - batch_artifact_gcs_uri: ${default(map.get(args, "batch_artifact_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/openai-batches")}
+          - alert_webhook_url: ${default(map.get(args, "alert_webhook_url"), "")}
           - plot_output_dir: ${default(map.get(args, "plot_output_dir"), "/tmp/static-plots")}
           - plot_gcs_output_uri: ${default(map.get(args, "plot_gcs_output_uri"), "gs://podcast-network-prod-podcast-network-artifacts/static-plots/latest")}
-    - run_scrape:
-        call: run_job
-        args:
-          project_id: ${project_id}
-          region: ${region}
-          job_name: ${scrape_job}
-          job_args:
-            - manage.py
-            - run_weekly_update_pipeline
-            - --phase
-            - scrape
-            - --coordinator-label
-            - ${run_label}
-            - --raw-snapshot-storage
-            - ${raw_snapshot_storage}
-            - --raw-snapshot-gcs-uri
-            - ${raw_snapshot_gcs_uri}
-        result: scrape_execution
-    - run_llm:
-        call: run_job
-        args:
-          project_id: ${project_id}
-          region: ${region}
-          job_name: ${llm_job}
-          job_args:
-            - manage.py
-            - run_weekly_update_pipeline
-            - --phase
-            - llm
-            - --coordinator-label
-            - ${run_label}
-            - --batch-artifact-gcs-uri
-            - ${batch_artifact_gcs_uri}
-        result: llm_execution
-    - run_processing:
-        call: run_job
-        args:
-          project_id: ${project_id}
-          region: ${region}
-          job_name: ${processing_job}
-          job_args:
-            - manage.py
-            - run_weekly_update_pipeline
-            - --phase
-            - processing-er
-            - --coordinator-label
-            - ${run_label}
-        result: processing_execution
-    - run_metrics:
-        call: run_job
-        args:
-          project_id: ${project_id}
-          region: ${region}
-          job_name: ${metrics_job}
-          job_args:
-            - manage.py
-            - run_weekly_update_pipeline
-            - --phase
-            - metrics
-            - --coordinator-label
-            - ${run_label}
-        result: metrics_execution
-    - run_predictions:
-        call: run_job
-        args:
-          project_id: ${project_id}
-          region: ${region}
-          job_name: ${predictions_job}
-          job_args:
-            - manage.py
-            - run_weekly_update_pipeline
-            - --phase
-            - predictions
-            - --coordinator-label
-            - ${run_label}
-            - --future-link-gcs-model-uri
-            - ${future_link_gcs_model_uri}
-            - --plot-output-dir
-            - ${plot_output_dir}
-            - --plot-gcs-output-uri
-            - ${plot_gcs_output_uri}
-        result: predictions_execution
+    - guarded_run:
+        try:
+          steps:
+            - run_preflight:
+                call: run_job
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${preflight_job}
+                  job_args:
+                    - manage.py
+                    - production_preflight
+                    - --require-postgres
+                    - --require-production-settings
+                    - --require-gcs-artifacts
+                    - --future-link-gcs-model-uri
+                    - ${future_link_gcs_model_uri}
+                result: preflight_execution
+            - run_scrape:
+                call: run_job
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${scrape_job}
+                  job_args:
+                    - manage.py
+                    - run_weekly_update_pipeline
+                    - --phase
+                    - scrape
+                    - --coordinator-label
+                    - ${run_label}
+                    - --raw-snapshot-storage
+                    - ${raw_snapshot_storage}
+                    - --raw-snapshot-gcs-uri
+                    - ${raw_snapshot_gcs_uri}
+                result: scrape_execution
+            - run_llm:
+                call: run_job
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${llm_job}
+                  job_args:
+                    - manage.py
+                    - run_weekly_update_pipeline
+                    - --phase
+                    - llm
+                    - --coordinator-label
+                    - ${run_label}
+                    - --batch-artifact-gcs-uri
+                    - ${batch_artifact_gcs_uri}
+                result: llm_execution
+            - run_processing:
+                call: run_job
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${processing_job}
+                  job_args:
+                    - manage.py
+                    - run_weekly_update_pipeline
+                    - --phase
+                    - processing-er
+                    - --coordinator-label
+                    - ${run_label}
+                result: processing_execution
+            - run_metrics:
+                call: run_job
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${metrics_job}
+                  job_args:
+                    - manage.py
+                    - run_weekly_update_pipeline
+                    - --phase
+                    - metrics
+                    - --coordinator-label
+                    - ${run_label}
+                result: metrics_execution
+            - run_predictions:
+                call: run_job
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${predictions_job}
+                  job_args:
+                    - manage.py
+                    - run_weekly_update_pipeline
+                    - --phase
+                    - predictions
+                    - --coordinator-label
+                    - ${run_label}
+                    - --future-link-gcs-model-uri
+                    - ${future_link_gcs_model_uri}
+                    - --plot-output-dir
+                    - ${plot_output_dir}
+                    - --plot-gcs-output-uri
+                    - ${plot_gcs_output_uri}
+                result: predictions_execution
+            - run_status:
+                call: run_job
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${status_job}
+                  job_args:
+                    - manage.py
+                    - weekly_update_status
+                    - --run-label
+                    - ${run_label}
+                    - --fail-on-problem
+                result: status_execution
+            - alert_success:
+                call: run_alert
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${alert_job}
+                  run_label: ${run_label}
+                  status: succeeded
+                  webhook_url: ${alert_webhook_url}
+                  error: ""
+                result: success_alert_execution
+        except:
+          as: workflow_error
+          steps:
+            - alert_failure:
+                call: run_alert
+                args:
+                  project_id: ${project_id}
+                  region: ${region}
+                  job_name: ${alert_job}
+                  run_label: ${run_label}
+                  status: failed
+                  webhook_url: ${alert_webhook_url}
+                  error: ${json.encode_to_string(workflow_error)}
+                result: failure_alert_execution
+            - raise_failure:
+                raise: ${workflow_error}
     - done:
         return:
           run_label: ${run_label}
+          preflight: ${preflight_execution}
           scrape: ${scrape_execution}
           llm: ${llm_execution}
           processing_er: ${processing_execution}
           metrics: ${metrics_execution}
           predictions: ${predictions_execution}
+          status: ${status_execution}
+          alert: ${success_alert_execution}
+
+run_alert:
+  params: [project_id, region, job_name, run_label, status, webhook_url, error]
+  steps:
+    - start:
+        call: run_job
+        args:
+          project_id: ${project_id}
+          region: ${region}
+          job_name: ${job_name}
+          job_args:
+            - manage.py
+            - send_weekly_update_alert
+            - --run-label
+            - ${run_label}
+            - --status
+            - ${status}
+            - --webhook-url
+            - ${webhook_url}
+            - --error
+            - ${default(error, "")}
+        result: execution
+    - return_execution:
+        return: ${execution}
 
 run_job:
   params: [project_id, region, job_name, job_args]

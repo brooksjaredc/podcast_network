@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.core.management.base import BaseCommand, CommandParser
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db.models import Count, Sum
 
 from podcast_network.web.catalog.models import (
@@ -24,34 +24,55 @@ class Command(BaseCommand):
             required=True,
             help="Weekly update run label, usually weekly-update-<workflow-execution-id>.",
         )
+        parser.add_argument(
+            "--fail-on-problem",
+            action="store_true",
+            help="Exit non-zero if the pipeline has failed, partial, or running steps.",
+        )
 
     def handle(self, *args: object, **options: object) -> None:
         run_label = str(options["run_label"])
         self.stdout.write(self.style.MIGRATE_HEADING(f"Weekly update status: {run_label}"))
-        self.print_pipeline_status(run_label)
+        problems = self.print_pipeline_status(run_label)
         self.print_scrape_status(run_label)
         self.print_extraction_status(run_label)
         self.print_processing_status(run_label)
         self.print_prediction_status(run_label)
         self.print_metric_status(run_label)
+        if options["fail_on_problem"] and problems:
+            raise CommandError("; ".join(problems))
 
-    def print_pipeline_status(self, run_label: str) -> None:
+    def print_pipeline_status(self, run_label: str) -> list[str]:
         self.stdout.write(self.style.MIGRATE_HEADING("Pipeline"))
         run = PipelineRun.objects.filter(run_label=run_label).order_by("-started_at").first()
         if run is None:
             self.stdout.write("No pipeline run found.")
-            return
+            return ["No pipeline run found."]
+        problems = []
+        if run.status in {
+            PipelineRun.Status.FAILED,
+            PipelineRun.Status.PARTIAL,
+            PipelineRun.Status.RUNNING,
+        }:
+            problems.append(f"PipelineRun {run.id} status is {run.status}")
         self.stdout.write(
             f"- PipelineRun {run.id}: {run.status}, phase={run.phase}, "
             f"started={run.started_at}, finished={run.finished_at}"
         )
         for step in run.steps.order_by("sequence"):
+            if step.status in {
+                "failed",
+                "running",
+                "pending",
+            }:
+                problems.append(f"Step {step.sequence} {step.command} status is {step.status}")
             progress = format_progress_metadata(step.metadata)
             suffix = f", progress={progress}" if progress else ""
             self.stdout.write(
                 f"  - {step.sequence}. {step.command}: {step.status}, "
                 f"elapsed={step.elapsed_seconds}{suffix}"
             )
+        return problems
 
     def print_scrape_status(self, run_label: str) -> None:
         runs = ScrapeRun.objects.filter(run_label=run_label).order_by("-started_at")

@@ -105,6 +105,10 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 PLOT_ARTIFACT_GCS_URI = os.environ.get("PODCAST_NETWORK_PLOT_GCS_URI", "")
 RAW_SNAPSHOT_GCS_URI = os.environ.get("PODCAST_NETWORK_RAW_SNAPSHOT_GCS_URI", "")
 BATCH_ARTIFACT_GCS_URI = os.environ.get("PODCAST_NETWORK_BATCH_ARTIFACT_GCS_URI", "")
+WEEKLY_UPDATE_ALERT_WEBHOOK_URL = os.environ.get(
+    "PODCAST_NETWORK_WEEKLY_UPDATE_ALERT_WEBHOOK_URL",
+    "",
+)
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from io import StringIO
 
+import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from podcast_network.pipeline_progress import update_pipeline_step_progress
 from podcast_network.web.catalog.management.commands.run_weekly_update_pipeline import (
@@ -188,6 +190,23 @@ def test_weekly_update_status_prints_pipeline_progress() -> None:
     assert "ingest_feeds" in output
     assert "processed=50" in output
     assert "failed=1" in output
+
+
+def test_weekly_update_status_can_fail_on_problem() -> None:
+    options = default_options()
+    options["coordinator_label"] = "weekly-update-failed-status-test"
+    options["phase"] = "scrape"
+    pipeline_run = start_pipeline_run(options=options, steps=build_pipeline_steps(options))
+    pipeline_run.status = PipelineRun.Status.FAILED
+    pipeline_run.save(update_fields=["status"])
+
+    with pytest.raises(CommandError, match="PipelineRun"):
+        call_command(
+            "weekly_update_status",
+            "--run-label",
+            "weekly-update-failed-status-test",
+            "--fail-on-problem",
+        )
 
 
 def test_weekly_update_only_warms_graph_for_metric_phase() -> None:
