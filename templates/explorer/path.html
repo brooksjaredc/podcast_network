@@ -5,19 +5,32 @@
 
 {% block content %}
   <h1>Six Degrees</h1>
+  <p class="muted">Find the shortest appearance path between two people.</p>
   <form class="path-query-form" method="get">
-    <input name="source" value="{{ source }}" placeholder="First person">
-    <input name="target" value="{{ target }}" placeholder="Second person">
-    <label>
-      <span>From</span>
-      <input type="date" name="start_date" value="{{ start_date }}" aria-label="Start date">
-    </label>
-    <label>
-      <span>To</span>
-      <input type="date" name="end_date" value="{{ end_date }}" aria-label="End date">
-    </label>
-    <button type="submit">Find Path</button>
+    <div class="path-main-fields">
+      <input name="source" value="{{ source }}" placeholder="First person" aria-label="First person">
+      <input name="target" value="{{ target }}" placeholder="Second person" aria-label="Second person">
+      <button type="submit">Find Path</button>
+    </div>
+    <details class="path-filter-details" {% if start_date or end_date %}open{% endif %}>
+      <summary>Advanced filters</summary>
+      <div class="path-filter-fields">
+        <label>
+          <span>From</span>
+          <input type="date" name="start_date" value="{{ start_date }}" aria-label="Start date">
+        </label>
+        <label>
+          <span>To</span>
+          <input type="date" name="end_date" value="{{ end_date }}" aria-label="End date">
+        </label>
+      </div>
+    </details>
   </form>
+  <div class="home-examples" aria-label="Example paths">
+    <a href="{% url 'explorer:path' %}?source=Joe%20Rogan&target=Hillary%20Clinton{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}">Joe Rogan to Hillary Clinton</a>
+    <a href="{% url 'explorer:path' %}?source=Conan%20O%27Brien&target=Jordan%20Peterson{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}">Conan O'Brien to Jordan Peterson</a>
+    <a href="{% url 'explorer:path' %}?source=Oprah%20Winfrey&target=Bill%20Burr{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}">Oprah Winfrey to Bill Burr</a>
+  </div>
 
   {% if result %}
     <h2>Result</h2>

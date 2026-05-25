@@ -41,11 +41,10 @@
     </section>
 
     <section class="panel">
-      <h2>Database Status</h2>
+      <h2>Identity</h2>
       <table>
         <tbody>
-          <tr><td>Normalized name</td><td>{{ person.normalized_name }}</td></tr>
-          <tr><td>People table ID</td><td>{{ person.id }}</td></tr>
+          <tr><td>Search name</td><td>{{ person.normalized_name }}</td></tr>
           {% if network_metric %}
             <tr><td>Canonical name</td><td>{{ network_metric.display_name }}</td></tr>
           {% endif %}
@@ -91,10 +90,13 @@
     </tbody>
   </table>
 
-  <h2>Podcast Predictions</h2>
+  <h2>Network-Based Podcast Fits</h2>
+  <p class="muted">
+    Experimental podcast matches based on network structure, not confident booking forecasts.
+  </p>
   <table>
     <thead>
-      <tr><th>Rank</th><th>Podcast</th><th>Score</th></tr>
+      <tr><th>Rank</th><th>Podcast</th><th>Score</th><th>Why</th></tr>
     </thead>
     <tbody>
       {% for prediction in predictions %}
@@ -102,9 +104,16 @@
           <td>#{{ prediction.rank }}</td>
           <td><a href="{% url 'explorer:podcast_detail' prediction.podcast_id %}">{{ prediction.podcast_name }}</a></td>
           <td>{{ prediction.score|floatformat:3 }}</td>
+          <td>
+            {% if prediction.reason %}
+              {{ prediction.reason }}
+            {% else %}
+              <span class="muted">Feature details unavailable.</span>
+            {% endif %}
+          </td>
         </tr>
       {% empty %}
-        <tr><td colspan="3">No predictions loaded.</td></tr>
+        <tr><td colspan="4">No predictions loaded.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -268,6 +268,40 @@
         color: var(--muted);
         font-size: 14px;
       }
+      .analysis-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 14px;
+        margin: 18px 0 28px;
+      }
+      .analysis-card {
+        display: grid;
+        gap: 10px;
+        align-content: space-between;
+        min-height: 150px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        background: #fff;
+        text-decoration: none;
+      }
+      .analysis-card:hover {
+        border-color: rgba(15, 118, 110, 0.45);
+        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.07);
+      }
+      .analysis-card h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+      .analysis-card p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .analysis-card span {
+        color: var(--accent);
+        font-weight: 700;
+      }
       .path-sentence {
         max-width: 860px;
         font-size: 18px;
@@ -301,6 +335,12 @@
         align-items: end;
         flex-wrap: wrap;
       }
+      .path-main-fields {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
       .path-query-form label {
         display: grid;
         gap: 5px;
@@ -310,6 +350,21 @@
       }
       .path-query-form label input {
         min-width: 150px;
+      }
+      .path-filter-details {
+        flex-basis: 100%;
+      }
+      .path-filter-details summary {
+        width: fit-content;
+        color: var(--accent);
+        font-weight: 650;
+        cursor: pointer;
+      }
+      .path-filter-fields {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
       }
       .path-graphic {
         margin: 18px 0 8px;
@@ -550,6 +605,49 @@
         border-radius: 8px;
         background: var(--panel);
       }
+      details.panel summary {
+        cursor: pointer;
+      }
+      .tabs {
+        margin: 22px 0 0;
+      }
+      .tab-radio {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .tab-list {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .tab-list label {
+        padding: 9px 12px;
+        border: 1px solid transparent;
+        border-bottom: 0;
+        border-radius: 8px 8px 0 0;
+        color: var(--muted);
+        background: #fff;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      .tab-panel {
+        display: none;
+      }
+      #prediction-tab-scores:checked ~ .tab-list label[for="prediction-tab-scores"],
+      #prediction-tab-links:checked ~ .tab-list label[for="prediction-tab-links"],
+      #prediction-tab-fits:checked ~ .tab-list label[for="prediction-tab-fits"] {
+        border-color: var(--line);
+        color: var(--accent);
+        background: var(--panel);
+      }
+      #prediction-tab-scores:checked ~ .tab-panels .prediction-tab-panel-scores,
+      #prediction-tab-links:checked ~ .tab-panels .prediction-tab-panel-links,
+      #prediction-tab-fits:checked ~ .tab-panels .prediction-tab-panel-fits {
+        display: block;
+      }
       .plot {
         margin: 14px 0 28px;
         border: 1px solid var(--line);
@@ -604,13 +702,13 @@
     <header>
       <nav>
         <a href="{% url 'explorer:home' %}">Six Degrees to Joe Rogan</a>
+        <a href="{% url 'explorer:path' %}">Six Degrees</a>
+        <a href="{% url 'explorer:map' %}">Map</a>
+        <a href="{% url 'explorer:recommendations' %}">Recommendations</a>
+        <a href="{% url 'explorer:rankings' %}">Rankings</a>
         <a href="{% url 'explorer:podcasts' %}">Podcasts</a>
         <a href="{% url 'explorer:people' %}">People</a>
-        <a href="{% url 'explorer:rankings' %}">Rankings</a>
-        <a href="{% url 'explorer:recommendations' %}">Recommendations</a>
-        <a href="{% url 'explorer:path' %}">Six Degrees</a>
-        <a href="{% url 'explorer:common' %}">Common Guests</a>
-        <a href="{% url 'explorer:advanced' %}">Advanced</a>
+        <a href="{% url 'explorer:advanced' %}">Analysis</a>
         <a class="creator-tag" href="https://brooksjaredc.github.io">Created by Jared Brooks</a>
       </nav>
     </header>

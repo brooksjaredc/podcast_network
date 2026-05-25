@@ -1,16 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Common Guests{% endblock %}
+{% block title %}Compare Podcasts{% endblock %}
 
 {% block content %}
-  <h1>Common Guests</h1>
+  <h1>Compare Podcasts</h1>
+  <p class="muted">Find guests shared by two shows and spot audience overlap.</p>
   <form class="toolbar" method="get">
-    <select name="first">
+    <select name="first" aria-label="First podcast">
+      <option value="">Choose first podcast</option>
       {% for podcast in podcasts %}
         <option value="{{ podcast.id }}" {% if first_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
       {% endfor %}
     </select>
-    <select name="second">
+    <select name="second" aria-label="Second podcast">
+      <option value="">Choose second podcast</option>
       {% for podcast in podcasts %}
         <option value="{{ podcast.id }}" {% if second_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
       {% endfor %}
@@ -40,5 +43,9 @@
         {% endfor %}
       </tbody>
     </table>
+  {% elif first_podcast %}
+    <p class="muted">Choose a second podcast to compare against {{ first_podcast.name }}.</p>
+  {% else %}
+    <p class="muted">Choose two podcasts to compare their shared guest lists.</p>
   {% endif %}
 {% endblock %}

@@ -4,9 +4,19 @@
 
 {% block content %}
   <h1>People</h1>
-  <form method="get">
-    <input name="q" value="{{ query }}" placeholder="Search people">
-    <button type="submit">Search</button>
+  <p class="muted">Find guests and hosts, then inspect their appearances, rankings, and network-based podcast fits.</p>
+
+  <form class="toolbar" method="get">
+    <input name="q" value="{{ query }}" placeholder="Search people" aria-label="Search people">
+    <select name="sort" aria-label="Sort people">
+      {% for sort_key, sort_label in sort_options.items %}
+        <option value="{{ sort_key }}" {% if sort == sort_key %}selected{% endif %}>{{ sort_label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Apply</button>
+    {% if query or sort != "appearances" %}
+      <a class="button secondary-button" href="{% url 'explorer:people' %}">Reset</a>
+    {% endif %}
   </form>
   <table>
     <thead>
@@ -21,6 +31,8 @@
           <td>{{ person.podcast_count }}</td>
           <td>{{ person.latest|date:"Y-m-d" }}</td>
         </tr>
+      {% empty %}
+        <tr><td colspan="5">No people match those filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>

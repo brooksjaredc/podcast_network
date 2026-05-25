@@ -13,6 +13,20 @@ RECOMMENDATION_SORTS = {
     "overlap": "Most shared guests",
 }
 
+PODCAST_SORTS = {
+    "appearances": "Most guest appearances",
+    "unique": "Most unique guests",
+    "latest": "Recently updated",
+    "name": "Name",
+}
+
+PEOPLE_SORTS = {
+    "appearances": "Most guest appearances",
+    "podcasts": "Most podcasts",
+    "latest": "Recently active",
+    "name": "Name",
+}
+
 RANKING_DEFINITIONS = [
     {
         "name": "Guest appearances",

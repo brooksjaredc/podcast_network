@@ -5,6 +5,9 @@
 
 {% block content %}
   <h1>{{ page.title }}</h1>
+  {% if page.lede %}
+    <p class="muted">{{ page.lede }}</p>
+  {% endif %}
 
   <div class="pill-row">
     {% for slug, item in pages.items %}
@@ -12,27 +15,41 @@
     {% endfor %}
   </div>
 
-  {% for section in page.sections %}
-    <section>
-      <h2>{{ section.heading }}</h2>
-      <p>{{ section.body }}</p>
-      {% if section.plot %}
-        <div class="plot interactive-plot">
-          <iframe src="{{ section.plot_url }}" title="{{ section.heading }}" loading="lazy"></iframe>
-        </div>
-      {% elif section.image %}
-        <div class="plot">
-          <img src="{{ section.image_url }}" alt="{{ section.heading }}">
-        </div>
-      {% endif %}
+  {% if page.layout == "cards" %}
+    <section class="analysis-cards" aria-label="Analysis sections">
+      {% for section in page.sections %}
+        <a class="analysis-card" href="{{ section.page_url }}">
+          <div>
+            <h2>{{ section.heading }}</h2>
+            <p>{{ section.body }}</p>
+          </div>
+          <span>{{ section.cta }}</span>
+        </a>
+      {% endfor %}
     </section>
-  {% endfor %}
+  {% else %}
+    {% for section in page.sections %}
+      <section>
+        <h2>{{ section.heading }}</h2>
+        <p>{{ section.body }}</p>
+        {% if section.plot %}
+          <div class="plot interactive-plot">
+            <iframe src="{{ section.plot_url }}" title="{{ section.heading }}" loading="lazy"></iframe>
+          </div>
+        {% elif section.image %}
+          <div class="plot">
+            <img src="{{ section.image_url }}" alt="{{ section.heading }}">
+          </div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  {% endif %}
 
-  {% if page.title == "Predictions" and prediction_run %}
+  {% if page_slug == "predictions" and prediction_run %}
     <div class="stats">
       <div class="stat">
         <strong>{{ prediction_run.metadata.rows_written }}</strong>
-        <span>top predictions</span>
+        <span>top network fits</span>
       </div>
       <div class="stat">
         <strong>{{ prediction_run.metadata.candidate_count }}</strong>
@@ -48,127 +65,153 @@
       </div>
     </div>
 
-    <section>
-      <h2>Score Distribution</h2>
-      {% if score_histogram_plot %}
-        {{ score_histogram_plot|json_script:"prediction-score-histogram-data" }}
-        <div class="plot interactive-plot">
-          <div
-            id="prediction-score-histogram"
-            class="prediction-score-histogram"
-            aria-label="Prediction score histogram"
-          ></div>
-        </div>
-        <script src="{% static 'plots/plotly.min.js' %}"></script>
-        <script>
-          {
-            const payload = JSON.parse(
-              document.getElementById("prediction-score-histogram-data").textContent
-            );
-            Plotly.newPlot(
-              "prediction-score-histogram",
-              payload.data,
-              payload.layout,
-              payload.config
-            );
-          }
-        </script>
-      {% else %}
-        <p class="muted">
-          The full-candidate score distribution will appear after the next scoring run.
-        </p>
-      {% endif %}
-    </section>
+    <div class="tabs">
+      <input class="tab-radio" type="radio" name="prediction-tab" id="prediction-tab-scores" checked>
+      <input class="tab-radio" type="radio" name="prediction-tab" id="prediction-tab-links">
+      <input class="tab-radio" type="radio" name="prediction-tab" id="prediction-tab-fits">
 
-    <section>
-      <h2>Recent New Links</h2>
-      {% if audit_run %}
-        <p class="muted">
-          Published {{ audit_run.metadata.week_start|slice:":10" }} through
-          {{ audit_run.metadata.week_end|slice:":10" }};
-          {{ audit_run.metadata.repeat_pair_excluded_count }} repeat links excluded;
-          {{ audit_run.metadata.scored_link_count }} of {{ audit_run.metadata.new_link_count }}
-          first-time links were in the prior candidate universe.
-        </p>
-      {% endif %}
-      {% if recent_link_rows %}
-        <table>
-          <thead>
-            <tr>
-              <th>Published</th>
-              <th>Podcast</th>
-              <th>Guest</th>
-              <th>Prior Rank</th>
-              <th>Prior Score</th>
-              <th>Prediction Run</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in recent_link_rows %}
+      <div class="tab-list" role="tablist" aria-label="Prediction analysis views">
+        <label for="prediction-tab-scores" role="tab">Score Distribution</label>
+        <label for="prediction-tab-links" role="tab">Recent New Links</label>
+        <label for="prediction-tab-fits" role="tab">Top Network Fits</label>
+      </div>
+
+      <div class="tab-panels">
+        <section class="tab-panel prediction-tab-panel-scores">
+          <h2>Score Distribution</h2>
+          <p class="muted">
+            Shows how the model spreads scores across all candidate podcast and guest pairs.
+            A long tail means only a small share of pairs look especially network-plausible.
+          </p>
+          {% if score_histogram_plot %}
+            {{ score_histogram_plot|json_script:"prediction-score-histogram-data" }}
+            <div class="plot interactive-plot">
+              <div
+                id="prediction-score-histogram"
+                class="prediction-score-histogram"
+                aria-label="Prediction score histogram"
+              ></div>
+            </div>
+            <script src="{% static 'plots/plotly.min.js' %}"></script>
+            <script>
+              {
+                const payload = JSON.parse(
+                  document.getElementById("prediction-score-histogram-data").textContent
+                );
+                Plotly.newPlot(
+                  "prediction-score-histogram",
+                  payload.data,
+                  payload.layout,
+                  payload.config
+                );
+              }
+            </script>
+          {% else %}
+            <p class="muted">
+              The full-candidate score distribution will appear after the next scoring run.
+            </p>
+          {% endif %}
+        </section>
+
+        <section class="tab-panel prediction-tab-panel-links">
+          <h2>Recent New Links</h2>
+          <p class="muted">
+            Checks recent first-time guest appearances against the prior prediction run. This is
+            a quick reality check, not a claim that the model caused or confidently forecast them.
+          </p>
+          {% if audit_run %}
+            <p class="muted">
+              Published {{ audit_run.metadata.week_start|slice:":10" }} through
+              {{ audit_run.metadata.week_end|slice:":10" }};
+              {{ audit_run.metadata.repeat_pair_excluded_count }} repeat links excluded;
+              {{ audit_run.metadata.scored_link_count }} of {{ audit_run.metadata.new_link_count }}
+              first-time links were in the prior candidate universe.
+            </p>
+          {% endif %}
+          {% if recent_link_rows %}
+            <table>
+              <thead>
+                <tr>
+                  <th>Published</th>
+                  <th>Podcast</th>
+                  <th>Guest</th>
+                  <th>Prior Rank</th>
+                  <th>Prior Score</th>
+                  <th>Prediction Run</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in recent_link_rows %}
+                  <tr>
+                    <td>{{ row.link_published_at|date:"M j, Y" }}</td>
+                    <td><a href="{% url 'explorer:podcast_detail' row.podcast_id %}">{{ row.podcast_name }}</a></td>
+                    <td>
+                      {% if row.person_id %}
+                        <a href="{% url 'explorer:person_detail' row.person_id %}">{{ row.guest_name }}</a>
+                      {% else %}
+                        {{ row.guest_name }}
+                      {% endif %}
+                    </td>
+                    {% if row.score != None %}
+                      <td>{{ row.rank }}</td>
+                      <td>{{ row.score|floatformat:3 }}</td>
+                      <td>{{ audit_run.run_id }}</td>
+                    {% else %}
+                      <td colspan="3" class="muted">Not in prior candidate universe</td>
+                    {% endif %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="muted">No recent new-link matches have an earlier prediction run yet.</p>
+          {% endif %}
+        </section>
+
+        <section class="tab-panel prediction-tab-panel-fits">
+          <h2>Top Network Fits</h2>
+          <p class="muted">
+            The highest-scoring podcast and guest pairs from the latest run. Treat these as
+            network-based fits to inspect, not booking recommendations or confident forecasts.
+          </p>
+          <table>
+            <thead>
               <tr>
-                <td>{{ row.link_published_at|date:"M j, Y" }}</td>
-                <td><a href="{% url 'explorer:podcast_detail' row.podcast_id %}">{{ row.podcast_name }}</a></td>
-                <td>
-                  {% if row.person_id %}
-                    <a href="{% url 'explorer:person_detail' row.person_id %}">{{ row.guest_name }}</a>
-                  {% else %}
-                    {{ row.guest_name }}
-                  {% endif %}
-                </td>
-                {% if row.score != None %}
-                  <td>{{ row.rank }}</td>
-                  <td>{{ row.score|floatformat:3 }}</td>
-                  <td>{{ audit_run.run_id }}</td>
-                {% else %}
-                  <td colspan="3" class="muted">Not in prior candidate universe</td>
-                {% endif %}
+                <th>Rank</th>
+                <th>Podcast</th>
+                <th>Guest</th>
+                <th>Score</th>
+                <th>Shared Neighbor Score</th>
+                <th>Guest Appearances</th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">No recent new-link matches have an earlier prediction run yet.</p>
-      {% endif %}
-    </section>
-
-    <section>
-      <h2>Top Predictions</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Podcast</th>
-            <th>Guest</th>
-            <th>Score</th>
-            <th>Shared Neighbor Score</th>
-            <th>Guest Appearances</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in predictions|slice:":200" %}
-            <tr>
-              <td>{{ item.rank }}</td>
-              <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast_name }}</a></td>
-              <td>
-                {% if item.person_id %}
-                  <a href="{% url 'explorer:person_detail' item.person_id %}">{{ item.guest_name }}</a>
-                {% else %}
-                  {{ item.guest_name }}
-                {% endif %}
-              </td>
-              <td>{{ item.score|floatformat:3 }}</td>
-              <td>{{ item.shared_neighbor_score|floatformat:0 }}</td>
-              <td>{{ item.guest_appearance_count|floatformat:0 }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
-  {% elif page.title == "Predictions" %}
+            </thead>
+            <tbody>
+              {% for item in predictions|slice:":200" %}
+                <tr>
+                  <td>{{ item.rank }}</td>
+                  <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast_name }}</a></td>
+                  <td>
+                    {% if item.person_id %}
+                      <a href="{% url 'explorer:person_detail' item.person_id %}">{{ item.guest_name }}</a>
+                    {% else %}
+                      {{ item.guest_name }}
+                    {% endif %}
+                  </td>
+                  <td>{{ item.score|floatformat:3 }}</td>
+                  <td>{{ item.shared_neighbor_score|floatformat:0 }}</td>
+                  <td>{{ item.guest_appearance_count|floatformat:0 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+  {% elif page_slug == "predictions" %}
     <section>
       <h2>No Database Prediction Run Yet</h2>
       <p class="muted">
-        Future link predictions will appear here after a database-backed scoring run is stored.
+        Network-based future link fits will appear here after a database-backed scoring run is stored.
       </p>
     </section>
   {% endif %}

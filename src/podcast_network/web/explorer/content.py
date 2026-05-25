@@ -6,29 +6,87 @@ from typing import Any
 def advanced_pages() -> dict[str, dict[str, Any]]:
     return {
         "overview": {
-            "title": "Advanced Analysis",
+            "title": "Analysis Guide",
+            "lede": (
+                "Use this area when you want to understand the network as a system: maps, "
+                "metric distributions, changes over time, categories, experimental fits, and "
+                "method definitions."
+            ),
+            "layout": "cards",
+            "sections": [
+                {
+                    "heading": "Network Map",
+                    "body": "Start here for the visual overview of podcasts and people.",
+                    "page": "map",
+                    "cta": "Open map",
+                },
+                {
+                    "heading": "Metric Distributions",
+                    "body": (
+                        "Inspect PageRank, hub, authority, closeness, degree, betweenness, "
+                        "and leadership score distributions."
+                    ),
+                    "page": "metrics",
+                    "cta": "View metrics",
+                },
+                {
+                    "heading": "Network Trends",
+                    "body": "See how graph size, structure, and centrality changed over time.",
+                    "page": "trends",
+                    "cta": "View trends",
+                },
+                {
+                    "heading": "Categories",
+                    "body": "Explore podcast categories, category mixing, and category bias.",
+                    "page": "categories",
+                    "cta": "View categories",
+                },
+                {
+                    "heading": "Experimental Predictions",
+                    "body": (
+                        "Review network-based future link fits, score distributions, and "
+                        "recent new-link checks."
+                    ),
+                    "page": "predictions",
+                    "cta": "View fits",
+                },
+                {
+                    "heading": "Methods",
+                    "body": "Look up short definitions for the network terms used across the site.",
+                    "page": "definitions",
+                    "cta": "Read methods",
+                },
+            ],
+        },
+        "map": {
+            "title": "Network Map",
+            "lede": (
+                "Two interactive views of the podcast appearance network: one centered on "
+                "shows, one centered on people."
+            ),
             "sections": [
                 {
                     "heading": "Podcast Network Graph",
                     "body": (
-                        "Podcasts are linked when they share guests. Link strength is based "
-                        "on the number of common guests and the total time spent on each "
-                        "podcast."
+                        "A full-network view of shows connected by shared guests. Use this "
+                        "when you want the big picture before drilling into a path, ranking, "
+                        "or recommendation."
                     ),
                     "plot": "plots/network_podcasts.html",
                 },
                 {
                     "heading": "People Network Graph",
                     "body": (
-                        "The people graph connects hosts and guests, with node size and "
-                        "grouping driven by centrality and category structure."
+                        "A person-level view of hosts and guests, sized and grouped by their "
+                        "position in the interview network."
                     ),
                     "plot": "plots/network_people.html",
                 },
             ],
         },
-        "centrality": {
-            "title": "Centrality",
+        "metrics": {
+            "title": "Metric Distributions",
+            "lede": "Use these distributions to understand what each ranking metric is measuring.",
             "sections": [
                 {
                     "heading": "Centrality Distributions",
@@ -95,8 +153,9 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
                 },
             ],
         },
-        "evolution": {
-            "title": "Network Evolution",
+        "trends": {
+            "title": "Network Trends",
+            "lede": "Track how the podcast network grew and changed over time.",
             "sections": [
                 {
                     "heading": "Evolution of the Network",
@@ -151,6 +210,7 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
         },
         "categories": {
             "title": "Categories",
+            "lede": "Explore how podcast categories structure the network.",
             "sections": [
                 {
                     "heading": "Podcast Categories",
@@ -187,7 +247,11 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
             ],
         },
         "definitions": {
-            "title": "Definitions",
+            "title": "Methods",
+            "lede": (
+                "Short definitions for the network terms and derived measures used in rankings, "
+                "analysis charts, and detail pages."
+            ),
             "sections": [
                 {
                     "heading": "PageRank",
@@ -238,10 +302,11 @@ def advanced_pages() -> dict[str, dict[str, Any]]:
             ],
         },
         "predictions": {
-            "title": "Predictions",
+            "title": "Experimental Predictions",
+            "lede": "Inspect network-based future link fits without treating them as forecasts.",
             "sections": [
                 {
-                    "heading": "Future Link Predictions",
+                    "heading": "Network-Based Future Link Fits",
                     "body": (
                         "These future link predictions are best understood as an exploratory "
                         "experiment, not a serious forecasting product. Guest booking depends on "

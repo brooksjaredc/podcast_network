@@ -5,12 +5,12 @@
 {% block content %}
   <h1>Recommendations</h1>
   <p class="muted">
-    Build a set of podcasts you already like, then find other shows with overlapping guests.
+    Start with shows you like, then find nearby podcasts by shared guests.
   </p>
 
   <section class="recommendations-layout">
     <aside class="panel">
-      <h2>Your Podcasts</h2>
+      <h2>Shows You Like</h2>
       <form class="toolbar" method="get">
         {% for selected_id in selected_ids %}
           <input type="hidden" name="selected" value="{{ selected_id }}">
@@ -111,7 +111,12 @@
             </div>
           </div>
         {% empty %}
-          <p class="muted">Search for a podcast to start.</p>
+          <p class="muted">Search for a podcast to start, or try one of these:</p>
+          <div class="pill-row" aria-label="Recommendation starter searches">
+            <a class="pill" href="{% url 'explorer:recommendations' %}?q=Joe%20Rogan">Joe Rogan</a>
+            <a class="pill" href="{% url 'explorer:recommendations' %}?q=Marc%20Maron">Marc Maron</a>
+            <a class="pill" href="{% url 'explorer:recommendations' %}?q=Fresh%20Air">Fresh Air</a>
+          </div>
         {% endfor %}
       </div>
 

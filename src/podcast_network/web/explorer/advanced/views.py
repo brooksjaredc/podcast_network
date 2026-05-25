@@ -12,6 +12,10 @@ from podcast_network.web.explorer.content import advanced_pages
 
 
 def advanced(request: HttpRequest, page: str = "overview") -> HttpResponse:
+    page = {
+        "centrality": "metrics",
+        "evolution": "trends",
+    }.get(page, page)
     pages = advanced_pages_with_asset_urls()
     if page not in pages:
         raise Http404("Advanced page not found")
@@ -20,6 +24,7 @@ def advanced(request: HttpRequest, page: str = "overview") -> HttpResponse:
         "explorer/advanced.html",
         {
             "page": pages[page],
+            "page_slug": page,
             "pages": pages,
             **(advanced_prediction_context() if page == "predictions" else {}),
         },
@@ -39,5 +44,10 @@ def advanced_pages_with_asset_urls() -> dict[str, dict[str, Any]]:
                 section["image_url"] = reverse(
                     "explorer:plot_asset",
                     kwargs={"asset_path": section["image"].removeprefix("plots/")},
+                )
+            if section.get("page"):
+                section["page_url"] = reverse(
+                    "explorer:advanced_page",
+                    kwargs={"page": section["page"]},
                 )
     return pages

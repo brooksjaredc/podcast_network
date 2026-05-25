@@ -5,15 +5,18 @@
 {% block content %}
   <h1>{{ rank_label }}</h1>
 
-  <section class="panel">
-    <h2>Metric Guide</h2>
+  <details class="panel">
+    <summary><strong>Metric Guide</strong></summary>
     <dl>
       {% for item in ranking_definitions %}
         <dt>{{ item.name }}</dt>
         <dd>{{ item.description }}</dd>
       {% endfor %}
     </dl>
-  </section>
+    <p>
+      <a href="{% url 'explorer:advanced_page' 'metrics' %}">Explore metric distribution charts</a>
+    </p>
+  </details>
 
   <form class="toolbar" method="get">
     <input name="q" value="{{ query }}" placeholder="Search people">
@@ -63,6 +66,13 @@
             {% else %}
               {{ person.latest|date:"Y-m-d" }}
             {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5">
+            No people match this ranking search.
+            <a href="{% url 'explorer:rankings' %}?rank={{ rank }}">Clear search</a>
           </td>
         </tr>
       {% endfor %}

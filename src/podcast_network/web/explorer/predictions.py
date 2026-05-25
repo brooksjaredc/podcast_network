@@ -52,6 +52,7 @@ def future_link_guest_prediction_row(prediction: FutureLinkPrediction) -> dict[s
         "canonical_id": prediction.canonical_id,
         "guest_name": prediction.canonical.display_name,
         "person_id": None,
+        "reason": future_link_reason(prediction.features),
     }
 
 
@@ -61,7 +62,35 @@ def future_link_podcast_prediction_row(prediction: FutureLinkPrediction) -> dict
         "score": prediction.score,
         "podcast_id": prediction.podcast_id,
         "podcast_name": prediction.podcast.name,
+        "reason": future_link_reason(prediction.features),
     }
+
+
+def future_link_reason(features: dict[str, object]) -> str:
+    parts = []
+    shared_neighbor_score = numeric_feature(features, "shared_neighbor_score")
+    if shared_neighbor_score:
+        parts.append(f"{shared_neighbor_score:,.0f} shared-neighbor signals")
+    host_bridge_count = numeric_feature(features, "host_bridge_count")
+    if host_bridge_count:
+        parts.append(f"{host_bridge_count:,.0f} host bridges")
+    guest_appearance_count = numeric_feature(features, "guest_appearance_count")
+    if guest_appearance_count:
+        parts.append(f"{guest_appearance_count:,.0f} prior guest appearances")
+    latest_days = numeric_feature(features, "guest_days_since_latest_appearance")
+    if latest_days is not None and latest_days >= 0:
+        parts.append(f"guest appeared {latest_days:,.0f} days before cutoff")
+    return "; ".join(parts[:3])
+
+
+def numeric_feature(features: dict[str, object], key: str) -> float | None:
+    value = features.get(key)
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def attach_person_ids(rows: list[dict[str, object]]) -> None:

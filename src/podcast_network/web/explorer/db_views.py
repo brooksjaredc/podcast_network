@@ -7,6 +7,8 @@ from django.shortcuts import render
 from podcast_network.web.catalog.models import Appearance, Person, Podcast
 from podcast_network.web.explorer.common_guests import common_guest_rows
 from podcast_network.web.explorer.constants import (
+    PEOPLE_SORTS,
+    PODCAST_SORTS,
     RANKING_DEFINITIONS,
     RANKING_FIELDS,
     RECOMMENDATION_SORTS,
@@ -23,6 +25,7 @@ from podcast_network.web.explorer.queries import (
     guest_filter,
     home_network_stats,
     host_people_by_podcast,
+    is_active_podcast,
     metric_people_queryset,
     people_queryset,
     person_network_metric,
@@ -54,6 +57,19 @@ def home(request: HttpRequest) -> HttpResponse:
 
 
 def podcasts(request: HttpRequest) -> HttpResponse:
+    query = request.GET.get("q", "").strip()
+    selected_genre = request.GET.get("genre", "").strip()
+    active_only = request.GET.get("active") == "1"
+    sort = request.GET.get("sort", "appearances")
+    if sort not in PODCAST_SORTS:
+        sort = "appearances"
+
+    order_by = {
+        "appearances": ("-guest_appearances", "name"),
+        "unique": ("-unique_guests", "name"),
+        "latest": ("-latest_episode", "name"),
+        "name": ("name",),
+    }[sort]
     podcasts = list(
         Podcast.objects.annotate(
             guest_appearances=Count(
@@ -68,18 +84,38 @@ def podcasts(request: HttpRequest) -> HttpResponse:
             latest_episode=Max("episodes__published_at"),
         )
         .filter(guest_appearances__gt=0)
-        .order_by("-guest_appearances", "name")[:1000]
+        .filter(name__icontains=query)
+        .order_by(*order_by)[:1500]
     )
     podcasts = english_podcasts(podcasts)
+    if active_only:
+        podcasts = [podcast for podcast in podcasts if is_active_podcast(podcast)]
+    genre_options = sorted({genre for podcast in podcasts for genre in podcast_genres(podcast)})
+    if selected_genre:
+        podcasts = [podcast for podcast in podcasts if selected_genre in podcast_genres(podcast)]
+    podcasts = podcasts[:1000]
     hosts_by_podcast = host_people_by_podcast([podcast.id for podcast in podcasts])
     rows = [
         {
             "podcast": podcast,
             "hosts": hosts_by_podcast.get(podcast.id, []),
+            "genres": podcast_genres(podcast),
         }
         for podcast in podcasts
     ]
-    return render(request, "explorer/podcasts.html", {"podcast_rows": rows})
+    return render(
+        request,
+        "explorer/podcasts.html",
+        {
+            "podcast_rows": rows,
+            "query": query,
+            "selected_genre": selected_genre,
+            "genre_options": genre_options,
+            "active_only": active_only,
+            "sort": sort,
+            "sort_options": PODCAST_SORTS,
+        },
+    )
 
 
 def podcast_detail(request: HttpRequest, podcast_id: int) -> HttpResponse:
@@ -141,13 +177,28 @@ def podcast_detail(request: HttpRequest, podcast_id: int) -> HttpResponse:
 
 def people(request: HttpRequest) -> HttpResponse:
     query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "appearances")
+    if sort not in PEOPLE_SORTS:
+        sort = "appearances"
     rows = people_queryset()
     if query:
         rows = rows.filter(name__icontains=query)
+    order_by = {
+        "appearances": ("-appearances_count", "name"),
+        "podcasts": ("-podcast_count", "name"),
+        "latest": ("-latest", "name"),
+        "name": ("name",),
+    }[sort]
+    rows = rows.order_by(*order_by)
     return render(
         request,
         "explorer/people.html",
-        {"people": rows[:500], "query": query},
+        {
+            "people": rows[:500],
+            "query": query,
+            "sort": sort,
+            "sort_options": PEOPLE_SORTS,
+        },
     )
 
 

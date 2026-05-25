@@ -31,6 +31,10 @@
     <p class="muted">No host metadata loaded.</p>
   {% endif %}
 
+  <p>
+    <a href="{% url 'explorer:common' %}?first={{ podcast.id }}">Compare this show with another podcast</a>
+  </p>
+
   <h2>Frequent Guests</h2>
   <table>
     <thead>
@@ -48,10 +52,13 @@
     </tbody>
   </table>
 
-  <h2>Predicted Guests</h2>
+  <h2>Network-Based Guest Fits</h2>
+  <p class="muted">
+    Experimental matches based on network structure, not confident booking forecasts.
+  </p>
   <table>
     <thead>
-      <tr><th>Rank</th><th>Guest</th><th>Score</th></tr>
+      <tr><th>Rank</th><th>Guest</th><th>Score</th><th>Why</th></tr>
     </thead>
     <tbody>
       {% for prediction in predictions %}
@@ -65,9 +72,16 @@
             {% endif %}
           </td>
           <td>{{ prediction.score|floatformat:3 }}</td>
+          <td>
+            {% if prediction.reason %}
+              {{ prediction.reason }}
+            {% else %}
+              <span class="muted">Feature details unavailable.</span>
+            {% endif %}
+          </td>
         </tr>
       {% empty %}
-        <tr><td colspan="3">No predictions loaded.</td></tr>
+        <tr><td colspan="4">No predictions loaded.</td></tr>
       {% endfor %}
     </tbody>
   </table>

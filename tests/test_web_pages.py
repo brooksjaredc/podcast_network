@@ -159,6 +159,9 @@ def test_path_page_loads_real_query() -> None:
     assert b"Jan 15, 2024" in response.content
     assert b'name="start_date"' in response.content
     assert b'name="end_date"' in response.content
+    assert b"Joe Rogan to Hillary Clinton" in response.content
+    assert b"Conan O" in response.content
+    assert b"Jordan Peterson" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -201,6 +204,8 @@ def test_rankings_page_loads() -> None:
     assert b"Metric Guide" in response.content
     assert b"Highlights people connected to other important people" in response.content
     assert b"Highlights hosts who receive links from prominent guests" in response.content
+    assert b"Explore metric distribution charts" in response.content
+    assert b"/advanced/metrics/" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -213,12 +218,33 @@ def test_rankings_page_links_people_and_podcasts() -> None:
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
+def test_rankings_page_empty_search_has_clear_action() -> None:
+    make_db_graph()
+    response = Client().get("/rankings/", {"q": "No Such Person", "rank": "appearances"})
+
+    assert response.status_code == 200
+    assert b"No people match this ranking search" in response.content
+    assert b'href="/rankings/?rank=appearances"' in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
 def test_people_page_links_people_and_podcasts() -> None:
     _, _, joe, _ = make_db_graph()
     response = Client().get("/people/", {"q": "Joe Rogan"})
 
     assert response.status_code == 200
     assert f'href="/people/{joe.id}/"'.encode() in response.content
+    assert b"Search people" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_people_page_can_sort_by_podcast_count() -> None:
+    make_db_graph()
+    response = Client().get("/people/", {"sort": "podcasts"})
+
+    assert response.status_code == 200
+    assert b"Most podcasts" in response.content
+    assert b'value="podcasts" selected' in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -231,6 +257,35 @@ def test_podcast_page_links_podcasts_and_hosts() -> None:
     assert b"The Joe Rogan Experience" in response.content
     assert b"Joe Rogan" in response.content
     assert b"Guest Appearances" in response.content
+    assert b"Search podcasts" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_podcast_page_filters_by_search_genre_and_activity() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    first_podcast.metadata = {"legacy": {"categories": ["Comedy"]}}
+    first_podcast.save(update_fields=["metadata"])
+    second_podcast.metadata = {"legacy": {"categories": ["News"]}}
+    second_podcast.save(update_fields=["metadata"])
+    first_podcast.episodes.update(published_at=timezone.now())
+    second_podcast.episodes.update(published_at=timezone.now() - timedelta(days=90))
+
+    response = Client().get(
+        "/podcasts/",
+        {
+            "q": "Joe",
+            "genre": "Comedy",
+            "active": "1",
+            "sort": "latest",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"The Joe Rogan Experience" in response.content
+    assert b"WTF with Marc Maron" not in response.content
+    assert b"Comedy" in response.content
+    assert b'value="latest" selected' in response.content
+    assert b'name="active" value="1" checked' in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -409,7 +464,17 @@ def test_common_guests_ignores_invalid_query_ids() -> None:
     response = Client().get("/common/", {"first": "not-an-id", "second": "2"})
 
     assert response.status_code == 200
-    assert b"Common Guests" in response.content
+    assert b"Compare Podcasts" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_common_guests_prompts_for_second_podcast() -> None:
+    first_podcast, _, _, _ = make_db_graph()
+    response = Client().get("/common/", {"first": str(first_podcast.id)})
+
+    assert response.status_code == 200
+    assert b"Choose a second podcast" in response.content
+    assert b"Choose second podcast" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -421,6 +486,22 @@ def test_recommendations_search_adds_selected_podcasts() -> None:
     assert b"Recommendations" in response.content
     assert b"The Joe Rogan Experience" in response.content
     assert f'name="selected" value="{first_podcast.id}"'.encode() in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_recommendations_show_genre_filters_before_selection() -> None:
+    first_podcast, second_podcast, _, _ = make_db_graph()
+    first_podcast.metadata = {"legacy": {"categories": ["Comedy"]}}
+    first_podcast.save(update_fields=["metadata"])
+    second_podcast.metadata = {"legacy": {"categories": ["Society & Culture"]}}
+    second_podcast.save(update_fields=["metadata"])
+
+    response = Client().get("/recommendations/")
+
+    assert response.status_code == 200
+    assert b"All genres" in response.content
+    assert b"Comedy" in response.content
+    assert b"Society &amp; Culture" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -911,10 +992,10 @@ def test_advanced_predictions_loads() -> None:
     response = Client().get("/advanced/predictions/")
 
     assert response.status_code == 200
-    assert b"Future Link Predictions" in response.content
+    assert b"Network-Based Future Link Fits" in response.content
     assert b"plot.ly" not in response.content
     assert b"Score Distribution" in response.content
-    assert b"Top Predictions" in response.content
+    assert b"Top Network Fits" in response.content
     assert f"/people/{person.id}/".encode() in response.content
 
 
@@ -926,11 +1007,41 @@ def test_advanced_prediction_histogram_accepts_count_bins() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
 def test_advanced_pages_use_dynamic_plot_asset_route() -> None:
+    response = Client().get("/advanced/map/")
+
+    assert response.status_code == 200
+    assert b"Network Map" in response.content
+    assert b"/advanced/plots/network_podcasts.html" in response.content
+    assert b"/static/plots/network_podcasts.html" not in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
+def test_advanced_landing_page_is_analysis_guide() -> None:
     response = Client().get("/advanced/")
 
     assert response.status_code == 200
-    assert b"/advanced/plots/network_podcasts.html" in response.content
-    assert b"/static/plots/network_podcasts.html" not in response.content
+    assert b"Analysis Guide" in response.content
+    assert b"Open map" in response.content
+    assert b"Read methods" in response.content
+    assert b"/advanced/definitions/" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
+def test_map_page_uses_network_map_entry_point() -> None:
+    response = Client().get("/map/")
+
+    assert response.status_code == 200
+    assert b"Network Map" in response.content
+    assert b"Podcast Network Graph" in response.content
+    assert b"People Network Graph" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
+def test_legacy_advanced_section_slugs_still_work() -> None:
+    response = Client().get("/advanced/centrality/")
+
+    assert response.status_code == 200
+    assert b"Metric Distributions" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
@@ -983,6 +1094,11 @@ def test_podcast_detail_shows_future_link_predictions() -> None:
         podcast=podcast,
         canonical=canonical,
         distance=3,
+        features={
+            "shared_neighbor_score": 4,
+            "host_bridge_count": 2,
+            "guest_appearance_count": 9,
+        },
     )
 
     response = Client().get(f"/podcasts/{podcast.id}/")
@@ -991,6 +1107,8 @@ def test_podcast_detail_shows_future_link_predictions() -> None:
     assert b"Predicted Guest" in response.content
     assert f"/people/{person.id}/".encode() in response.content
     assert b"0.770" in response.content
+    assert b"4 shared-neighbor signals" in response.content
+    assert b"2 host bridges" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -1029,6 +1147,11 @@ def test_person_detail_shows_future_link_predictions() -> None:
         podcast=podcast,
         canonical=canonical,
         distance=3,
+        features={
+            "shared_neighbor_score": 5,
+            "guest_appearance_count": 12,
+            "guest_days_since_latest_appearance": 30,
+        },
     )
 
     response = Client().get(f"/people/{person.id}/")
@@ -1037,3 +1160,5 @@ def test_person_detail_shows_future_link_predictions() -> None:
     assert b"Predicted Podcast" in response.content
     assert f"/podcasts/{podcast.id}/".encode() in response.content
     assert b"0.880" in response.content
+    assert b"5 shared-neighbor signals" in response.content
+    assert b"12 prior guest appearances" in response.content

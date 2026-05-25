@@ -4,12 +4,38 @@
 
 {% block content %}
   <h1>Podcasts</h1>
+  <p class="muted">Browse shows with guest data, then drill into hosts, frequent guests, and network-based fits.</p>
+
+  <form class="toolbar" method="get">
+    <input name="q" value="{{ query }}" placeholder="Search podcasts" aria-label="Search podcasts">
+    <select name="genre" aria-label="Filter by genre">
+      <option value="">All genres</option>
+      {% for genre in genre_options %}
+        <option value="{{ genre }}" {% if selected_genre == genre %}selected{% endif %}>{{ genre }}</option>
+      {% endfor %}
+    </select>
+    <select name="sort" aria-label="Sort podcasts">
+      {% for sort_key, sort_label in sort_options.items %}
+        <option value="{{ sort_key }}" {% if sort == sort_key %}selected{% endif %}>{{ sort_label }}</option>
+      {% endfor %}
+    </select>
+    <label class="inline-check">
+      <input type="checkbox" name="active" value="1" {% if active_only %}checked{% endif %}>
+      Active in last 2 months
+    </label>
+    <button type="submit">Apply</button>
+    {% if query or selected_genre or active_only or sort != "appearances" %}
+      <a class="button secondary-button" href="{% url 'explorer:podcasts' %}">Reset</a>
+    {% endif %}
+  </form>
+
   <table>
     <thead>
       <tr>
         <th>Rank</th>
         <th>Name</th>
         <th>Hosts</th>
+        <th>Genres</th>
         <th>Guest Appearances</th>
         <th>Unique Guests</th>
         <th>Latest Episode</th>
@@ -27,10 +53,19 @@
               <span class="muted">Unknown</span>
             {% endfor %}
           </td>
+          <td>
+            {% for genre in row.genres %}
+              {{ genre }}{% if not forloop.last %}, {% endif %}
+            {% empty %}
+              <span class="muted">Unknown</span>
+            {% endfor %}
+          </td>
           <td>{{ row.podcast.guest_appearances }}</td>
           <td>{{ row.podcast.unique_guests }}</td>
           <td>{{ row.podcast.latest_episode|date:"Y-m-d" }}</td>
         </tr>
+      {% empty %}
+        <tr><td colspan="7">No podcasts match those filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>

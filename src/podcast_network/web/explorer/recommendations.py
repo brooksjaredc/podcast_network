@@ -19,8 +19,9 @@ def podcast_recommendations_context(
     active_only: bool,
     sort: str,
 ) -> dict[str, object]:
+    global_genre_options = recommendation_genre_options()
     if not selected_ids:
-        return {"rows": [], "genre_options": []}
+        return {"rows": [], "genre_options": global_genre_options}
 
     selected_guest_ids = list(
         Appearance.objects.filter(
@@ -31,7 +32,7 @@ def podcast_recommendations_context(
         .distinct()
     )
     if not selected_guest_ids:
-        return {"rows": [], "genre_options": []}
+        return {"rows": [], "genre_options": global_genre_options}
 
     score_rows = list(
         Appearance.objects.filter(
@@ -75,9 +76,10 @@ def podcast_recommendations_context(
         podcast.overlap_rate_percent = round(podcast.overlap_rate * 100)
         podcast.exclusion_penalty = 0
     recommendations = english_podcasts(recommendations)
-    genre_options = sorted(
-        {genre for podcast in recommendations for genre in podcast.recommendation_genres}
-    )
+    candidate_genre_options = {
+        genre for podcast in recommendations for genre in podcast.recommendation_genres
+    }
+    genre_options = sorted(candidate_genre_options | set(global_genre_options))
     apply_exclusion_penalties(recommendations, excluded_ids=excluded_ids)
     if selected_genres:
         recommendations = [
@@ -110,6 +112,21 @@ def podcast_recommendations_context(
         for podcast in recommendations
     ]
     return {"rows": rows, "genre_options": genre_options}
+
+
+def recommendation_genre_options() -> list[str]:
+    podcasts = list(
+        Podcast.objects.annotate(
+            guest_appearances=Count(
+                "episodes__appearances",
+                filter=guest_filter("episodes__appearances"),
+            ),
+        )
+        .filter(guest_appearances__gt=0)
+        .order_by("name")[:1500]
+    )
+    podcasts = english_podcasts(podcasts)
+    return sorted({genre for podcast in podcasts for genre in podcast_genres(podcast)})
 
 
 def recommendation_sort_key(podcast: Podcast, sort: str):
