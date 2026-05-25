@@ -5,12 +5,14 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandParser
 
+from podcast_network.artifact_metadata import current_git_sha, local_file_artifact_metadata
 from podcast_network.entities.features import (
     HEURISTIC_MODEL_NAME,
     apply_entity_score_guards,
     heuristic_person_match_score,
 )
 from podcast_network.entities.model import load_entity_model, predict_match_probability
+from podcast_network.paths import PROJECT_ROOT
 from podcast_network.web.catalog.models import PersonEntityCandidatePair
 
 
@@ -88,9 +90,13 @@ def score_person_entity_candidates(
     auto_status: bool = False,
     dry_run: bool = False,
 ) -> CandidateScoringStats:
+    trained_model_artifact = {}
+    if trained_model_path:
+        trained_model_artifact = local_file_artifact_metadata(Path(trained_model_path))
     trained_model = load_entity_model(Path(trained_model_path)) if trained_model_path else None
     if trained_model is not None:
         model_name = trained_model.model_name
+    git_sha = current_git_sha(cwd=PROJECT_ROOT) if trained_model is not None else ""
     queryset = PersonEntityCandidatePair.objects.order_by("pair_id")
     if limit:
         queryset = queryset[:limit]
@@ -109,8 +115,19 @@ def score_person_entity_candidates(
             score, reasons = apply_entity_score_guards(score, pair.features)
         pair.match_probability = score
         pair.model_name = model_name
+        feature_updates: dict[str, object] = {}
         if trained_model is None or reasons:
-            pair.features = {**pair.features, "heuristic_reasons": reasons}
+            feature_updates["heuristic_reasons"] = reasons
+        if trained_model_artifact:
+            feature_updates.update(
+                {
+                    "scoring_model_sha256": trained_model_artifact["sha256"],
+                    "scoring_model_size_bytes": trained_model_artifact["size_bytes"],
+                    "scoring_git_sha": git_sha,
+                }
+            )
+        if feature_updates:
+            pair.features = {**pair.features, **feature_updates}
         if auto_status and score >= accept_threshold:
             pair.status = PersonEntityCandidatePair.Status.ACCEPTED
             accepted += 1

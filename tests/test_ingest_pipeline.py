@@ -6,7 +6,12 @@ from django.test import TestCase
 
 from podcast_network.ingest.fetch import FetchResult
 from podcast_network.ingest.pipeline import ingest_feed, ingest_feeds, record_feed_failure
-from podcast_network.ingest.storage import LocalRawFeedStorage
+from podcast_network.ingest.storage import (
+    GCSRawFeedStorage,
+    LocalRawFeedStorage,
+    NoopRawFeedStorage,
+)
+from podcast_network.web.catalog.management.commands.ingest_feeds import raw_feed_storage
 from podcast_network.web.catalog.models import (
     Episode,
     Feed,
@@ -78,6 +83,52 @@ class IngestPipelineTests(TestCase):
         assert Episode.objects.filter(podcast=feed.podcast).count() == 2
         assert RawFeedSnapshot.objects.filter(feed=feed).count() == 1
 
+    def test_reingesting_changed_episode_updates_existing_row(self) -> None:
+        feed = create_feed()
+        storage = LocalRawFeedStorage(Path(self.tmpdir))
+        ingest_feed(feed, storage=storage, fetcher=fixture_fetcher(RSS_FIXTURE))
+        first_seen_at = Episode.objects.get(guid="episode-1").first_seen_at
+        changed_rss = RSS_FIXTURE.replace(b"First Episode", b"First Episode Updated")
+
+        feed.refresh_from_db()
+        result = ingest_feed(feed, storage=storage, fetcher=fixture_fetcher(changed_rss))
+
+        episode = Episode.objects.get(guid="episode-1")
+        assert result.created_episodes == 0
+        assert result.updated_episodes == 2
+        assert episode.title == "First Episode Updated"
+        assert episode.first_seen_at == first_seen_at
+        assert episode.last_seen_at >= first_seen_at
+
+    def test_ingest_deduplicates_repeated_episode_guids_before_bulk_upsert(self) -> None:
+        feed = create_feed()
+        rss = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Podcast</title>
+    <item>
+      <title>Original Duplicate</title>
+      <guid>duplicate-guid</guid>
+    </item>
+    <item>
+      <title>Latest Duplicate</title>
+      <guid>duplicate-guid</guid>
+    </item>
+  </channel>
+</rss>
+"""
+
+        result = ingest_feed(
+            feed,
+            storage=LocalRawFeedStorage(Path(self.tmpdir)),
+            fetcher=fixture_fetcher(rss),
+        )
+
+        assert result.created_episodes == 1
+        assert result.updated_episodes == 0
+        assert Episode.objects.count() == 1
+        assert Episode.objects.get().title == "Latest Duplicate"
+
     def test_unchanged_feed_records_success_without_parsing(self) -> None:
         feed = create_feed()
         feed.etag = "abc"
@@ -102,6 +153,13 @@ class IngestPipelineTests(TestCase):
         )
 
         assert run.run_label == "weekly-update-test"
+
+    def test_raw_feed_storage_factory_supports_noop_and_gcs(self) -> None:
+        assert isinstance(raw_feed_storage(storage_name="none", gcs_uri=""), NoopRawFeedStorage)
+        assert isinstance(
+            raw_feed_storage(storage_name="gcs", gcs_uri="gs://bucket/raw"),
+            GCSRawFeedStorage,
+        )
 
     def test_ingest_feed_bounds_long_episode_fields(self) -> None:
         feed = create_feed()

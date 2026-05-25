@@ -3,8 +3,12 @@ from __future__ import annotations
 from podcast_network.web.catalog.management.commands.run_weekly_update_pipeline import (
     TODO_NOTES,
     build_pipeline_steps,
+    finish_pipeline_run,
+    finish_step_run,
     should_warm_graph,
+    start_pipeline_run,
 )
+from podcast_network.web.catalog.models import PipelineRun, PipelineStepRun
 
 
 def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
@@ -29,6 +33,7 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert batch_step.options["prompt_version"] == "guest-extraction-v7"
     assert batch_step.options["max_first_pass_batches"] == 0
     assert batch_step.options["first_pass_reasoning_effort"] == "low"
+    assert batch_step.options["batch_artifact_gcs_uri"] == ""
     assert batch_step.options["coordinator_label"].startswith("weekly-update-")
     sync_step = steps[2]
     assert sync_step.options["extraction_run_label"] == batch_step.options["coordinator_label"]
@@ -106,6 +111,36 @@ def test_weekly_update_predictions_can_use_gcs_model_uri() -> None:
     assert steps[0].options["gcs_model_uri"] == "gs://bucket/models/future_link.joblib"
 
 
+def test_weekly_update_plan_passes_raw_snapshot_gcs_uri() -> None:
+    options = default_options()
+    options["raw_snapshot_storage"] = "gcs"
+    options["raw_snapshot_gcs_uri"] = "gs://bucket/raw"
+
+    steps = build_pipeline_steps(options)
+
+    assert steps[0].options["raw_snapshot_storage"] == "gcs"
+    assert steps[0].options["raw_snapshot_gcs_uri"] == "gs://bucket/raw"
+
+
+def test_pipeline_run_ledger_records_steps() -> None:
+    options = default_options()
+    options["coordinator_label"] = "weekly-update-ledger-test"
+    steps = build_pipeline_steps(options)
+
+    pipeline_run = start_pipeline_run(options=options, steps=steps)
+    first_step = pipeline_run.steps.order_by("sequence").first()
+    assert first_step is not None
+    finish_step_run(step_run=first_step, elapsed_seconds=1.25)
+    finish_pipeline_run(pipeline_run=pipeline_run, status=PipelineRun.Status.SUCCEEDED)
+
+    pipeline_run.refresh_from_db()
+    first_step.refresh_from_db()
+    assert pipeline_run.status == PipelineRun.Status.SUCCEEDED
+    assert pipeline_run.metadata["step_count"] == len(steps)
+    assert first_step.status == PipelineStepRun.Status.SUCCEEDED
+    assert first_step.elapsed_seconds == 1.25
+
+
 def test_weekly_update_only_warms_graph_for_metric_phase() -> None:
     options = default_options()
 
@@ -134,6 +169,7 @@ def default_options() -> dict[str, object]:
         "max_feed_mb": 50.0,
         "max_episodes_per_feed": 500,
         "raw_snapshot_storage": "none",
+        "raw_snapshot_gcs_uri": "",
         "include_inactive_feeds": False,
         "first_pass_batch_size": 1000,
         "max_first_pass_batches": 0,
@@ -144,6 +180,7 @@ def default_options() -> dict[str, object]:
         "prompt_version": "guest-extraction-v7",
         "coordinator_label": "",
         "llm_output_dir": "/tmp/podcast-network-batches",
+        "batch_artifact_gcs_uri": "",
         "poll_interval_seconds": 300,
         "review_min_confidence": 0.75,
         "review_max_confidence": 0.90,

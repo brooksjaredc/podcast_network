@@ -13,7 +13,11 @@ from podcast_network.cleaning import is_english_language_code, is_likely_english
 from podcast_network.ingest.fetch import FetchResult, fetch_feed
 from podcast_network.ingest.models import ParsedEpisode, ParsedFeed
 from podcast_network.ingest.parse import parse_feed
-from podcast_network.ingest.storage import LocalRawFeedStorage, NoopRawFeedStorage
+from podcast_network.ingest.storage import (
+    GCSRawFeedStorage,
+    LocalRawFeedStorage,
+    NoopRawFeedStorage,
+)
 from podcast_network.web.catalog.models import (
     Episode,
     Feed,
@@ -38,7 +42,7 @@ class FeedIngestResult:
 def ingest_feeds(
     feeds: list[Feed],
     *,
-    storage: LocalRawFeedStorage | NoopRawFeedStorage | None = None,
+    storage: GCSRawFeedStorage | LocalRawFeedStorage | NoopRawFeedStorage | None = None,
     fetch_timeout_seconds: int = 20,
     max_feed_bytes: int = 25 * 1024 * 1024,
     max_episodes_per_feed: int | None = None,
@@ -92,7 +96,7 @@ def ingest_feeds(
 def ingest_feeds_concurrently(
     *,
     feed_ids: list[int],
-    storage: LocalRawFeedStorage | NoopRawFeedStorage,
+    storage: GCSRawFeedStorage | LocalRawFeedStorage | NoopRawFeedStorage,
     scrape_run: ScrapeRun,
     fetch_timeout_seconds: int,
     max_feed_bytes: int,
@@ -133,7 +137,7 @@ def ingest_feeds_concurrently(
 def ingest_feed_for_run(
     *,
     feed_id: int,
-    storage: LocalRawFeedStorage | NoopRawFeedStorage,
+    storage: GCSRawFeedStorage | LocalRawFeedStorage | NoopRawFeedStorage,
     scrape_run_id: int,
     fetch_timeout_seconds: int,
     max_feed_bytes: int,
@@ -192,7 +196,7 @@ def finish_feed_run(*, run: ScrapeRun, succeeded: int, failed: int) -> None:
 def ingest_feed(
     feed: Feed,
     *,
-    storage: LocalRawFeedStorage | NoopRawFeedStorage | None = None,
+    storage: GCSRawFeedStorage | LocalRawFeedStorage | NoopRawFeedStorage | None = None,
     scrape_run: ScrapeRun | None = None,
     fetcher=fetch_feed,
     parser=parse_feed,
@@ -313,27 +317,54 @@ def sync_podcast_metadata(feed: Feed, parsed: ParsedFeed) -> None:
 
 
 def upsert_episodes(feed: Feed, episodes: list[ParsedEpisode]) -> tuple[int, int]:
-    created = 0
-    updated = 0
+    if not episodes:
+        return 0, 0
+
+    now = timezone.now()
+    episode_by_guid: dict[str, Episode] = {}
     for parsed in episodes:
-        _, was_created = Episode.objects.update_or_create(
+        guid = bounded_text(parsed.guid, 1000)
+        episode_by_guid[guid] = Episode(
             podcast=feed.podcast,
-            guid=bounded_text(parsed.guid, 1000),
-            defaults={
-                "title": bounded_text(parsed.title, 1000),
-                "description": parsed.description,
-                "published_at": parsed.published_at,
-                "episode_url": bounded_text(parsed.episode_url, 1000),
-                "enclosure_url": bounded_text(parsed.enclosure_url, 1000),
-                "duration_raw": bounded_text(parsed.duration_raw, 100),
-                "explicit": parsed.explicit,
-                "raw_data": parsed.raw_data,
-            },
+            guid=guid,
+            title=bounded_text(parsed.title, 1000),
+            description=parsed.description,
+            published_at=parsed.published_at,
+            episode_url=bounded_text(parsed.episode_url, 1000),
+            enclosure_url=bounded_text(parsed.enclosure_url, 1000),
+            duration_raw=bounded_text(parsed.duration_raw, 100),
+            explicit=parsed.explicit,
+            raw_data=parsed.raw_data,
+            first_seen_at=now,
+            last_seen_at=now,
         )
-        if was_created:
-            created += 1
-        else:
-            updated += 1
+
+    existing_guids = set(
+        Episode.objects.filter(
+            podcast=feed.podcast,
+            guid__in=episode_by_guid,
+        ).values_list("guid", flat=True)
+    )
+    created = len(episode_by_guid) - len(existing_guids)
+    updated = len(existing_guids)
+
+    Episode.objects.bulk_create(
+        list(episode_by_guid.values()),
+        batch_size=1000,
+        update_conflicts=True,
+        update_fields=[
+            "title",
+            "description",
+            "published_at",
+            "episode_url",
+            "enclosure_url",
+            "duration_raw",
+            "explicit",
+            "raw_data",
+            "last_seen_at",
+        ],
+        unique_fields=["podcast", "guid"],
+    )
     return created, updated
 
 

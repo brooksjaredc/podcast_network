@@ -13,6 +13,7 @@ from django.db import transaction
 from django.db.models import Max, Min
 from django.utils import timezone
 
+from podcast_network.artifact_metadata import current_git_sha, local_file_artifact_metadata
 from podcast_network.cloud_artifacts import download_gcs_to_path
 from podcast_network.future_links.features import (
     LOGISTIC_FORWARD_FEATURES,
@@ -20,6 +21,7 @@ from podcast_network.future_links.features import (
     selected_feature_values,
 )
 from podcast_network.future_links.prediction import LinkCandidate, build_historical_link_data
+from podcast_network.paths import PROJECT_ROOT
 from podcast_network.web.catalog.models import (
     Appearance,
     FutureLinkWeeklyAuditLink,
@@ -68,6 +70,7 @@ class Command(BaseCommand):
                 gcs_model_uri=str(options["gcs_model_uri"]),
                 temp_dir=Path(temp_dir),
             )
+            model_artifact = local_file_artifact_metadata(model_path)
             payload = joblib.load(model_path)
             feature_names = list(payload.get("feature_names") or LOGISTIC_FORWARD_FEATURES)
             scaler = payload["scaler"]
@@ -152,7 +155,10 @@ class Command(BaseCommand):
                 "window_days": window_days,
                 "model_path": str(model_path),
                 "gcs_model_uri": str(options["gcs_model_uri"] or ""),
+                "model_sha256": model_artifact["sha256"],
+                "model_size_bytes": model_artifact["size_bytes"],
                 "model_type": payload.get("model_type"),
+                "git_sha": current_git_sha(cwd=PROJECT_ROOT),
                 "event_time_field": "observation__episode__published_at",
                 "feature_names": feature_names,
                 "prior_guest_link_count": len(historical.existing_guest_links),

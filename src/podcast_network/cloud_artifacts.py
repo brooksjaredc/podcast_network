@@ -21,6 +21,16 @@ def upload_path_to_gcs(*, local_path: Path, gcs_uri: str) -> None:
         blob.upload_from_filename(str(path))
 
 
+def upload_text_to_gcs(*, text: str, gcs_uri: str, content_type: str = "text/plain") -> None:
+    from google.cloud import storage
+
+    bucket_name, blob_name = parse_gcs_uri(gcs_uri)
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    blob.upload_from_string(text, content_type=content_type)
+
+
 def download_gcs_to_path(*, gcs_uri: str, local_path: Path) -> None:
     from google.cloud import storage
 

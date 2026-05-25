@@ -12,6 +12,9 @@ main:
           - predictions_job: ${default(map.get(args, "predictions_job"), "podcast-network-weekly-predictions")}
           - run_label: ${default(map.get(args, "run_label"), "weekly-update-" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID"))}
           - future_link_gcs_model_uri: ${default(map.get(args, "future_link_gcs_model_uri"), "gs://podcast-network-prod-podcast-network-artifacts/future-link-training/online-logistic-20260522/future_link_online_logistic.joblib")}
+          - raw_snapshot_storage: ${default(map.get(args, "raw_snapshot_storage"), "gcs")}
+          - raw_snapshot_gcs_uri: ${default(map.get(args, "raw_snapshot_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/raw-feed-snapshots")}
+          - batch_artifact_gcs_uri: ${default(map.get(args, "batch_artifact_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/openai-batches")}
           - plot_output_dir: ${default(map.get(args, "plot_output_dir"), "/tmp/static-plots")}
           - plot_gcs_output_uri: ${default(map.get(args, "plot_gcs_output_uri"), "gs://podcast-network-prod-podcast-network-artifacts/static-plots/latest")}
     - run_scrape:
@@ -27,6 +30,10 @@ main:
             - scrape
             - --coordinator-label
             - ${run_label}
+            - --raw-snapshot-storage
+            - ${raw_snapshot_storage}
+            - --raw-snapshot-gcs-uri
+            - ${raw_snapshot_gcs_uri}
         result: scrape_execution
     - run_llm:
         call: run_job
@@ -41,6 +48,8 @@ main:
             - llm
             - --coordinator-label
             - ${run_label}
+            - --batch-artifact-gcs-uri
+            - ${batch_artifact_gcs_uri}
         result: llm_execution
     - run_processing:
         call: run_job

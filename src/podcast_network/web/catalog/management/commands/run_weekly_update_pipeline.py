@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import close_old_connections
+from django.utils import timezone
 
 from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL
 from podcast_network.extraction.prompt import PROMPT_VERSION
@@ -14,7 +15,7 @@ from podcast_network.web.catalog.management.commands.promote_frequent_guests_to_
     DEFAULT_COHOST_EPISODE_SHARE,
     DEFAULT_COHOST_EPISODE_THRESHOLD,
 )
-from podcast_network.web.catalog.models import ExtractionRun
+from podcast_network.web.catalog.models import ExtractionRun, PipelineRun, PipelineStepRun
 from podcast_network.web.explorer.graph_service import database_six_degrees_graph
 
 
@@ -64,9 +65,14 @@ class Command(BaseCommand):
         parser.add_argument("--max-episodes-per-feed", type=int, default=500)
         parser.add_argument(
             "--raw-snapshot-storage",
-            choices=["local", "none"],
+            choices=["local", "gcs", "none"],
             default="none",
             help="Use 'none' for Cloud Run jobs so RSS XML is not written to the image FS.",
+        )
+        parser.add_argument(
+            "--raw-snapshot-gcs-uri",
+            default="",
+            help="GCS prefix for raw RSS snapshots when --raw-snapshot-storage=gcs.",
         )
         parser.add_argument("--include-inactive-feeds", action="store_true")
         parser.add_argument("--first-pass-batch-size", type=int, default=1000)
@@ -86,6 +92,11 @@ class Command(BaseCommand):
             "--llm-output-dir",
             default="/tmp/podcast-network-batches",
             help="Temporary OpenAI batch input/output directory for Cloud Run.",
+        )
+        parser.add_argument(
+            "--batch-artifact-gcs-uri",
+            default="",
+            help="GCS prefix for OpenAI batch input/output JSONL artifacts.",
         )
         parser.add_argument("--poll-interval-seconds", type=int, default=300)
         parser.add_argument("--review-min-confidence", type=float, default=0.75)
@@ -148,31 +159,61 @@ class Command(BaseCommand):
             self.print_todos()
             return
 
-        for step in steps:
-            close_old_connections()
-            started = time.monotonic()
-            self.stdout.write(self.style.MIGRATE_HEADING(f"== {step.name} =="))
-            call_command(step.command, **step.options)
-            elapsed = time.monotonic() - started
-            self.stdout.write(self.style.SUCCESS(f"Completed {step.name} in {elapsed:.1f}s."))
-            close_old_connections()
+        pipeline_run = start_pipeline_run(options=options, steps=steps)
+        try:
+            for step_run, step in zip(
+                pipeline_run.steps.order_by("sequence"),
+                steps,
+                strict=True,
+            ):
+                close_old_connections()
+                started = time.monotonic()
+                step_run.status = PipelineStepRun.Status.RUNNING
+                step_run.started_at = timezone.now()
+                step_run.save(update_fields=["status", "started_at"])
+                self.stdout.write(self.style.MIGRATE_HEADING(f"== {step.name} =="))
+                try:
+                    call_command(step.command, **step.options)
+                except Exception as exc:
+                    elapsed = time.monotonic() - started
+                    fail_step_run(step_run=step_run, error=str(exc), elapsed_seconds=elapsed)
+                    raise
+                elapsed = time.monotonic() - started
+                finish_step_run(step_run=step_run, elapsed_seconds=elapsed)
+                self.stdout.write(self.style.SUCCESS(f"Completed {step.name} in {elapsed:.1f}s."))
+                close_old_connections()
 
-        if should_warm_graph(options):
-            close_old_connections()
-            started = time.monotonic()
-            self.stdout.write(self.style.MIGRATE_HEADING("== Warm DB graph =="))
-            database_six_degrees_graph.cache_clear()
-            graph = database_six_degrees_graph()
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Loaded graph with {len(graph.names)} names and "
-                    f"{len(graph.podcast_ids)} podcasts."
+            if should_warm_graph(options):
+                close_old_connections()
+                started = time.monotonic()
+                self.stdout.write(self.style.MIGRATE_HEADING("== Warm DB graph =="))
+                database_six_degrees_graph.cache_clear()
+                graph = database_six_degrees_graph()
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Loaded graph with {len(graph.names)} names and "
+                        f"{len(graph.podcast_ids)} podcasts."
+                    )
                 )
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Completed Warm DB graph in {time.monotonic() - started:.1f}s."
+                    )
+                )
+                close_old_connections()
+        except Exception as exc:
+            finish_pipeline_run(
+                pipeline_run=pipeline_run,
+                status=PipelineRun.Status.FAILED,
+                error=str(exc),
             )
-            self.stdout.write(
-                self.style.SUCCESS(f"Completed Warm DB graph in {time.monotonic() - started:.1f}s.")
-            )
-            close_old_connections()
+            raise
+
+        failed_steps = pipeline_run.steps.filter(status=PipelineStepRun.Status.FAILED).exists()
+        finish_pipeline_run(
+            pipeline_run=pipeline_run,
+            status=PipelineRun.Status.PARTIAL if failed_steps else PipelineRun.Status.SUCCEEDED,
+        )
 
         self.print_todos()
         self.stdout.write(self.style.SUCCESS("Weekly update pipeline complete."))
@@ -205,6 +246,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     "max_feed_mb": float(options["max_feed_mb"]),
                     "max_episodes_per_feed": int(options["max_episodes_per_feed"]),
                     "raw_snapshot_storage": str(options["raw_snapshot_storage"]),
+                    "raw_snapshot_gcs_uri": str(options.get("raw_snapshot_gcs_uri", "")),
                     "inactive": bool(options["include_inactive_feeds"]),
                     "run_label": coordinator_label,
                 },
@@ -229,6 +271,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     "review_max_confidence": float(options["review_max_confidence"]),
                     "new_episodes_only": not bool(options["reprocess_current_prompt"]),
                     "output_dir": str(options["llm_output_dir"]),
+                    "batch_artifact_gcs_uri": str(options["batch_artifact_gcs_uri"]),
                 },
             )
         )
@@ -385,3 +428,72 @@ def future_link_model_options(options: dict[str, object]) -> dict[str, str]:
         "model_path": model_path,
         "gcs_model_uri": gcs_model_uri,
     }
+
+
+def start_pipeline_run(
+    *,
+    options: dict[str, object],
+    steps: list[PipelineStep],
+) -> PipelineRun:
+    run_label = resolve_coordinator_label(options)
+    pipeline_run, _created = PipelineRun.objects.update_or_create(
+        run_label=run_label,
+        defaults={
+            "phase": str(options.get("phase", "all")),
+            "status": PipelineRun.Status.RUNNING,
+            "finished_at": None,
+            "options": serializable_options(options),
+            "metadata": {
+                "step_count": len(steps),
+            },
+            "error": "",
+        },
+    )
+    pipeline_run.steps.all().delete()
+    PipelineStepRun.objects.bulk_create(
+        [
+            PipelineStepRun(
+                pipeline_run=pipeline_run,
+                sequence=index,
+                name=step.name,
+                command=step.command,
+                options=serializable_options(step.options),
+            )
+            for index, step in enumerate(steps, start=1)
+        ]
+    )
+    return pipeline_run
+
+
+def finish_step_run(*, step_run: PipelineStepRun, elapsed_seconds: float) -> None:
+    step_run.status = PipelineStepRun.Status.SUCCEEDED
+    step_run.finished_at = timezone.now()
+    step_run.elapsed_seconds = elapsed_seconds
+    step_run.save(update_fields=["status", "finished_at", "elapsed_seconds"])
+
+
+def fail_step_run(*, step_run: PipelineStepRun, error: str, elapsed_seconds: float) -> None:
+    step_run.status = PipelineStepRun.Status.FAILED
+    step_run.finished_at = timezone.now()
+    step_run.elapsed_seconds = elapsed_seconds
+    step_run.error = error
+    step_run.save(update_fields=["status", "finished_at", "elapsed_seconds", "error"])
+
+
+def finish_pipeline_run(
+    *,
+    pipeline_run: PipelineRun,
+    status: str,
+    error: str = "",
+) -> None:
+    pipeline_run.status = status
+    pipeline_run.finished_at = timezone.now()
+    pipeline_run.error = error
+    pipeline_run.save(update_fields=["status", "finished_at", "error"])
+
+
+def serializable_options(options: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in options.items() if isinstance(value, JSON_SCALAR_TYPES)}
+
+
+JSON_SCALAR_TYPES = (str, int, float, bool, type(None))

@@ -7,6 +7,7 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from openai import OpenAI
 
+from podcast_network.cloud_artifacts import parse_gcs_uri, upload_text_to_gcs
 from podcast_network.extraction.batch import (
     episode_id_from_custom_id,
     result_from_response_body,
@@ -45,16 +46,20 @@ class Command(BaseCommand):
         if not batch.output_file_id:
             raise CommandError(f"Batch {batch.id} completed without an output_file_id.")
 
-        output_path = output_file_path(run, "output.jsonl")
         output_text = download_file_text(client, batch.output_file_id)
-        output_path.write_text(output_text, encoding="utf-8")
+        output_path, output_gcs_uri = write_batch_artifact(
+            run=run,
+            filename="output.jsonl",
+            text=output_text,
+        )
 
         error_path = ""
+        error_gcs_uri = ""
         if batch.error_file_id:
-            error_path_obj = output_file_path(run, "errors.jsonl")
-            error_path_obj.write_text(
-                download_file_text(client, batch.error_file_id),
-                encoding="utf-8",
+            error_path_obj, error_gcs_uri = write_batch_artifact(
+                run=run,
+                filename="errors.jsonl",
+                text=download_file_text(client, batch.error_file_id),
             )
             error_path = str(error_path_obj)
 
@@ -64,9 +69,13 @@ class Command(BaseCommand):
             "output_file_id": batch.output_file_id,
             "output_jsonl_path": str(output_path),
         }
+        if output_gcs_uri:
+            metadata["output_jsonl_gcs_uri"] = output_gcs_uri
         if batch.error_file_id:
             metadata["error_file_id"] = batch.error_file_id
             metadata["error_jsonl_path"] = error_path
+            if error_gcs_uri:
+                metadata["error_jsonl_gcs_uri"] = error_gcs_uri
         run.metadata = metadata
         run.save(update_fields=["metadata"])
         finalize_extraction_run(run=run, outcomes=outcomes)
@@ -152,3 +161,53 @@ def output_file_path(run: ExtractionRun, filename: str) -> Path:
     output_dir = base_path.parent / f"run_{run.id}_{run.metadata.get('batch_id', 'batch')}"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir / filename
+
+
+def write_batch_artifact(
+    *,
+    run: ExtractionRun,
+    filename: str,
+    text: str,
+) -> tuple[Path, str]:
+    path = output_file_path(run, filename)
+    path.write_text(text, encoding="utf-8")
+    gcs_uri = batch_artifact_gcs_uri(run=run, filename=filename)
+    if gcs_uri:
+        upload_text_to_gcs(text=text, gcs_uri=gcs_uri, content_type="application/jsonl")
+    return path, gcs_uri
+
+
+def batch_artifact_gcs_uri(*, run: ExtractionRun, filename: str) -> str:
+    prefix = str(run.metadata.get("batch_artifact_gcs_uri") or "").strip()
+    if not prefix:
+        return ""
+    bucket_name, blob_prefix = parse_gcs_uri(prefix)
+    run_label = safe_artifact_segment(
+        str(
+            run.metadata.get("coordinator_label")
+            or run.metadata.get("run_label")
+            or f"run-{run.id}"
+        )
+    )
+    phase = safe_artifact_segment(str(run.metadata.get("phase") or "batch"))
+    batch_id = safe_artifact_segment(str(run.metadata.get("batch_id") or f"run-{run.id}"))
+    blob_name = "/".join(
+        part.strip("/")
+        for part in [
+            blob_prefix,
+            run_label,
+            phase,
+            f"run_{run.id}_{batch_id}",
+            filename,
+        ]
+        if part.strip("/")
+    )
+    return f"gs://{bucket_name}/{blob_name}"
+
+
+def safe_artifact_segment(value: str) -> str:
+    safe = "".join(
+        character if character.isalnum() or character in "-_." else "-"
+        for character in value
+    )
+    return safe.strip("-") or "artifact"

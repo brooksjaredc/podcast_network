@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from openai import OpenAI
 
+from podcast_network.cloud_artifacts import upload_text_to_gcs
 from podcast_network.extraction.batch import BATCH_ENDPOINT, write_batch_jsonl
 from podcast_network.extraction.openai_client import DEFAULT_EXTRACTION_MODEL
 from podcast_network.extraction.prompt import PROMPT_VERSION
@@ -14,6 +16,9 @@ from podcast_network.web.catalog.management.commands.backfill_guest_extractions 
     select_second_pass_review_episodes,
 )
 from podcast_network.web.catalog.management.commands.extract_guests import select_episodes
+from podcast_network.web.catalog.management.commands.sync_guest_extraction_batch import (
+    batch_artifact_gcs_uri,
+)
 from podcast_network.web.catalog.models import ExtractionRun
 
 
@@ -47,6 +52,14 @@ class Command(BaseCommand):
             "--output-dir",
             default="data/reports/batches",
             help="Directory for local batch input and output files.",
+        )
+        parser.add_argument(
+            "--batch-artifact-gcs-uri",
+            default="",
+            help=(
+                "GCS prefix for OpenAI batch input/output JSONL. "
+                "Defaults to PODCAST_NETWORK_BATCH_ARTIFACT_GCS_URI."
+            ),
         )
         parser.add_argument(
             "--dry-run",
@@ -93,6 +106,10 @@ class Command(BaseCommand):
             reasoning_effort=reasoning_effort,
             path=jsonl_path,
         )
+        batch_artifact_gcs_prefix = str(
+            options["batch_artifact_gcs_uri"] or settings.BATCH_ARTIFACT_GCS_URI
+        )
+        input_text = jsonl_path.read_text(encoding="utf-8")
         if options["dry_run"]:
             self.stdout.write(
                 self.style.SUCCESS(
@@ -127,11 +144,24 @@ class Command(BaseCommand):
                 "batch_id": batch.id,
                 "input_file_id": uploaded_file.id,
                 "input_jsonl_path": str(jsonl_path),
+                "batch_artifact_gcs_uri": batch_artifact_gcs_prefix,
                 "endpoint": BATCH_ENDPOINT,
                 "reasoning_effort": reasoning_effort,
                 "review_band_run_id": review_band_run_id or "",
             },
         )
+        if batch_artifact_gcs_prefix:
+            input_gcs_uri = batch_artifact_gcs_uri(run=run, filename=jsonl_path.name)
+            upload_text_to_gcs(
+                text=input_text,
+                gcs_uri=input_gcs_uri,
+                content_type="application/jsonl",
+            )
+            run.metadata = {
+                **run.metadata,
+                "input_jsonl_gcs_uri": input_gcs_uri,
+            }
+            run.save(update_fields=["metadata"])
         self.stdout.write(
             self.style.SUCCESS(
                 f"Submitted OpenAI batch {batch.id} for run {run.id} "

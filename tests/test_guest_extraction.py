@@ -16,6 +16,7 @@ from podcast_network.extraction.pipeline import (
 )
 from podcast_network.extraction.prompt import build_episode_prompt
 from podcast_network.web.catalog.management.commands.sync_guest_extraction_batch import (
+    batch_artifact_gcs_uri,
     sync_output_record,
 )
 from podcast_network.web.catalog.models import (
@@ -398,6 +399,27 @@ class GuestExtractionTests(TestCase):
         assert extraction.input_tokens == 10
         assert extraction.output_tokens == 5
         assert GuestCandidate.objects.get(extraction=extraction).name == "Jane Doe"
+
+    def test_batch_artifact_gcs_uri_uses_run_metadata(self) -> None:
+        run = ExtractionRun.objects.create(
+            model="gpt-5-nano",
+            provider="openai-batch",
+            prompt_version="guest-extraction-v4",
+            episodes_requested=1,
+            metadata={
+                "batch_artifact_gcs_uri": "gs://bucket/openai-batches",
+                "coordinator_label": "weekly/update test",
+                "phase": "first pass",
+                "batch_id": "batch/123",
+            },
+        )
+
+        uri = batch_artifact_gcs_uri(run=run, filename="output.jsonl")
+
+        assert uri == (
+            f"gs://bucket/openai-batches/weekly-update-test/first-pass/"
+            f"run_{run.id}_batch-123/output.jsonl"
+        )
 
     def test_submit_batch_dry_run_can_select_second_pass_review_band(self) -> None:
         episode = create_episode(title="Episode with Jane Doe")

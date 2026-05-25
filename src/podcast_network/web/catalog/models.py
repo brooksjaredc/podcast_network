@@ -43,6 +43,74 @@ class Feed(models.Model):
         return self.url
 
 
+class PipelineRun(models.Model):
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        PARTIAL = "partial", "Partial"
+        FAILED = "failed", "Failed"
+
+    run_label = models.CharField(max_length=120, unique=True)
+    phase = models.CharField(max_length=50, default="all", db_index=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RUNNING)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    options = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["run_label"]),
+            models.Index(fields=["status", "started_at"]),
+        ]
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        return f"{self.run_label} {self.status}"
+
+
+class PipelineStepRun(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        SKIPPED = "skipped", "Skipped"
+
+    pipeline_run = models.ForeignKey(
+        PipelineRun,
+        on_delete=models.CASCADE,
+        related_name="steps",
+    )
+    sequence = models.PositiveIntegerField()
+    name = models.CharField(max_length=200)
+    command = models.CharField(max_length=200)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    elapsed_seconds = models.FloatField(null=True, blank=True)
+    options = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pipeline_run", "sequence"],
+                name="unique_pipeline_step_sequence_per_run",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["pipeline_run", "status"]),
+            models.Index(fields=["command", "status"]),
+        ]
+        ordering = ["pipeline_run", "sequence"]
+
+    def __str__(self) -> str:
+        return f"{self.pipeline_run_id}:{self.sequence} {self.command} {self.status}"
+
+
 class ScrapeRun(models.Model):
     class Status(models.TextChoices):
         RUNNING = "running", "Running"

@@ -56,6 +56,14 @@ gcloud storage buckets create gs://PROJECT_ID-podcast-network-artifacts \
   --location=us-central1
 ```
 
+Use stable prefixes in that bucket for generated artifacts and raw ingestion snapshots:
+
+```text
+gs://PROJECT_ID-podcast-network-artifacts/static-plots/latest
+gs://PROJECT_ID-podcast-network-artifacts/raw-feed-snapshots
+gs://PROJECT_ID-podcast-network-artifacts/openai-batches
+```
+
 Create secrets:
 
 ```bash
@@ -99,6 +107,7 @@ gcloud run jobs create weekly-update \
   --image us-central1-docker.pkg.dev/PROJECT_ID/podcast-network/web:latest \
   --region us-central1 \
   --set-cloudsql-instances PROJECT_ID:us-central1:podcast-network-db \
+  --set-env-vars PODCAST_NETWORK_RAW_SNAPSHOT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/raw-feed-snapshots,PODCAST_NETWORK_BATCH_ARTIFACT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/openai-batches \
   --set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest \
   --command python \
   --args manage.py,run_weekly_update_pipeline \
@@ -121,3 +130,16 @@ gcloud run jobs execute weekly-update \
 
 The regular weekly job is meant for incremental updates. Heavy historical backfills should
 remain separate jobs with explicit limits, not part of the regular web service startup.
+
+To persist raw RSS snapshots from Cloud Run, pass `--raw-snapshot-storage gcs` to the
+scrape phase or weekly coordinator. The snapshot rows in Postgres will then point at
+immutable `gs://` objects instead of local or noop paths.
+
+To persist OpenAI Batch API JSONL artifacts, set `PODCAST_NETWORK_BATCH_ARTIFACT_GCS_URI`
+or pass `--batch-artifact-gcs-uri`. Extraction run metadata will keep both the local
+temporary path and durable `input_jsonl_gcs_uri`, `output_jsonl_gcs_uri`, and optional
+`error_jsonl_gcs_uri` values.
+
+Future-link prediction/audit runs record model artifact `model_sha256`,
+`model_size_bytes`, and the current `git_sha` in run metadata. Trained person-entity
+candidate scoring stores the same model checksum fields in candidate pair features.

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandParser
 
 from podcast_network.ingest import ingest_feeds
-from podcast_network.ingest.storage import LocalRawFeedStorage, NoopRawFeedStorage
+from podcast_network.ingest.storage import (
+    GCSRawFeedStorage,
+    LocalRawFeedStorage,
+    NoopRawFeedStorage,
+)
 from podcast_network.web.catalog.models import Feed, Podcast
 
 
@@ -66,9 +71,17 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--raw-snapshot-storage",
-            choices=["local", "none"],
+            choices=["local", "gcs", "none"],
             default="local",
             help="Where to store raw RSS snapshots. Use 'none' for Cloud Run jobs.",
+        )
+        parser.add_argument(
+            "--raw-snapshot-gcs-uri",
+            default="",
+            help=(
+                "GCS prefix for raw RSS snapshots when --raw-snapshot-storage=gcs. "
+                "Defaults to PODCAST_NETWORK_RAW_SNAPSHOT_GCS_URI."
+            ),
         )
         parser.add_argument(
             "--run-label",
@@ -107,10 +120,9 @@ class Command(BaseCommand):
         max_episodes_per_feed = int(options["max_episodes_per_feed"])
         if max_episodes_per_feed < 0:
             raise ValueError("--max-episodes-per-feed cannot be negative.")
-        storage = (
-            NoopRawFeedStorage()
-            if str(options["raw_snapshot_storage"]) == "none"
-            else LocalRawFeedStorage()
+        storage = raw_feed_storage(
+            storage_name=str(options["raw_snapshot_storage"]),
+            gcs_uri=str(options["raw_snapshot_gcs_uri"] or settings.RAW_SNAPSHOT_GCS_URI),
         )
 
         def progress(processed: int, succeeded: int, failed: int) -> None:
@@ -144,3 +156,16 @@ def ensure_feed(url: str, podcast_name: str) -> Feed:
     podcast, _ = Podcast.objects.get_or_create(name=podcast_name)
     feed, _ = Feed.objects.get_or_create(url=url, defaults={"podcast": podcast})
     return feed
+
+
+def raw_feed_storage(*, storage_name: str, gcs_uri: str):
+    if storage_name == "none":
+        return NoopRawFeedStorage()
+    if storage_name == "gcs":
+        if not gcs_uri:
+            raise ValueError(
+                "--raw-snapshot-gcs-uri or PODCAST_NETWORK_RAW_SNAPSHOT_GCS_URI is required "
+                "when --raw-snapshot-storage=gcs."
+            )
+        return GCSRawFeedStorage(gcs_uri)
+    return LocalRawFeedStorage()

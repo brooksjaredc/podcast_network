@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.core.management.base import BaseCommand, CommandParser
-from django.db import transaction
+from django.db import IntegrityError
 
 from podcast_network.cleaning import clean_person_display_name, is_single_token_person_name
 from podcast_network.extraction.pipeline import normalize_name
@@ -35,6 +35,15 @@ class SyncStats:
     extraction_run_label: str = ""
 
 
+@dataclass(frozen=True)
+class GuestAppearanceCandidate:
+    episode_id: int
+    podcast_id: int
+    display_name: str
+    normalized_name: str
+    confidence: float
+
+
 class Command(BaseCommand):
     help = "Materialize accepted guest candidates into Person and Appearance rows."
 
@@ -44,6 +53,7 @@ class Command(BaseCommand):
         parser.add_argument("--second-pass-model", default="gpt-5-mini")
         parser.add_argument("--min-confidence", type=float, default=0.90)
         parser.add_argument("--limit", type=int, default=0)
+        parser.add_argument("--chunk-size", type=int, default=5000)
         parser.add_argument(
             "--extraction-run-label",
             default="",
@@ -81,6 +91,7 @@ class Command(BaseCommand):
             second_pass_model=str(options["second_pass_model"]),
             min_confidence=float(options["min_confidence"]),
             limit=int(options["limit"]),
+            chunk_size=int(options["chunk_size"]),
             extraction_run_label=str(options["extraction_run_label"]),
             sync_hosts=not bool(options["skip_host_sync"]),
             prune_single_name_people=not bool(options["keep_single_name_people"]),
@@ -109,16 +120,14 @@ def sync_guest_appearances(
     second_pass_model: str,
     min_confidence: float,
     limit: int = 0,
+    chunk_size: int = 5000,
     extraction_run_label: str = "",
     sync_hosts: bool = True,
     prune_single_name_people: bool = True,
 ) -> SyncStats:
     stats = SyncStats()
     stats.extraction_run_label = extraction_run_label
-    people_by_normalized = {
-        person.normalized_name: person
-        for person in Person.objects.only("id", "name", "normalized_name")
-    }
+    people_by_normalized: dict[str, Person] = {}
     people_by_name = {person.name: person for person in people_by_normalized.values()}
     host_normalized_by_podcast = podcast_host_index()
 
@@ -146,34 +155,139 @@ def sync_guest_appearances(
             episode_ids=episode_ids if extraction_run_label else None,
         )
 
-    for episode_id in episode_ids:
-        stats.episodes_seen += 1
-        extraction = preferred_extraction(
-            episode_id=episode_id,
-            prompt_version=prompt_version,
-            first_pass_model=first_pass_model,
-            second_pass_model=second_pass_model,
+    preferred_extractions = preferred_extractions_for_episodes(
+        episode_ids=episode_ids,
+        prompt_version=prompt_version,
+        first_pass_model=first_pass_model,
+        second_pass_model=second_pass_model,
+    )
+    stats.episodes_seen = len(episode_ids)
+    extraction_ids = [extraction.id for extraction in preferred_extractions.values()]
+    for extraction_id_chunk in chunks(extraction_ids, chunk_size):
+        sync_guest_candidate_chunk(
+            extraction_ids=extraction_id_chunk,
+            host_normalized_by_podcast=host_normalized_by_podcast,
+            people_by_normalized=people_by_normalized,
+            people_by_name=people_by_name,
+            min_confidence=min_confidence,
+            stats=stats,
+            chunk_size=chunk_size,
         )
-        if extraction is None:
-            continue
-        host_names = host_normalized_by_podcast.get(extraction.episode.podcast_id, set())
-        candidates = GuestCandidate.objects.filter(
-            extraction=extraction,
+    if prune_single_name_people:
+        stats.single_name_people_pruned = prune_single_name_people_rows()
+    return stats
+
+
+def sync_guest_candidate_chunk(
+    *,
+    extraction_ids: list[int],
+    host_normalized_by_podcast: dict[int, set[str]],
+    people_by_normalized: dict[str, Person],
+    people_by_name: dict[str, Person],
+    min_confidence: float,
+    stats: SyncStats,
+    chunk_size: int,
+) -> None:
+    candidates = materializable_guest_candidates(
+        extraction_ids=extraction_ids,
+        host_normalized_by_podcast=host_normalized_by_podcast,
+        min_confidence=min_confidence,
+        stats=stats,
+    )
+    if not candidates:
+        return
+    sync_people_for_candidates(
+        candidates=candidates,
+        people_by_normalized=people_by_normalized,
+        people_by_name=people_by_name,
+        stats=stats,
+        chunk_size=chunk_size,
+    )
+    bulk_upsert_guest_appearances(
+        candidates=candidates,
+        people_by_normalized=people_by_normalized,
+        stats=stats,
+        chunk_size=chunk_size,
+    )
+
+
+def materializable_guest_candidates(
+    *,
+    extraction_ids: list[int],
+    host_normalized_by_podcast: dict[int, set[str]],
+    min_confidence: float,
+    stats: SyncStats,
+) -> list[GuestAppearanceCandidate]:
+    output_by_pair: dict[tuple[int, str], GuestAppearanceCandidate] = {}
+    rows = (
+        GuestCandidate.objects.filter(
+            extraction_id__in=extraction_ids,
             confidence__gte=min_confidence,
-        ).order_by("normalized_name", "-confidence")
-        with transaction.atomic():
-            for candidate in candidates:
-                display_name = clean_person_display_name(candidate.name)
-                normalized = normalize_name(display_name)
-                if not normalized:
-                    continue
-                if is_single_token_person_name(display_name):
-                    stats.skipped_single_name_candidates += 1
-                    continue
-                if normalized in host_names:
-                    stats.skipped_host_candidates += 1
-                    continue
-                person, created = get_or_create_person(
+        )
+        .select_related("extraction__episode")
+        .order_by("extraction__episode_id", "normalized_name", "-confidence")
+    )
+    for candidate in rows.iterator(chunk_size=5000):
+        display_name = clean_person_display_name(candidate.name)
+        normalized = normalize_name(display_name)
+        if not normalized:
+            continue
+        if is_single_token_person_name(display_name):
+            stats.skipped_single_name_candidates += 1
+            continue
+        episode = candidate.extraction.episode
+        if normalized in host_normalized_by_podcast.get(episode.podcast_id, set()):
+            stats.skipped_host_candidates += 1
+            continue
+        key = (episode.id, normalized)
+        existing = output_by_pair.get(key)
+        if existing is not None and existing.confidence >= candidate.confidence:
+            continue
+        output_by_pair[key] = GuestAppearanceCandidate(
+            episode_id=episode.id,
+            podcast_id=episode.podcast_id,
+            display_name=display_name,
+            normalized_name=normalized,
+            confidence=candidate.confidence,
+        )
+    return list(output_by_pair.values())
+
+
+def sync_people_for_candidates(
+    *,
+    candidates: list[GuestAppearanceCandidate],
+    people_by_normalized: dict[str, Person],
+    people_by_name: dict[str, Person],
+    stats: SyncStats,
+    chunk_size: int,
+) -> None:
+    normalized_names = {candidate.normalized_name for candidate in candidates}
+    display_names = {candidate.display_name for candidate in candidates}
+    load_people(
+        normalized_names=normalized_names,
+        display_names=display_names,
+        people_by_normalized=people_by_normalized,
+        people_by_name=people_by_name,
+    )
+
+    missing_by_normalized: dict[str, str] = {}
+    for candidate in candidates:
+        if (
+            candidate.normalized_name not in people_by_normalized
+            and candidate.display_name not in people_by_name
+        ):
+            missing_by_normalized.setdefault(candidate.normalized_name, candidate.display_name)
+    if missing_by_normalized:
+        people = [
+            Person(name=display_name, normalized_name=normalized)
+            for normalized, display_name in missing_by_normalized.items()
+        ]
+        try:
+            created_people = Person.objects.bulk_create(people, batch_size=chunk_size)
+            stats.people_created += len(created_people)
+        except IntegrityError:
+            for normalized, display_name in missing_by_normalized.items():
+                _person, created = get_or_create_person(
                     display_name=display_name,
                     normalized=normalized,
                     people_by_normalized=people_by_normalized,
@@ -181,29 +295,94 @@ def sync_guest_appearances(
                 )
                 if created:
                     stats.people_created += 1
-                if person.name != display_name and should_replace_display_name(
-                    person.name,
-                    display_name,
-                ):
-                    person.name = display_name
-                    person.save(update_fields=["name", "updated_at"])
-                appearance, created = Appearance.objects.update_or_create(
-                    episode_id=episode_id,
-                    person=person,
-                    role=Appearance.Role.GUEST,
-                    defaults={
-                        "source": "llm-guest-extraction",
-                        "confidence": candidate.confidence,
-                    },
-                )
-                stats.candidates_seen += 1
-                if created:
-                    stats.appearances_created += 1
-                else:
-                    stats.appearances_updated += 1
-    if prune_single_name_people:
-        stats.single_name_people_pruned = prune_single_name_people_rows()
-    return stats
+        load_people(
+            normalized_names=normalized_names,
+            display_names=display_names,
+            people_by_normalized=people_by_normalized,
+            people_by_name=people_by_name,
+        )
+
+    people_to_update: dict[int, Person] = {}
+    for candidate in candidates:
+        person = people_by_normalized.get(candidate.normalized_name) or people_by_name.get(
+            candidate.display_name
+        )
+        if person is None:
+            continue
+        people_by_normalized.setdefault(candidate.normalized_name, person)
+        people_by_name.setdefault(candidate.display_name, person)
+        if person.name != candidate.display_name and should_replace_display_name(
+            person.name,
+            candidate.display_name,
+        ):
+            person.name = candidate.display_name
+            people_to_update[person.id] = person
+    if people_to_update:
+        Person.objects.bulk_update(list(people_to_update.values()), ["name"], batch_size=chunk_size)
+
+
+def load_people(
+    *,
+    normalized_names: set[str],
+    display_names: set[str],
+    people_by_normalized: dict[str, Person],
+    people_by_name: dict[str, Person],
+) -> None:
+    missing_normalized = normalized_names - set(people_by_normalized)
+    missing_names = display_names - set(people_by_name)
+    if not missing_normalized and not missing_names:
+        return
+    people = Person.objects.filter(normalized_name__in=missing_normalized)
+    if missing_names:
+        people = people | Person.objects.filter(name__in=missing_names)
+    for person in people.only("id", "name", "normalized_name"):
+        people_by_normalized.setdefault(person.normalized_name, person)
+        people_by_name.setdefault(person.name, person)
+
+
+def bulk_upsert_guest_appearances(
+    *,
+    candidates: list[GuestAppearanceCandidate],
+    people_by_normalized: dict[str, Person],
+    stats: SyncStats,
+    chunk_size: int,
+) -> None:
+    rows = []
+    keys = []
+    for candidate in candidates:
+        person = people_by_normalized.get(candidate.normalized_name)
+        if person is None:
+            continue
+        rows.append(
+            Appearance(
+                episode_id=candidate.episode_id,
+                person=person,
+                role=Appearance.Role.GUEST,
+                source="llm-guest-extraction",
+                confidence=candidate.confidence,
+            )
+        )
+        keys.append((candidate.episode_id, person.id, Appearance.Role.GUEST))
+    if not rows:
+        return
+    existing_keys = set(
+        Appearance.objects.filter(
+            episode_id__in={episode_id for episode_id, _person_id, _role in keys},
+            person_id__in={person_id for _episode_id, person_id, _role in keys},
+            role=Appearance.Role.GUEST,
+        ).values_list("episode_id", "person_id", "role")
+    )
+    stats.candidates_seen += len(rows)
+    updated = sum(1 for key in keys if key in existing_keys)
+    stats.appearances_updated += updated
+    stats.appearances_created += len(keys) - updated
+    Appearance.objects.bulk_create(
+        rows,
+        batch_size=chunk_size,
+        update_conflicts=True,
+        update_fields=["source", "confidence"],
+        unique_fields=["episode", "person", "role"],
+    )
 
 
 def sync_host_appearances(
@@ -310,6 +489,15 @@ def get_or_create_person(
         people_by_name.setdefault(display_name, person)
         return person, False
 
+    person = (
+        Person.objects.filter(normalized_name=normalized).first()
+        or Person.objects.filter(name=display_name).first()
+    )
+    if person is not None:
+        people_by_normalized.setdefault(person.normalized_name, person)
+        people_by_name.setdefault(person.name, person)
+        return person, False
+
     person = Person.objects.create(name=display_name, normalized_name=normalized)
     people_by_normalized[normalized] = person
     people_by_name[display_name] = person
@@ -350,3 +538,39 @@ def preferred_extraction(
         model=first_pass_model,
         status=EpisodeGuestExtraction.Status.SUCCEEDED,
     ).first()
+
+
+def preferred_extractions_for_episodes(
+    *,
+    episode_ids: list[int],
+    prompt_version: str,
+    first_pass_model: str,
+    second_pass_model: str,
+) -> dict[int, EpisodeGuestExtraction]:
+    if not episode_ids:
+        return {}
+    model_priority = {
+        first_pass_model: 1,
+        second_pass_model: 2,
+    }
+    rows = (
+        EpisodeGuestExtraction.objects.filter(
+            episode_id__in=episode_ids,
+            prompt_version=prompt_version,
+            model__in=model_priority,
+            status=EpisodeGuestExtraction.Status.SUCCEEDED,
+        )
+        .select_related("episode")
+        .order_by("episode_id", "model", "-created_at")
+    )
+    preferred: dict[int, EpisodeGuestExtraction] = {}
+    for extraction in rows.iterator(chunk_size=5000):
+        current = preferred.get(extraction.episode_id)
+        if current is None or model_priority[extraction.model] > model_priority[current.model]:
+            preferred[extraction.episode_id] = extraction
+    return preferred
+
+
+def chunks[T](values: list[T], chunk_size: int) -> list[list[T]]:
+    chunk_size = max(chunk_size, 1)
+    return [values[index : index + chunk_size] for index in range(0, len(values), chunk_size)]

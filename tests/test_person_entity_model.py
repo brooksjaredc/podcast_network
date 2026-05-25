@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from django.core.management import call_command
@@ -109,6 +110,10 @@ class PersonEntityModelTests(TestCase):
         pair.refresh_from_db()
         assert pair.model_name == "test-trained-model"
         assert pair.match_probability is not None
+        assert pair.features["scoring_model_sha256"] == hashlib.sha256(
+            model_path.read_bytes()
+        ).hexdigest()
+        assert pair.features["scoring_model_size_bytes"] == model_path.stat().st_size
 
     def test_score_command_report_uses_trained_model_name(self) -> None:
         create_scored_candidate_pair()

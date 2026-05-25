@@ -7,8 +7,8 @@ from openai import OpenAI
 from podcast_network.extraction.pipeline import finalize_extraction_run
 from podcast_network.web.catalog.management.commands.sync_guest_extraction_batch import (
     download_file_text,
-    output_file_path,
     sync_output_lines,
+    write_batch_artifact,
 )
 from podcast_network.web.catalog.models import ExtractionRun
 
@@ -103,9 +103,12 @@ class Command(BaseCommand):
         if not batch.output_file_id:
             raise CommandError(f"Batch {batch.id} completed without an output_file_id.")
 
-        output_path = output_file_path(run, "output.jsonl")
         output_text = download_file_text(client, batch.output_file_id)
-        output_path.write_text(output_text, encoding="utf-8")
+        output_path, output_gcs_uri = write_batch_artifact(
+            run=run,
+            filename="output.jsonl",
+            text=output_text,
+        )
         outcomes = sync_output_lines(run=run, output_text=output_text)
 
         metadata = {
@@ -113,14 +116,18 @@ class Command(BaseCommand):
             "output_file_id": batch.output_file_id,
             "output_jsonl_path": str(output_path),
         }
+        if output_gcs_uri:
+            metadata["output_jsonl_gcs_uri"] = output_gcs_uri
         if batch.error_file_id:
-            error_path = output_file_path(run, "errors.jsonl")
-            error_path.write_text(
-                download_file_text(client, batch.error_file_id),
-                encoding="utf-8",
+            error_path, error_gcs_uri = write_batch_artifact(
+                run=run,
+                filename="errors.jsonl",
+                text=download_file_text(client, batch.error_file_id),
             )
             metadata["error_file_id"] = batch.error_file_id
             metadata["error_jsonl_path"] = str(error_path)
+            if error_gcs_uri:
+                metadata["error_jsonl_gcs_uri"] = error_gcs_uri
         run.metadata = metadata
         run.save(update_fields=["metadata"])
         finalize_extraction_run(run=run, outcomes=outcomes)

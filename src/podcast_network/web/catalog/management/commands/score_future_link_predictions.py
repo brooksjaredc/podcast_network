@@ -13,6 +13,7 @@ from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 from django.utils import timezone
 
+from podcast_network.artifact_metadata import current_git_sha, local_file_artifact_metadata
 from podcast_network.cloud_artifacts import download_gcs_to_path
 from podcast_network.future_links.features import (
     LOGISTIC_FORWARD_FEATURES,
@@ -21,6 +22,7 @@ from podcast_network.future_links.features import (
     selected_feature_values,
 )
 from podcast_network.future_links.prediction import build_historical_link_data, podcasts_to_score
+from podcast_network.paths import PROJECT_ROOT
 from podcast_network.web.catalog.models import (
     CanonicalPersonEntity,
     FutureLinkPrediction,
@@ -71,6 +73,7 @@ class Command(BaseCommand):
                 gcs_model_uri=str(options["gcs_model_uri"]),
                 temp_dir=Path(temp_dir),
             )
+            model_artifact = local_file_artifact_metadata(model_path)
             payload = joblib.load(model_path)
 
             feature_names = list(payload.get("feature_names") or LOGISTIC_FORWARD_FEATURES)
@@ -155,7 +158,10 @@ class Command(BaseCommand):
                 "cutoff_at": cutoff_at.isoformat(),
                 "model_path": str(model_path),
                 "gcs_model_uri": str(options["gcs_model_uri"] or ""),
+                "model_sha256": model_artifact["sha256"],
+                "model_size_bytes": model_artifact["size_bytes"],
                 "model_type": payload.get("model_type"),
+                "git_sha": current_git_sha(cwd=PROJECT_ROOT),
                 "feature_names": feature_names,
                 "candidate_count": candidate_count,
                 "scored_podcast_count": len(podcast_ids),
