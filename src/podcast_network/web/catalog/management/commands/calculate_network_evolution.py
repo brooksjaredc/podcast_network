@@ -44,6 +44,7 @@ class Command(BaseCommand):
             help="Approximate closeness with this many source nodes; 0 means exact.",
         )
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--run-label", default="")
         parser.add_argument(
             "--reset",
             action="store_true",
@@ -105,6 +106,7 @@ class Command(BaseCommand):
             person_metric_limit=int(options["person_metric_limit"]),
             betweenness_sample_size=int(options["betweenness_sample_size"]),
             closeness_sample_size=int(options["closeness_sample_size"]),
+            run_label=str(options["run_label"]),
         )
         if stats.run.status == stats.run.Status.SKIPPED:
             self.stdout.write(

@@ -57,6 +57,7 @@ class ScrapeRun(models.Model):
     feeds_succeeded = models.PositiveIntegerField(default=0)
     feeds_failed = models.PositiveIntegerField(default=0)
     parser_version = models.CharField(max_length=50, default="rss-v1")
+    run_label = models.CharField(max_length=120, blank=True, db_index=True)
 
     class Meta:
         ordering = ["-started_at"]

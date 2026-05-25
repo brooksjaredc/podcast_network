@@ -99,8 +99,17 @@ class PersonEntityPairLabelAdmin(admin.ModelAdmin):
 
 @admin.register(ScrapeRun)
 class ScrapeRunAdmin(admin.ModelAdmin):
-    list_display = ["id", "status", "started_at", "finished_at", "feeds_succeeded", "feeds_failed"]
-    list_filter = ["status"]
+    search_fields = ["run_label"]
+    list_display = [
+        "id",
+        "run_label",
+        "status",
+        "started_at",
+        "finished_at",
+        "feeds_succeeded",
+        "feeds_failed",
+    ]
+    list_filter = ["status", "run_label"]
 
 
 @admin.register(RawFeedSnapshot)

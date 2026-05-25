@@ -78,8 +78,10 @@ def calculate_network_evolution(
     person_metric_limit: int = DEFAULT_PERSON_METRIC_LIMIT,
     betweenness_sample_size: int = DEFAULT_BETWEENNESS_SAMPLE_SIZE,
     closeness_sample_size: int = DEFAULT_CLOSENESS_SAMPLE_SIZE,
+    run_label: str = "",
 ) -> EvolutionStats:
-    run = NetworkEvolutionRun.objects.create(graph_version=GRAPH_VERSION)
+    run_metadata = {"run_label": run_label} if run_label else {}
+    run = NetworkEvolutionRun.objects.create(graph_version=GRAPH_VERSION, metadata=run_metadata)
     try:
         weeks = missing_evolution_weeks(
             start_week=start_week,
@@ -95,6 +97,7 @@ def calculate_network_evolution(
                 weeks_requested=0,
                 weeks_calculated=0,
                 metadata={
+                    **run_metadata,
                     "reason": (
                         "no_missing_weeks"
                         if latest_snapshot_week() is not None or bootstrap
@@ -110,6 +113,7 @@ def calculate_network_evolution(
         run.start_week = weeks[0]
         run.end_week = weeks[-1]
         run.metadata = {
+            **run_metadata,
             "bootstrap": bootstrap,
             "recompute": recompute,
             "person_metric_limit": person_metric_limit,

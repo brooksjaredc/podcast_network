@@ -5,7 +5,7 @@ from pathlib import Path
 from django.test import TestCase
 
 from podcast_network.ingest.fetch import FetchResult
-from podcast_network.ingest.pipeline import ingest_feed, record_feed_failure
+from podcast_network.ingest.pipeline import ingest_feed, ingest_feeds, record_feed_failure
 from podcast_network.ingest.storage import LocalRawFeedStorage
 from podcast_network.web.catalog.models import (
     Episode,
@@ -92,6 +92,16 @@ class IngestPipelineTests(TestCase):
         assert result.skipped_unchanged is True
         assert Episode.objects.count() == 0
         assert ScrapeRun.objects.get().status == ScrapeRun.Status.SUCCEEDED
+
+    def test_ingest_feeds_records_run_label(self) -> None:
+        run = ingest_feeds(
+            [],
+            storage=LocalRawFeedStorage(Path(self.tmpdir)),
+            fetch_timeout_seconds=20,
+            run_label="weekly-update-test",
+        )
+
+        assert run.run_label == "weekly-update-test"
 
     def test_ingest_feed_bounds_long_episode_fields(self) -> None:
         feed = create_feed()

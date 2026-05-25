@@ -31,10 +31,11 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert batch_step.options["first_pass_reasoning_effort"] == "low"
     assert batch_step.options["coordinator_label"].startswith("weekly-update-")
     sync_step = steps[2]
-    assert sync_step.options["extraction_run_label"].startswith("weekly-update-")
+    assert sync_step.options["extraction_run_label"] == batch_step.options["coordinator_label"]
     scrape_step = steps[0]
     assert scrape_step.options["raw_snapshot_storage"] == "none"
     assert scrape_step.options["max_episodes_per_feed"] == 500
+    assert scrape_step.options["run_label"] == batch_step.options["coordinator_label"]
     promotion_step = steps[3]
     assert promotion_step.options["threshold"] == 100
     assert promotion_step.options["episode_share_threshold"] == 0.20
@@ -42,6 +43,8 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert evolution_step.options["max_weeks"] == 1
     assert evolution_step.options["betweenness_sample_size"] == 200
     assert evolution_step.options["closeness_sample_size"] == 200
+    assert steps[5].options["run_label"] == batch_step.options["coordinator_label"]
+    assert evolution_step.options["run_label"] == batch_step.options["coordinator_label"]
     er_step = steps[4]
     assert er_step.options["limit_pairs"] == 20000
     audit_step = steps[7]
@@ -49,7 +52,7 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
         audit_step.options["model_path"]
         == "data/models/future_link_exact_lr_unweighted_onecut.joblib"
     )
-    assert audit_step.options["run_id"].startswith("weekly-update-")
+    assert audit_step.options["run_id"] == batch_step.options["coordinator_label"]
     prediction_step = steps[8]
     assert prediction_step.options["top_n"] == 1000
     plot_step = steps[9]

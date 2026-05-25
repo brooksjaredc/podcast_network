@@ -43,10 +43,11 @@ def ingest_feeds(
     max_feed_bytes: int = 25 * 1024 * 1024,
     max_episodes_per_feed: int | None = None,
     concurrency: int = 1,
+    run_label: str = "",
     progress_callback: Callable[[int, int, int], None] | None = None,
 ) -> ScrapeRun:
     storage = storage or LocalRawFeedStorage()
-    run = ScrapeRun.objects.create(feeds_requested=len(feeds))
+    run = ScrapeRun.objects.create(feeds_requested=len(feeds), run_label=run_label)
     if concurrency > 1:
         return ingest_feeds_concurrently(
             feed_ids=[feed.id for feed in feeds],

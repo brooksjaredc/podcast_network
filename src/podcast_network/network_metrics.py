@@ -38,8 +38,9 @@ class MetricGraphs:
     person_stats: dict[str, PersonNodeStats]
 
 
-def calculate_and_store_network_metrics() -> NetworkMetricRun:
-    run = NetworkMetricRun.objects.create(graph_version=GRAPH_VERSION)
+def calculate_and_store_network_metrics(*, run_label: str = "") -> NetworkMetricRun:
+    metadata = {"run_label": run_label} if run_label else {}
+    run = NetworkMetricRun.objects.create(graph_version=GRAPH_VERSION, metadata=metadata)
     try:
         graphs = build_metric_graphs()
         person_metrics = person_metric_rows(run=run, graphs=graphs)

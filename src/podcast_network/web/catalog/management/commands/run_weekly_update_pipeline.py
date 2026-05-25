@@ -14,6 +14,7 @@ from podcast_network.web.catalog.management.commands.promote_frequent_guests_to_
     DEFAULT_COHOST_EPISODE_SHARE,
     DEFAULT_COHOST_EPISODE_THRESHOLD,
 )
+from podcast_network.web.catalog.models import ExtractionRun
 from podcast_network.web.explorer.services import database_six_degrees_graph
 
 
@@ -191,7 +192,7 @@ class Command(BaseCommand):
 def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
     steps: list[PipelineStep] = []
     phase = str(options.get("phase", "all"))
-    coordinator_label = str(options["coordinator_label"]) or weekly_label()
+    coordinator_label = resolve_coordinator_label(options)
     if phase in {"all", "scrape"} and not options["skip_scrape"]:
         steps.append(
             PipelineStep(
@@ -205,6 +206,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     "max_episodes_per_feed": int(options["max_episodes_per_feed"]),
                     "raw_snapshot_storage": str(options["raw_snapshot_storage"]),
                     "inactive": bool(options["include_inactive_feeds"]),
+                    "run_label": coordinator_label,
                 },
             )
         )
@@ -272,7 +274,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
             PipelineStep(
                 name="Calculate network metrics",
                 command="calculate_network_metrics",
-                options={},
+                options={"run_label": coordinator_label},
             )
         )
     if phase in {"all", "metrics"} and not options["skip_network_evolution"]:
@@ -285,6 +287,7 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                     "person_metric_limit": int(options["evolution_person_metric_limit"]),
                     "betweenness_sample_size": int(options["evolution_betweenness_sample_size"]),
                     "closeness_sample_size": int(options["evolution_closeness_sample_size"]),
+                    "run_label": coordinator_label,
                 },
             )
         )
@@ -336,7 +339,36 @@ def should_warm_graph(options: dict[str, object]) -> bool:
 
 
 def weekly_label() -> str:
-    return f"weekly-update-{datetime.now(tz=UTC).strftime('%Y%m%d')}"
+    return f"weekly-update-{datetime.now(tz=UTC).strftime('%Y%m%dT%H%M%SZ')}"
+
+
+def resolve_coordinator_label(options: dict[str, object]) -> str:
+    explicit_label = str(options["coordinator_label"])
+    if explicit_label:
+        return explicit_label
+    phase = str(options.get("phase", "all"))
+    if phase in {"processing-er", "predictions"}:
+        latest_label = latest_extraction_coordinator_label()
+        if latest_label:
+            return latest_label
+    return weekly_label()
+
+
+def latest_extraction_coordinator_label() -> str:
+    rows = (
+        ExtractionRun.objects.filter(
+            provider="openai-batch",
+            status__in=[ExtractionRun.Status.SUCCEEDED, ExtractionRun.Status.PARTIAL],
+            metadata__has_key="coordinator_label",
+        )
+        .order_by("-finished_at", "-started_at")
+        .values_list("metadata", flat=True)[:50]
+    )
+    for metadata in rows:
+        label = str(metadata.get("coordinator_label") or "")
+        if label:
+            return label
+    return ""
 
 
 def future_link_model_options(options: dict[str, object]) -> dict[str, str]:

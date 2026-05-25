@@ -70,6 +70,11 @@ class Command(BaseCommand):
             default="local",
             help="Where to store raw RSS snapshots. Use 'none' for Cloud Run jobs.",
         )
+        parser.add_argument(
+            "--run-label",
+            default="",
+            help="Optional audit label tying this scrape run to a weekly workflow execution.",
+        )
 
     def handle(self, *args: object, **options: object) -> None:
         feed_urls = list(options["feed_url"])
@@ -122,6 +127,7 @@ class Command(BaseCommand):
             max_feed_bytes=max_feed_bytes,
             max_episodes_per_feed=max_episodes_per_feed or None,
             concurrency=concurrency,
+            run_label=str(options["run_label"]),
             progress_callback=progress if progress_every else None,
         )
         self.stdout.write(
