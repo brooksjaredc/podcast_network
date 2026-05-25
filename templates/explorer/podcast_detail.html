@@ -35,54 +35,73 @@
     <a href="{% url 'explorer:common' %}?first={{ podcast.id }}">Compare this show with another podcast</a>
   </p>
 
-  <h2>Frequent Guests</h2>
-  <table>
-    <thead>
-      <tr><th>Guest</th><th>Appearances</th><th>Hours</th><th>Most Recent</th></tr>
-    </thead>
-    <tbody>
-      {% for row in guest_rows %}
-        <tr>
-          <td><a href="{% url 'explorer:person_detail' row.id %}">{{ row.name }}</a></td>
-          <td>{{ row.appearances_count }}</td>
-          <td></td>
-          <td>{{ row.latest|date:"Y-m-d" }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="tabs detail-tabs">
+    <input class="tab-radio" type="radio" name="podcast-detail-tab" id="podcast-tab-guests" checked>
+    <input class="tab-radio" type="radio" name="podcast-detail-tab" id="podcast-tab-fits">
 
-  <h2>Network-Based Guest Fits</h2>
-  <p class="muted">
-    Experimental matches based on network structure, not confident booking forecasts.
-  </p>
-  <table>
-    <thead>
-      <tr><th>Rank</th><th>Guest</th><th>Score</th><th>Why</th></tr>
-    </thead>
-    <tbody>
-      {% for prediction in predictions %}
-        <tr>
-          <td>#{{ prediction.rank }}</td>
-          <td>
-            {% if prediction.person_id %}
-              <a href="{% url 'explorer:person_detail' prediction.person_id %}">{{ prediction.guest_name }}</a>
-            {% else %}
-              {{ prediction.guest_name }}
-            {% endif %}
-          </td>
-          <td>{{ prediction.score|floatformat:3 }}</td>
-          <td>
-            {% if prediction.reason %}
-              {{ prediction.reason }}
-            {% else %}
-              <span class="muted">Feature details unavailable.</span>
-            {% endif %}
-          </td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="4">No predictions loaded.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+    <div class="tab-list" role="tablist" aria-label="Podcast detail sections">
+      <label for="podcast-tab-guests" role="tab">Frequent Guests</label>
+      <label for="podcast-tab-fits" role="tab">Network-Based Guest Fits</label>
+    </div>
+
+    <div class="tab-panels">
+      <section class="tab-panel podcast-tab-panel-guests">
+        <h2>Frequent Guests</h2>
+        <table>
+          <thead>
+            <tr><th>Guest</th><th>Appearances</th><th>Hours</th><th>Most Recent</th></tr>
+          </thead>
+          <tbody>
+            {% for row in guest_rows %}
+              <tr>
+                <td><a href="{% url 'explorer:person_detail' row.id %}">{{ row.name }}</a></td>
+                <td>{{ row.appearances_count }}</td>
+                <td></td>
+                <td>{{ row.latest|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4">No frequent guests loaded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tab-panel podcast-tab-panel-fits">
+        <h2>Network-Based Guest Fits</h2>
+        <p class="muted">
+          Experimental matches based on network structure, not confident booking forecasts.
+          <a href="{% url 'explorer:advanced_page' 'predictions' %}">Open the full predictions analysis</a>.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Rank</th><th>Guest</th><th>Score</th><th>Why</th></tr>
+          </thead>
+          <tbody>
+            {% for prediction in predictions %}
+              <tr>
+                <td>#{{ prediction.rank }}</td>
+                <td>
+                  {% if prediction.person_id %}
+                    <a href="{% url 'explorer:person_detail' prediction.person_id %}">{{ prediction.guest_name }}</a>
+                  {% else %}
+                    {{ prediction.guest_name }}
+                  {% endif %}
+                </td>
+                <td>{{ prediction.score|floatformat:3 }}</td>
+                <td>
+                  {% if prediction.reason %}
+                    {{ prediction.reason }}
+                  {% else %}
+                    <span class="muted">Feature details unavailable.</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4">No predictions loaded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </div>
 {% endblock %}

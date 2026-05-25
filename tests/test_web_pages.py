@@ -296,6 +296,10 @@ def test_podcast_detail_links_guests() -> None:
     assert response.status_code == 200
     assert b"Hosts" in response.content
     assert b"Frequent Guests" in response.content
+    assert b"podcast-detail-tab" in response.content
+    assert b"Network-Based Guest Fits" in response.content
+    assert b"Open the full predictions analysis" in response.content
+    assert b"/advanced/predictions/" in response.content
     assert response.content.count(f'href="/people/{joe.id}/"'.encode()) == 1
 
 
@@ -424,6 +428,11 @@ def test_person_detail_loads() -> None:
     assert response.status_code == 200
     assert b"Joe Rogan" in response.content
     assert b"Hosts or Co-hosts" in response.content
+    assert b"Network Snapshot" in response.content
+    assert b"Find path to Joe Rogan" in response.content
+    assert b"person-detail-tab" in response.content
+    assert b"Open the full predictions analysis" in response.content
+    assert b"/advanced/predictions/" in response.content
     assert b"The Joe Rogan Experience" in response.content
     assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
 

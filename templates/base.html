@@ -611,6 +611,9 @@
       .tabs {
         margin: 22px 0 0;
       }
+      .detail-tabs {
+        margin-top: 24px;
+      }
       .tab-radio {
         position: absolute;
         opacity: 0;
@@ -646,6 +649,24 @@
       #prediction-tab-scores:checked ~ .tab-panels .prediction-tab-panel-scores,
       #prediction-tab-links:checked ~ .tab-panels .prediction-tab-panel-links,
       #prediction-tab-fits:checked ~ .tab-panels .prediction-tab-panel-fits {
+        display: block;
+      }
+      #podcast-tab-guests:checked ~ .tab-list label[for="podcast-tab-guests"],
+      #podcast-tab-fits:checked ~ .tab-list label[for="podcast-tab-fits"],
+      #person-tab-hosting:checked ~ .tab-list label[for="person-tab-hosting"],
+      #person-tab-appearances:checked ~ .tab-list label[for="person-tab-appearances"],
+      #person-tab-rankings:checked ~ .tab-list label[for="person-tab-rankings"],
+      #person-tab-fits:checked ~ .tab-list label[for="person-tab-fits"] {
+        border-color: var(--line);
+        color: var(--accent);
+        background: var(--panel);
+      }
+      #podcast-tab-guests:checked ~ .tab-panels .podcast-tab-panel-guests,
+      #podcast-tab-fits:checked ~ .tab-panels .podcast-tab-panel-fits,
+      #person-tab-hosting:checked ~ .tab-panels .person-tab-panel-hosting,
+      #person-tab-appearances:checked ~ .tab-panels .person-tab-panel-appearances,
+      #person-tab-rankings:checked ~ .tab-panels .person-tab-panel-rankings,
+      #person-tab-fits:checked ~ .tab-panels .person-tab-panel-fits {
         display: block;
       }
       .plot {

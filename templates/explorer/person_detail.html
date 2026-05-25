@@ -5,24 +5,6 @@
 {% block content %}
   <h1>{{ person.name }}</h1>
 
-  <h2>Hosts or Co-hosts</h2>
-  <table>
-    <thead>
-      <tr><th>Podcast</th><th>Host Episodes</th><th>Most Recent</th></tr>
-    </thead>
-    <tbody>
-      {% for podcast in host_podcast_rows %}
-        <tr>
-          <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
-          <td>{{ podcast.appearances_count }}</td>
-          <td>{{ podcast.latest|date:"Y-m-d" }}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="3">No host or co-host podcasts loaded.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
   <div class="grid">
     <section class="panel">
       <h2>Guest On</h2>
@@ -41,80 +23,129 @@
     </section>
 
     <section class="panel">
-      <h2>Identity</h2>
+      <h2>Network Snapshot</h2>
       <table>
         <tbody>
-          <tr><td>Search name</td><td>{{ person.normalized_name }}</td></tr>
+          <tr><td>Guest podcasts</td><td>{{ podcast_rows|length }}</td></tr>
+          <tr><td>Hosted shows</td><td>{{ host_podcast_rows|length }}</td></tr>
           {% if network_metric %}
-            <tr><td>Canonical name</td><td>{{ network_metric.display_name }}</td></tr>
+            <tr><td>Best rank</td><td>#{{ network_metric.pagerank_rank }} PageRank</td></tr>
+          {% elif podcast_rows %}
+            <tr><td>Most frequent show</td><td>{{ podcast_rows.0.name }}</td></tr>
           {% endif %}
         </tbody>
       </table>
+      <p>
+        <a href="{% url 'explorer:path' %}?source={{ person.name|urlencode }}&target=Joe%20Rogan">Find path to Joe Rogan</a>
+      </p>
     </section>
   </div>
 
-  <h2>Network Rankings</h2>
-  <table>
-    <thead>
-      <tr><th>Metric</th><th>Rank</th><th>Score</th></tr>
-    </thead>
-    <tbody>
-      {% for row in network_rank_rows %}
-        <tr>
-          <td><a href="{% url 'explorer:rankings' %}?rank={{ row.rank_key }}">{{ row.label }}</a></td>
-          <td>#{{ row.rank }}</td>
-          <td>{{ row.score|floatformat:6 }}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="3">No network rankings loaded yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="tabs detail-tabs">
+    <input class="tab-radio" type="radio" name="person-detail-tab" id="person-tab-hosting" checked>
+    <input class="tab-radio" type="radio" name="person-detail-tab" id="person-tab-appearances">
+    <input class="tab-radio" type="radio" name="person-detail-tab" id="person-tab-rankings">
+    <input class="tab-radio" type="radio" name="person-detail-tab" id="person-tab-fits">
 
-  <h2>Podcast Appearance Summary</h2>
-  <table>
-    <thead>
-      <tr><th>Podcast</th><th>Duration</th><th>Appearances</th><th>Most Recent</th></tr>
-    </thead>
-    <tbody>
-      {% for podcast in podcast_rows %}
-        <tr>
-          <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
-          <td></td>
-          <td>{{ podcast.appearances_count }}</td>
-          <td>{{ podcast.latest|date:"Y-m-d" }}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="4">No guest podcast summaries loaded.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+    <div class="tab-list" role="tablist" aria-label="Person detail sections">
+      <label for="person-tab-hosting" role="tab">Hosting</label>
+      <label for="person-tab-appearances" role="tab">Guest Appearances</label>
+      <label for="person-tab-rankings" role="tab">Network Rankings</label>
+      <label for="person-tab-fits" role="tab">Podcast Fits</label>
+    </div>
 
-  <h2>Network-Based Podcast Fits</h2>
-  <p class="muted">
-    Experimental podcast matches based on network structure, not confident booking forecasts.
-  </p>
-  <table>
-    <thead>
-      <tr><th>Rank</th><th>Podcast</th><th>Score</th><th>Why</th></tr>
-    </thead>
-    <tbody>
-      {% for prediction in predictions %}
-        <tr>
-          <td>#{{ prediction.rank }}</td>
-          <td><a href="{% url 'explorer:podcast_detail' prediction.podcast_id %}">{{ prediction.podcast_name }}</a></td>
-          <td>{{ prediction.score|floatformat:3 }}</td>
-          <td>
-            {% if prediction.reason %}
-              {{ prediction.reason }}
-            {% else %}
-              <span class="muted">Feature details unavailable.</span>
-            {% endif %}
-          </td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="4">No predictions loaded.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+    <div class="tab-panels">
+      <section class="tab-panel person-tab-panel-hosting">
+        <h2>Hosts or Co-hosts</h2>
+        <table>
+          <thead>
+            <tr><th>Podcast</th><th>Host Episodes</th><th>Most Recent</th></tr>
+          </thead>
+          <tbody>
+            {% for podcast in host_podcast_rows %}
+              <tr>
+                <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
+                <td>{{ podcast.appearances_count }}</td>
+                <td>{{ podcast.latest|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3">No host or co-host podcasts loaded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tab-panel person-tab-panel-appearances">
+        <h2>Podcast Appearance Summary</h2>
+        <table>
+          <thead>
+            <tr><th>Podcast</th><th>Duration</th><th>Appearances</th><th>Most Recent</th></tr>
+          </thead>
+          <tbody>
+            {% for podcast in podcast_rows %}
+              <tr>
+                <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
+                <td></td>
+                <td>{{ podcast.appearances_count }}</td>
+                <td>{{ podcast.latest|date:"Y-m-d" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4">No guest podcast summaries loaded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tab-panel person-tab-panel-rankings">
+        <h2>Network Rankings</h2>
+        <table>
+          <thead>
+            <tr><th>Metric</th><th>Rank</th><th>Score</th></tr>
+          </thead>
+          <tbody>
+            {% for row in network_rank_rows %}
+              <tr>
+                <td><a href="{% url 'explorer:rankings' %}?rank={{ row.rank_key }}">{{ row.label }}</a></td>
+                <td>#{{ row.rank }}</td>
+                <td>{{ row.score|floatformat:6 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3">No network rankings loaded yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tab-panel person-tab-panel-fits">
+        <h2>Network-Based Podcast Fits</h2>
+        <p class="muted">
+          Experimental podcast matches based on network structure, not confident booking forecasts.
+          <a href="{% url 'explorer:advanced_page' 'predictions' %}">Open the full predictions analysis</a>.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Rank</th><th>Podcast</th><th>Score</th><th>Why</th></tr>
+          </thead>
+          <tbody>
+            {% for prediction in predictions %}
+              <tr>
+                <td>#{{ prediction.rank }}</td>
+                <td><a href="{% url 'explorer:podcast_detail' prediction.podcast_id %}">{{ prediction.podcast_name }}</a></td>
+                <td>{{ prediction.score|floatformat:3 }}</td>
+                <td>
+                  {% if prediction.reason %}
+                    {{ prediction.reason }}
+                  {% else %}
+                    <span class="muted">Feature details unavailable.</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4">No predictions loaded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </div>
 {% endblock %}
