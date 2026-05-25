@@ -4,6 +4,7 @@ import html
 import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 
@@ -12,7 +13,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from django.db import OperationalError, ProgrammingError
-from django.db.models import Count, Max
+from django.db.models import Count, Q
 
 from podcast_network.network_metrics import latest_succeeded_metric_run
 from podcast_network.paths import PROJECT_ROOT
@@ -254,35 +255,20 @@ def generate_interactive_plots(dataset: PlotDataset) -> list[Path]:
     ]
 
 
+@dataclass(frozen=True)
 class PlotDataset:
-    def __init__(
-        self,
-        *,
-        podcast_categories: dict[str, float],
-        people_categories: dict[str, float],
-        category_bias: dict[str, float],
-        category_mixing: dict[tuple[str, str], float],
-        metric_values: dict[str, list[float]],
-        leadership_scores: list[float],
-        evolution_global: pd.DataFrame,
-        evolution_structure: pd.DataFrame,
-        evolution_metrics: dict[str, pd.DataFrame],
-        prediction_scores: list[float],
-        podcast_graph: nx.Graph,
-        people_graph: nx.Graph,
-    ) -> None:
-        self.podcast_categories = podcast_categories
-        self.people_categories = people_categories
-        self.category_bias = category_bias
-        self.category_mixing = category_mixing
-        self.metric_values = metric_values
-        self.leadership_scores = leadership_scores
-        self.evolution_global = evolution_global
-        self.evolution_structure = evolution_structure
-        self.evolution_metrics = evolution_metrics
-        self.prediction_scores = prediction_scores
-        self.podcast_graph = podcast_graph
-        self.people_graph = people_graph
+    podcast_categories: dict[str, float]
+    people_categories: dict[str, float]
+    category_bias: dict[str, float]
+    category_mixing: dict[tuple[str, str], float]
+    metric_values: dict[str, list[float]]
+    leadership_scores: list[float]
+    evolution_global: pd.DataFrame
+    evolution_structure: pd.DataFrame
+    evolution_metrics: dict[str, pd.DataFrame]
+    prediction_scores: list[float]
+    podcast_graph: nx.Graph
+    people_graph: nx.Graph
 
     @classmethod
     def from_database(cls) -> PlotDataset:
@@ -591,7 +577,11 @@ def podcast_similarity_graph(limit_podcasts: int = 120, max_edges: int = 500) ->
         podcast_id: name
         for podcast_id, name in (
             Podcast.objects.annotate(
-                guest_count=Count("episodes__appearances__person", distinct=True)
+                guest_count=Count(
+                    "episodes__appearances__person",
+                    filter=Q(episodes__appearances__role=Appearance.Role.GUEST),
+                    distinct=True,
+                )
             )
             .filter(guest_count__gt=0)
             .order_by("-guest_count")
@@ -623,7 +613,7 @@ def people_coappearance_graph(limit_people: int = 160, max_edges: int = 650) -> 
     top_people = dict(
         Appearance.objects.filter(role=Appearance.Role.GUEST)
         .values("person_id", "person__name")
-        .annotate(appearance_count=Count("id"), latest=Max("episode__published_at"))
+        .annotate(appearance_count=Count("id"))
         .order_by("-appearance_count", "person__name")[:limit_people]
         .values_list("person_id", "person__name")
     )
@@ -649,7 +639,7 @@ def people_coappearance_graph(limit_people: int = 160, max_edges: int = 650) -> 
 
 
 def empty_frame(columns: list[str]) -> pd.DataFrame:
-    return pd.DataFrame({column: ([] if column == "dates" else []) for column in columns})
+    return pd.DataFrame({column: [] for column in columns})
 
 
 def bar_chart(

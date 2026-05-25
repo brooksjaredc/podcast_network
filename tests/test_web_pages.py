@@ -405,6 +405,14 @@ def test_common_guests_loads() -> None:
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
+def test_common_guests_ignores_invalid_query_ids() -> None:
+    response = Client().get("/common/", {"first": "not-an-id", "second": "2"})
+
+    assert response.status_code == 200
+    assert b"Common Guests" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
 def test_recommendations_search_adds_selected_podcasts() -> None:
     first_podcast, _, _, _ = make_db_graph()
     response = Client().get("/recommendations/", {"q": "Joe Rogan"})
@@ -824,9 +832,7 @@ def test_recommendation_explanation_guests_sort_by_total_appearances() -> None:
     assert response.status_code == 200
     card = response.content.decode().split("Explanation Ordering", 1)[1]
     explanation_line = card.split("Recommended because", 1)[1].split("</p>", 1)[0]
-    assert explanation_line.index("Zed Explanation") < explanation_line.index(
-        "Alpha Explanation"
-    )
+    assert explanation_line.index("Zed Explanation") < explanation_line.index("Alpha Explanation")
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -910,6 +916,12 @@ def test_advanced_predictions_loads() -> None:
     assert b"Score Distribution" in response.content
     assert b"Top Predictions" in response.content
     assert f"/people/{person.id}/".encode() in response.content
+
+
+def test_advanced_prediction_histogram_accepts_count_bins() -> None:
+    from podcast_network.web.explorer.advanced_views import metadata_score_histogram_counts
+
+    assert metadata_score_histogram_counts([1] * 100) == [10] * 10
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")

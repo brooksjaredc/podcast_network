@@ -275,6 +275,8 @@ def metadata_score_histogram_counts(raw_bins: object, *, bin_count: int = 10) ->
     counts = [0] * bin_count
     if not isinstance(raw_bins, list) or not raw_bins:
         return counts
+    if all(isinstance(raw_bin, int | float) for raw_bin in raw_bins):
+        return rebinned_counts([max(0, int(raw_bin)) for raw_bin in raw_bins], bin_count)
     for raw_bin in raw_bins:
         if not isinstance(raw_bin, dict):
             continue
@@ -283,6 +285,18 @@ def metadata_score_histogram_counts(raw_bins: object, *, bin_count: int = 10) ->
         index = min(bin_count - 1, max(0, int(lower * bin_count)))
         counts[index] += count
     return counts
+
+
+def rebinned_counts(counts: list[int], bin_count: int) -> list[int]:
+    if len(counts) == bin_count:
+        return counts
+    output = [0] * bin_count
+    if not counts:
+        return output
+    for index, count in enumerate(counts):
+        target_index = min(bin_count - 1, int(index / len(counts) * bin_count))
+        output[target_index] += count
+    return output
 
 
 def score_histogram_plot(
