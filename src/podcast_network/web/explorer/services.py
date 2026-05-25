@@ -1,11 +1,9 @@
-from functools import lru_cache
 from time import monotonic
 
 from django.conf import settings
 from django.db.models import Count
 
 from podcast_network.cleaning import is_likely_english_podcast_name
-from podcast_network.data import LegacyRepository
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import Edge
 from podcast_network.web.catalog.models import Appearance, PersonEntityLink, Podcast
@@ -14,16 +12,6 @@ COHOST_EPISODE_THRESHOLD = 100
 COHOST_EPISODE_SHARE = 0.20
 
 _DATABASE_GRAPH_CACHE: tuple[float, SixDegreesGraph] | None = None
-
-
-@lru_cache(maxsize=1)
-def legacy_repository() -> LegacyRepository:
-    return LegacyRepository()
-
-
-@lru_cache(maxsize=1)
-def six_degrees_graph() -> SixDegreesGraph:
-    return SixDegreesGraph.from_legacy_dir()
 
 
 def database_six_degrees_graph() -> SixDegreesGraph:

@@ -22,12 +22,18 @@ from podcast_network.web.catalog.models import (
     PersonNetworkMetric,
     Podcast,
 )
+from podcast_network.web.explorer.path_graph import build_path_graph
+from podcast_network.web.explorer.request_params import (
+    parse_date_filter,
+    parse_int,
+    parse_int_list,
+    parse_string_list,
+)
 from podcast_network.web.explorer.services import (
     COHOST_EPISODE_SHARE,
     COHOST_EPISODE_THRESHOLD,
     database_six_degrees_graph,
 )
-from podcast_network.web.explorer.views import build_path_graph, parse_date_filter
 
 RANKING_FIELDS = {
     "pr": ("pagerank_rank", "PageRank Rankings"),
@@ -1065,39 +1071,6 @@ def podcast_or_none(podcast_id: int | None) -> Podcast | None:
     if podcast_id is None:
         return None
     return Podcast.objects.filter(id=podcast_id).first()
-
-
-def parse_int(value: str | None) -> int | None:
-    if value in (None, ""):
-        return None
-    return int(value)
-
-
-def parse_int_list(values: list[str]) -> list[int]:
-    parsed = []
-    seen = set()
-    for value in values:
-        try:
-            parsed_value = int(value)
-        except (TypeError, ValueError):
-            continue
-        if parsed_value in seen:
-            continue
-        seen.add(parsed_value)
-        parsed.append(parsed_value)
-    return parsed
-
-
-def parse_string_list(values: list[str]) -> list[str]:
-    parsed = []
-    seen = set()
-    for value in values:
-        parsed_value = value.strip()
-        if not parsed_value or parsed_value in seen:
-            continue
-        seen.add(parsed_value)
-        parsed.append(parsed_value)
-    return parsed
 
 
 def link_path_message_parts(

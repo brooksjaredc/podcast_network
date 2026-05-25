@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import os
 
-from podcast_network.graph import SixDegreesGraph
-from podcast_network.plots.generate import generate_all_plots
+
+def database_graph():
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "podcast_network.web.settings")
+    import django
+
+    django.setup()
+
+    from podcast_network.web.explorer.services import database_six_degrees_graph
+
+    return database_six_degrees_graph()
 
 
 def main() -> None:
@@ -14,19 +23,12 @@ def main() -> None:
     path_parser.add_argument("source")
     path_parser.add_argument("target")
 
-    subparsers.add_parser("plots", help="Generate local SVG plot assets.")
-
     args = parser.parse_args()
     if args.command == "path":
-        graph = SixDegreesGraph.from_legacy_dir()
-        result = graph.explain(args.source, args.target)
+        result = database_graph().explain(args.source, args.target)
         print(result.message)
         if result.found:
             print(f"Length: {result.length}")
-    elif args.command == "plots":
-        outputs = generate_all_plots()
-        for output in outputs:
-            print(output)
 
 
 if __name__ == "__main__":

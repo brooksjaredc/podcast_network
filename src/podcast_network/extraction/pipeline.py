@@ -45,10 +45,7 @@ def extract_guest_batch(
         episodes_requested=len(episodes),
         metadata=metadata,
     )
-    succeeded = 0
-    failed = 0
-    input_tokens = 0
-    output_tokens = 0
+    outcomes = []
     for episode in episodes:
         outcome = extract_episode_guests(
             episode,
@@ -58,28 +55,9 @@ def extract_guest_batch(
             prompt_version=prompt_version,
             force=force,
         )
-        if outcome.succeeded:
-            succeeded += 1
-        else:
-            failed += 1
+        outcomes.append(outcome)
 
-    for extraction in run.episode_extractions.all():
-        input_tokens += extraction.input_tokens
-        output_tokens += extraction.output_tokens
-
-    run.episodes_succeeded = succeeded
-    run.episodes_failed = failed
-    run.input_tokens = input_tokens
-    run.output_tokens = output_tokens
-    run.finished_at = timezone.now()
-    if failed and succeeded:
-        run.status = ExtractionRun.Status.PARTIAL
-    elif failed:
-        run.status = ExtractionRun.Status.FAILED
-    else:
-        run.status = ExtractionRun.Status.SUCCEEDED
-    run.save()
-    return run
+    return finalize_extraction_run(run=run, outcomes=outcomes)
 
 
 async def extract_guest_batch_async(

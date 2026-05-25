@@ -53,7 +53,7 @@ class Command(BaseCommand):
             ],
             default="all",
             help=(
-                "Run one phase of the weekly update. Use 'all' for the legacy "
+                "Run one phase of the weekly update. Use 'all' for the database-backed "
                 "single-process coordinator."
             ),
         )

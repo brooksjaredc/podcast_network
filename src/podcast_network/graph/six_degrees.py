@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-import ast
-import csv
-import pickle
 import re
 import unicodedata
 from collections import deque
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from pathlib import Path
-
-from podcast_network.paths import LEGACY_ANALYSIS_DIR
 
 
 @dataclass(frozen=True)
@@ -73,15 +67,6 @@ class SixDegreesGraph:
         for edge in merge_edges(edges):
             self._adjacency.setdefault(edge.left, {})[edge.right] = edge
             self._adjacency.setdefault(edge.right, {})[edge.left] = edge
-
-    @classmethod
-    def from_legacy_dir(cls, data_dir: Path = LEGACY_ANALYSIS_DIR) -> SixDegreesGraph:
-        return cls(
-            edges=load_edges(data_dir / "six_degrees.edgelist"),
-            names=load_names(data_dir / "correct_spellings.csv"),
-            podcast_ids=load_pickle(data_dir / "podcast_id.pkl"),
-            person_ids=load_pickle(data_dir / "sorted_pr_dict.pkl"),
-        )
 
     def shortest_path(
         self,
@@ -269,35 +254,6 @@ class SixDegreesGraph:
         return tuple(parts)
 
 
-def load_edges(path: Path) -> list[Edge]:
-    edges: list[Edge] = []
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            fields = line.rstrip("\n").split("\t", maxsplit=2)
-            if len(fields) != 3:
-                # Some legacy node names contain embedded newlines, which corrupted a few
-                # edgelist rows. Keep loading the usable graph and let data cleanup handle
-                # those source records later.
-                continue
-            left, right, raw_attrs = fields
-            attrs = ast.literal_eval(raw_attrs)
-            edges.append(
-                Edge(
-                    left=left,
-                    right=right,
-                    kind=attrs.get("attr", "guest"),
-                    date=normalize_edge_date(attrs.get("date")),
-                    active_start=normalize_edge_date(attrs.get("date"))
-                    if attrs.get("attr") == "host"
-                    else None,
-                    active_end=normalize_edge_date(attrs.get("date"))
-                    if attrs.get("attr") == "host"
-                    else None,
-                )
-            )
-    return edges
-
-
 def merge_edges(edges: list[Edge]) -> list[Edge]:
     merged: dict[tuple[str, str], Edge] = {}
     for edge in edges:
@@ -381,31 +337,6 @@ def date_ranges_overlap(
     if window_end is not None and active_start > window_end:
         return False
     return not (window_start is not None and active_end < window_start)
-
-
-def load_names(path: Path) -> set[str]:
-    with path.open(encoding="utf-8") as handle:
-        reader = csv.reader(handle, delimiter="\t")
-        return {row[0] for row in reader if row}
-
-
-def normalize_edge_date(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    return text[:10]
-
-
-def load_pickle(path: Path) -> dict[str, int]:
-    if not path.exists():
-        return {}
-    with path.open("rb") as handle:
-        value = pickle.load(handle)
-    if not isinstance(value, dict):
-        raise TypeError(f"Expected {path} to contain a dict, got {type(value).__name__}")
-    return value
 
 
 def canonical_name_index(names: set[str]) -> dict[str, str]:

@@ -165,32 +165,11 @@
       </table>
     </section>
   {% elif page.title == "Predictions" %}
-    <h2>True Positives in Test Set</h2>
-    <table>
-      <thead><tr><th>Podcast</th><th>Guest</th><th>Test Probability</th></tr></thead>
-      <tbody>
-        {% for item in true_positives|slice:":200" %}
-          <tr>
-            <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast }}</a></td>
-            <td><a href="{% url 'explorer:person_detail' item.person_id %}">{{ item.guest }}</a></td>
-            <td>{{ item.test_prob|floatformat:3 }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    <h2>Predictions</h2>
-    <table>
-      <thead><tr><th>Podcast</th><th>Guest</th><th>Probability</th></tr></thead>
-      <tbody>
-        {% for item in predictions|slice:":500" %}
-          <tr>
-            <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast }}</a></td>
-            <td><a href="{% url 'explorer:person_detail' item.person_id %}">{{ item.guest }}</a></td>
-            <td>{{ item.prob|floatformat:3 }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <section>
+      <h2>No Database Prediction Run Yet</h2>
+      <p class="muted">
+        Future link predictions will appear here after a database-backed scoring run is stored.
+      </p>
+    </section>
   {% endif %}
 {% endblock %}

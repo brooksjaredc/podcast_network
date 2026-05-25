@@ -58,7 +58,8 @@ python -m podcast_network.cli path "Joe Rogan" "Marc Maron"
 python -m pytest
 ```
 
-The Django web pages read from the catalog tables. The advanced plot pages still use the copied legacy analysis artifacts under `data/legacy/analysis/`.
+The Django web pages, CLI path lookup, and generated advanced plot assets read from the
+catalog database.
 
 ## Development Workflow
 
