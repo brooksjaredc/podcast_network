@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from podcast_network.network_metrics import calculate_and_store_network_metrics
+from podcast_network.network.metrics import calculate_and_store_network_metrics
 
 
 class Command(BaseCommand):

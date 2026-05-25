@@ -14,12 +14,12 @@ from django.db.models import Max, Min
 from django.utils import timezone
 
 from podcast_network.cloud_artifacts import download_gcs_to_path
-from podcast_network.future_link_features import (
+from podcast_network.future_links.features import (
     LOGISTIC_FORWARD_FEATURES,
     build_feature_context,
     selected_feature_values,
 )
-from podcast_network.future_link_prediction import LinkCandidate, build_historical_link_data
+from podcast_network.future_links.prediction import LinkCandidate, build_historical_link_data
 from podcast_network.web.catalog.models import (
     Appearance,
     FutureLinkWeeklyAuditLink,

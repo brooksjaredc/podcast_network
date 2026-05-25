@@ -6,7 +6,7 @@ from itertools import combinations
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from podcast_network.entity_features import (
+from podcast_network.entities.features import (
     EntityProfile,
     blocking_keys_for_profile,
     cleaned_name_tokens,
@@ -15,7 +15,7 @@ from podcast_network.entity_features import (
     repeated_first_name_suffix_stripped_tokens,
     tokenize_name,
 )
-from podcast_network.entity_resolution import person_candidate_pair_id
+from podcast_network.entities.resolution import person_candidate_pair_id
 from podcast_network.web.catalog.models import (
     CanonicalPersonEntity,
     PersonEntityCandidatePair,

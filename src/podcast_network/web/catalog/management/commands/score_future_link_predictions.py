@@ -14,13 +14,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from podcast_network.cloud_artifacts import download_gcs_to_path
-from podcast_network.future_link_features import (
+from podcast_network.future_links.features import (
     LOGISTIC_FORWARD_FEATURES,
     build_feature_context,
     iter_degree_limited_candidates,
     selected_feature_values,
 )
-from podcast_network.future_link_prediction import build_historical_link_data, podcasts_to_score
+from podcast_network.future_links.prediction import build_historical_link_data, podcasts_to_score
 from podcast_network.web.catalog.models import (
     CanonicalPersonEntity,
     FutureLinkPrediction,

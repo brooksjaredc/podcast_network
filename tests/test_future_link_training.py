@@ -2,7 +2,7 @@ from datetime import datetime
 
 from django.utils import timezone
 
-from podcast_network.future_link_training import (
+from podcast_network.future_links.training import (
     FutureLinkCutConfig,
     FutureLinkSplitConfig,
     build_cut_plans,

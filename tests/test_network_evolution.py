@@ -3,7 +3,7 @@ from datetime import datetime
 from django.core.management import call_command
 from django.utils import timezone
 
-from podcast_network.network_evolution import calculate_network_evolution
+from podcast_network.network.evolution import calculate_network_evolution
 from podcast_network.web.catalog.models import (
     Appearance,
     Episode,

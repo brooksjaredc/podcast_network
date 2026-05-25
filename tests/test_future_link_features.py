@@ -5,12 +5,12 @@ import pandas as pd
 from django.core.management import call_command
 from django.utils import timezone
 
-from podcast_network.future_link_features import (
+from podcast_network.future_links.features import (
     build_balanced_experiment_dataset,
     build_feature_context,
     build_full_feature_matrix,
 )
-from podcast_network.future_link_prediction import build_historical_link_data
+from podcast_network.future_links.prediction import build_historical_link_data
 from podcast_network.web.catalog.models import (
     Appearance,
     Episode,

@@ -10,18 +10,18 @@ from django.core.management.base import BaseCommand, CommandParser
 from sklearn.preprocessing import StandardScaler
 
 from podcast_network.cloud_artifacts import upload_path_to_gcs
-from podcast_network.future_link_features import (
+from podcast_network.future_links.features import (
     LOGISTIC_FORWARD_FEATURES,
     build_full_feature_matrix,
 )
-from podcast_network.future_link_model import (
+from podcast_network.future_links.model import (
     build_online_logistic_model,
     evaluate_online_logistic,
     matrix_arrays,
     matrix_split_indexes,
     partial_fit_online_logistic,
 )
-from podcast_network.future_link_training import (
+from podcast_network.future_links.training import (
     FutureLinkCutConfig,
     FutureLinkSplitConfig,
     database_cut_plans,

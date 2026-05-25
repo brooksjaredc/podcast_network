@@ -4,7 +4,7 @@ from datetime import date
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from podcast_network.network_evolution import (
+from podcast_network.network.evolution import (
     DEFAULT_BETWEENNESS_SAMPLE_SIZE,
     DEFAULT_CLOSENESS_SAMPLE_SIZE,
     calculate_network_evolution,

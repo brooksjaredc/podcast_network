@@ -5,7 +5,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from podcast_network.future_link_model import (
+from podcast_network.future_links.model import (
     save_future_link_model,
     train_future_link_model,
     write_future_link_metrics,
@@ -50,4 +50,3 @@ class Command(BaseCommand):
         self.stdout.write("Features:")
         for feature_name in result.feature_names:
             self.stdout.write(f"  {feature_name}")
-

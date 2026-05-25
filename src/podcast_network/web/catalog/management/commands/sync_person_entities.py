@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from django.core.management.base import BaseCommand, CommandParser
 from django.db.models import Count, Max, Min
 
-from podcast_network.entity_resolution import (
+from podcast_network.entities.resolution import (
     canonical_person_id,
     person_observation_id,
     person_record_id,

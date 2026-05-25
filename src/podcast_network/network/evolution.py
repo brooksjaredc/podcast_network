@@ -10,7 +10,7 @@ from django.db import transaction
 from django.db.models import Max, Min
 from django.utils import timezone
 
-from podcast_network.network_metrics import (
+from podcast_network.network.metrics import (
     empty_episode_people,
     ranks,
     safe_hits,

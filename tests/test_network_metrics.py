@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.management import call_command
 from django.test import TestCase
 
-from podcast_network.network_metrics import calculate_and_store_network_metrics
+from podcast_network.network.metrics import calculate_and_store_network_metrics
 from podcast_network.web.catalog.models import (
     Appearance,
     Episode,

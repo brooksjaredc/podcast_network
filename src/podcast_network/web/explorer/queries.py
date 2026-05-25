@@ -7,7 +7,7 @@ from django.db.models import Count, Max, Q, QuerySet
 from django.utils import timezone
 
 from podcast_network.cleaning import is_likely_english_podcast_name
-from podcast_network.network_metrics import latest_succeeded_metric_run
+from podcast_network.network.metrics import latest_succeeded_metric_run
 from podcast_network.web.catalog.models import (
     Appearance,
     Person,

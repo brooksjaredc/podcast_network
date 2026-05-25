@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.management import call_command
 from django.test import TestCase
 
-from podcast_network.entity_features import (
+from podcast_network.entities.features import (
     EntityProfile,
     apply_entity_score_guards,
     cleaned_name_tokens,

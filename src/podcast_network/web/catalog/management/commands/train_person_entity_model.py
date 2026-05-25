@@ -9,8 +9,8 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
 from sklearn.model_selection import train_test_split
 
-from podcast_network.entity_features import apply_entity_score_guards
-from podcast_network.entity_model import (
+from podcast_network.entities.features import apply_entity_score_guards
+from podcast_network.entities.model import (
     FEATURE_NAMES,
     build_pipeline,
     feature_vector,

@@ -16,7 +16,7 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import StandardScaler
 
-from podcast_network.future_link_model import (
+from podcast_network.future_links.model import (
     build_online_logistic_model,
     matrix_arrays,
     matrix_split_indexes,

@@ -6,7 +6,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandParser
 from django.utils import timezone
 
-from podcast_network.future_link_features import build_full_feature_matrix
+from podcast_network.future_links.features import build_full_feature_matrix
 
 
 class Command(BaseCommand):
@@ -62,4 +62,3 @@ def parse_datetime(value: str) -> datetime:
     if timezone.is_naive(parsed):
         return timezone.make_aware(parsed, timezone.get_current_timezone())
     return parsed
-

@@ -4,7 +4,7 @@ from django.core.management import call_command
 from django.test import Client, override_settings
 from django.utils import timezone
 
-from podcast_network.network_metrics import calculate_and_store_network_metrics
+from podcast_network.network.metrics import calculate_and_store_network_metrics
 from podcast_network.web.catalog.models import (
     Appearance,
     CanonicalPersonEntity,

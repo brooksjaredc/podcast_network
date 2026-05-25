@@ -5,7 +5,7 @@ from pathlib import Path
 from django.core.management import call_command
 from django.test import TestCase
 
-from podcast_network.entity_model import (
+from podcast_network.entities.model import (
     load_entity_model,
     predict_match_probability,
     save_entity_model,

@@ -15,7 +15,7 @@ import networkx as nx
 import numpy as np
 from django.utils import timezone
 
-from podcast_network.future_link_prediction import (
+from podcast_network.future_links.prediction import (
     HistoricalLinkData,
     LinkCandidate,
     build_historical_link_data,
@@ -23,7 +23,7 @@ from podcast_network.future_link_prediction import (
     latest_cutoff_for_labeling,
     podcasts_to_score,
 )
-from podcast_network.future_link_training import split_name
+from podcast_network.future_links.training import split_name
 from podcast_network.web.catalog.models import Appearance, PersonEntityLink, Podcast
 
 RECENT_WINDOWS = [30, 90, 180, 365]

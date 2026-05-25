@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from django.core.management import call_command
 from django.utils import timezone
 
-from podcast_network.future_link_prediction import (
+from podcast_network.future_links.prediction import (
     build_degree_limited_link_candidates,
     build_historical_link_data,
     build_shared_guest_heuristic_link_candidates,

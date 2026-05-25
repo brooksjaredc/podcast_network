@@ -5,7 +5,7 @@ from datetime import date, datetime, time
 from django.core.management.base import BaseCommand, CommandParser
 from django.utils import timezone
 
-from podcast_network.future_link_training import (
+from podcast_network.future_links.training import (
     FutureLinkCutConfig,
     FutureLinkSplitConfig,
     database_cut_plans,

@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 from django.db.models import QuerySet
 
-from podcast_network.entity_aliases import KNOWN_PERSON_ALIASES, KnownPersonAlias
+from podcast_network.entities.aliases import KNOWN_PERSON_ALIASES, KnownPersonAlias
 from podcast_network.web.catalog.models import (
     CanonicalPersonEntity,
     PersonEntityLink,

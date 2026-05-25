@@ -1,4 +1,4 @@
-from podcast_network.name_frequency import (
+from podcast_network.entities.name_frequency import (
     shared_name_frequency_features,
     token_name_frequency_features,
 )

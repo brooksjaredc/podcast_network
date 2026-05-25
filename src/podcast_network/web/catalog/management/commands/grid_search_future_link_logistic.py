@@ -5,7 +5,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from podcast_network.future_link_model import run_logistic_grid_search, write_logistic_grid_result
+from podcast_network.future_links.model import run_logistic_grid_search, write_logistic_grid_result
 
 
 class Command(BaseCommand):
@@ -52,4 +52,3 @@ def parse_float_list(value: str) -> list[float]:
 
 def parse_string_list(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
-

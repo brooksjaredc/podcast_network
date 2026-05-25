@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.management import call_command
 from django.test import TestCase
 
-from podcast_network.entity_resolution import (
+from podcast_network.entities.resolution import (
     canonical_person_id,
     person_observation_id,
     person_record_id,

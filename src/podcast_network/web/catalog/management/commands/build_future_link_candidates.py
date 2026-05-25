@@ -5,7 +5,7 @@ from datetime import datetime
 from django.core.management.base import BaseCommand, CommandParser
 from django.utils import timezone
 
-from podcast_network.future_link_prediction import (
+from podcast_network.future_links.prediction import (
     build_degree_limited_link_candidates,
     build_shared_guest_heuristic_link_candidates,
     compare_candidate_sets,

@@ -5,12 +5,12 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from podcast_network.entity_features import (
+from podcast_network.entities.features import (
     HEURISTIC_MODEL_NAME,
     apply_entity_score_guards,
     heuristic_person_match_score,
 )
-from podcast_network.entity_model import load_entity_model, predict_match_probability
+from podcast_network.entities.model import load_entity_model, predict_match_probability
 from podcast_network.web.catalog.models import PersonEntityCandidatePair
 
 
