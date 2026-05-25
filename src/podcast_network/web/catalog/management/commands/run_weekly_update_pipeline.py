@@ -15,7 +15,7 @@ from podcast_network.web.catalog.management.commands.promote_frequent_guests_to_
     DEFAULT_COHOST_EPISODE_THRESHOLD,
 )
 from podcast_network.web.catalog.models import ExtractionRun
-from podcast_network.web.explorer.services import database_six_degrees_graph
+from podcast_network.web.explorer.graph_service import database_six_degrees_graph
 
 
 @dataclass(frozen=True)

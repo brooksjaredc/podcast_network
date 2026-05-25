@@ -10,7 +10,7 @@ def database_graph():
 
     django.setup()
 
-    from podcast_network.web.explorer.services import database_six_degrees_graph
+    from podcast_network.web.explorer.graph_service import database_six_degrees_graph
 
     return database_six_degrees_graph()
 

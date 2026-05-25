@@ -18,7 +18,7 @@ from podcast_network.web.catalog.models import (
     PersonObservation,
     Podcast,
 )
-from podcast_network.web.explorer.services import database_six_degrees_graph
+from podcast_network.web.explorer.graph_service import database_six_degrees_graph
 
 
 class PersonEntityResolutionTests(TestCase):

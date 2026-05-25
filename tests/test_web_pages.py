@@ -16,7 +16,7 @@ from podcast_network.web.catalog.models import (
     Person,
     Podcast,
 )
-from podcast_network.web.explorer.services import database_six_degrees_graph
+from podcast_network.web.explorer.graph_service import database_six_degrees_graph
 
 
 def make_db_graph() -> tuple[Podcast, Podcast, Person, Person]:
@@ -919,7 +919,7 @@ def test_advanced_predictions_loads() -> None:
 
 
 def test_advanced_prediction_histogram_accepts_count_bins() -> None:
-    from podcast_network.web.explorer.advanced_views import metadata_score_histogram_counts
+    from podcast_network.web.explorer.advanced.predictions import metadata_score_histogram_counts
 
     assert metadata_score_histogram_counts([1] * 100) == [10] * 10
 
