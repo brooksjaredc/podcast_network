@@ -16,7 +16,7 @@
 
   <nav class="analysis-nav" aria-label="Analysis sections">
     {% for slug, item in pages.items %}
-      <a class="pill {% if item.title == page.title %}active{% endif %}" href="{% url 'explorer:advanced_page' slug %}">{{ item.title }}</a>
+      <a class="analysis-nav-link {% if item.title == page.title %}active{% endif %}" href="{% url 'explorer:analysis_page' slug %}">{{ item.title }}</a>
     {% endfor %}
   </nav>
 

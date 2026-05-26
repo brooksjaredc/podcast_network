@@ -3,49 +3,65 @@
 {% block title %}Compare Podcasts{% endblock %}
 
 {% block content %}
-  <h1>Compare Podcasts</h1>
-  <p class="muted">Find guests shared by two shows and spot audience overlap.</p>
-  <form class="toolbar" method="get">
-    <select name="first" aria-label="First podcast">
-      <option value="">Choose first podcast</option>
-      {% for podcast in podcasts %}
-        <option value="{{ podcast.id }}" {% if first_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
-      {% endfor %}
-    </select>
-    <select name="second" aria-label="Second podcast">
-      <option value="">Choose second podcast</option>
-      {% for podcast in podcasts %}
-        <option value="{{ podcast.id }}" {% if second_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit">Compare</button>
-  </form>
+  <section class="experiment-hero compare-hero">
+    <div>
+      <p class="eyebrow">Podcast Comparison</p>
+      <h1>Compare Podcasts</h1>
+      <p class="muted">Find guests shared by two shows and spot audience overlap.</p>
+    </div>
+    <form class="toolbar tool-command compare-command" method="get">
+      <select name="first" aria-label="First podcast">
+        <option value="">Choose first podcast</option>
+        {% for podcast in podcasts %}
+          <option value="{{ podcast.id }}" {% if first_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="second" aria-label="Second podcast">
+        <option value="">Choose second podcast</option>
+        {% for podcast in podcasts %}
+          <option value="{{ podcast.id }}" {% if second_id == podcast.id %}selected{% endif %}>{{ podcast.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Compare</button>
+    </form>
+  </section>
 
   {% if first_podcast and second_podcast %}
-    <h2>{{ first_podcast.name }} and {{ second_podcast.name }}</h2>
+    <section class="result-panel">
+    <div class="table-meta">
+      <div>
+        <h2>{{ first_podcast.name }} and {{ second_podcast.name }}</h2>
+        <span class="muted">{{ common_people|length }} shared guests found</span>
+      </div>
+    </div>
     <table>
       <thead>
         <tr>
           <th>Guest</th>
-          <th>{{ first_podcast.name }} Appearances</th>
-          <th>{{ second_podcast.name }} Appearances</th>
+          <th class="numeric-cell">{{ first_podcast.name }} Appearances</th>
+          <th class="numeric-cell">{{ second_podcast.name }} Appearances</th>
         </tr>
       </thead>
       <tbody>
         {% for person in common_people %}
           <tr>
             <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-            <td>{{ person.first_appearances }}</td>
-            <td>{{ person.second_appearances }}</td>
+            <td class="numeric-cell">{{ person.first_appearances }}</td>
+            <td class="numeric-cell">{{ person.second_appearances }}</td>
           </tr>
         {% empty %}
           <tr><td colspan="3">No common guests found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+    </section>
   {% elif first_podcast %}
-    <p class="muted">Choose a second podcast to compare against {{ first_podcast.name }}.</p>
+    <section class="result-panel">
+      <p class="muted">Choose a second podcast to compare against {{ first_podcast.name }}.</p>
+    </section>
   {% else %}
-    <p class="muted">Choose two podcasts to compare their shared guest lists.</p>
+    <section class="result-panel">
+      <p class="muted">Choose two podcasts to compare their shared guest lists.</p>
+    </section>
   {% endif %}
 {% endblock %}

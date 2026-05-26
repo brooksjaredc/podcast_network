@@ -106,6 +106,10 @@ def test_home_page_loads() -> None:
     assert b'href="https://brooksjaredc.github.io"' in response.content
     assert b"Created by Jared Brooks" in response.content
     assert b'images/favicon.svg' in response.content
+    assert b'class="brand-mark"' in response.content
+    assert b'name="theme-color"' in response.content
+    assert b"interactive podcast network experiment" in response.content
+    assert b'href="/analysis/definitions/"' in response.content
     assert b"See who connects through the interview podcast graph." in response.content
     assert b"home-path-form" in response.content
     assert b"Joe Rogan to Hillary Clinton" in response.content
@@ -207,7 +211,7 @@ def test_rankings_page_loads() -> None:
     assert b"Highlights people connected to other important people" in response.content
     assert b"Highlights hosts who receive links from prominent guests" in response.content
     assert b"Explore metric distribution charts" in response.content
-    assert b"/advanced/metrics/" in response.content
+    assert b"/analysis/metrics/" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -301,7 +305,7 @@ def test_podcast_detail_links_guests() -> None:
     assert b"podcast-detail-tab" in response.content
     assert b"Network-Based Guest Fits" in response.content
     assert b"Open the full predictions analysis" in response.content
-    assert b"/advanced/predictions/" in response.content
+    assert b"/analysis/predictions/" in response.content
     assert response.content.count(f'href="/people/{joe.id}/"'.encode()) == 1
 
 
@@ -434,7 +438,7 @@ def test_person_detail_loads() -> None:
     assert b"Find path to Joe Rogan" in response.content
     assert b"person-detail-tab" in response.content
     assert b"Open the full predictions analysis" in response.content
-    assert b"/advanced/predictions/" in response.content
+    assert b"/analysis/predictions/" in response.content
     assert b"The Joe Rogan Experience" in response.content
     assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
 
@@ -1000,7 +1004,7 @@ def test_advanced_predictions_loads() -> None:
         candidate_eligible=True,
     )
 
-    response = Client().get("/advanced/predictions/")
+    response = Client().get("/analysis/predictions/")
 
     assert response.status_code == 200
     assert b"Network-Based Future Link Fits" in response.content
@@ -1018,7 +1022,7 @@ def test_advanced_prediction_histogram_accepts_count_bins() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
 def test_advanced_pages_use_dynamic_plot_asset_route() -> None:
-    response = Client().get("/advanced/map/")
+    response = Client().get("/analysis/map/")
 
     assert response.status_code == 200
     assert b"Network Map" in response.content
@@ -1028,13 +1032,13 @@ def test_advanced_pages_use_dynamic_plot_asset_route() -> None:
 
 @override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
 def test_advanced_landing_page_is_analysis_guide() -> None:
-    response = Client().get("/advanced/")
+    response = Client().get("/analysis/")
 
     assert response.status_code == 200
     assert b"Analysis Guide" in response.content
     assert b"Open map" in response.content
     assert b"Read methods" in response.content
-    assert b"/advanced/definitions/" in response.content
+    assert b"/analysis/definitions/" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")

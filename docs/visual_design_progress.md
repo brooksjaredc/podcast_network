@@ -31,7 +31,14 @@ clusters, and surprising adjacency feel alive.
    - Keep interactive tools honest as data experiments, with polished workflow
      surfaces rather than marketing-style decoration.
    - Add a small network-style favicon so the browser tab carries the site identity.
+   - Reuse the network mark in the global header so the brand is visual, not just
+     text.
    - Add active navigation states so the current tool/section is always visible.
+   - Add a restrained footer so pages end with project context and useful routes.
+   - Use `/analysis/` for user-facing Analysis pages while preserving legacy
+     `/advanced/` routes for compatibility.
+   - Add cohesive focus states so keyboard interaction feels intentionally
+     designed, not browser-default.
 
 2. [Done] Replace or restyle the homepage hero experience.
    - Removed the dark generated hero image from the homepage background.
@@ -45,6 +52,7 @@ clusters, and surprising adjacency feel alive.
    - Stronger input grouping, labels, and example paths.
    - Make example paths read like stories to try.
    - Keep the first action fast and obvious.
+   - Extend the same command-surface pattern to the podcast comparison workflow.
 
 4. [Done] Give person and podcast detail pages stronger identity.
    - Add a compact summary band before dense tables.
@@ -75,6 +83,12 @@ clusters, and surprising adjacency feel alive.
      visualization surfaces.
    - Give Recommendations a distinct workflow header, summary strip, and clearer
      result-card metrics/actions.
+   - Bring Compare Podcasts into the experiment-tool pattern with a command panel
+     and result surface.
+   - Add a shared footer pattern distinct from cards, panels, and data tables.
+   - Replace clipped tab shapes with rounded segmented tab buttons.
+   - Scope broad navigation styling to the global header and add component-level
+     focus states to avoid future CSS leakage.
 
 ## Implementation Notes
 
@@ -146,3 +160,13 @@ futuristic HUD, no readable tiny text.
   alignment and semantic host/genre badges.
 - 2026-05-26: Added active top-navigation states across tools, browse pages, and
   analysis sections.
+- 2026-05-26: Polished Compare Podcasts with an experiment header, command panel,
+  result panel, and numeric table alignment.
+- 2026-05-26: Added a restrained shared footer with project context and links to
+  core workflows and methods.
+- 2026-05-26: Added `/analysis/` routes for user-facing Analysis pages and
+  refreshed tab styling so selected tabs are not clipped.
+- 2026-05-26: Reused the network favicon as a header brand mark and added a
+  matching browser theme color.
+- 2026-05-26: Scoped global navigation CSS to the header and added cohesive
+  focus states for links, controls, cards, pills, and form fields.

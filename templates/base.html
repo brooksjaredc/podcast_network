@@ -6,6 +6,7 @@
     <title>{% block title %}Six Degrees to Joe Rogan{% endblock %}</title>
     {% load static %}
     <link rel="icon" href="{% static 'images/favicon.svg' %}" type="image/svg+xml">
+    <meta name="theme-color" content="#fffdfa">
     <style>
       :root {
         color-scheme: light;
@@ -33,6 +34,15 @@
       a {
         color: var(--accent-strong);
       }
+      a:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      summary:focus-visible,
+      label[role="tab"]:focus-visible {
+        outline: 3px solid rgba(15, 118, 110, 0.24);
+        outline-offset: 3px;
+      }
       header {
         border-bottom: 1px solid var(--line);
         background: rgba(255, 253, 250, 0.94);
@@ -41,37 +51,49 @@
         top: 0;
         z-index: 10;
       }
-      nav, main {
+      header nav,
+      main {
         max-width: 1280px;
         margin: 0 auto;
         padding: 18px 22px;
       }
-      nav {
+      header nav {
         display: flex;
         align-items: center;
         gap: 18px;
         flex-wrap: wrap;
       }
-      nav a {
+      header nav a {
         color: var(--ink);
         text-decoration: none;
       }
-      nav a:first-child {
+      header nav a:first-child {
         font-weight: 700;
         margin-right: auto;
       }
-      nav a:not(:first-child):not(.creator-tag) {
+      .brand-link {
+        display: inline-flex;
+        gap: 9px;
+        align-items: center;
+      }
+      .brand-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      }
+      header nav a:not(:first-child):not(.creator-tag) {
         padding: 5px 0;
         border-bottom: 2px solid transparent;
       }
-      nav a.nav-primary {
+      header nav a.nav-primary {
         color: var(--accent-strong);
         font-weight: 650;
       }
-      nav a.nav-primary:hover {
+      header nav a.nav-primary:hover {
         color: var(--accent);
       }
-      nav a.active {
+      header nav a.active {
         border-bottom-color: var(--accent);
         color: var(--accent-strong);
         font-weight: 750;
@@ -142,6 +164,7 @@
         border: 1px solid var(--line);
         border-radius: 6px;
         font: inherit;
+        transition: border-color 140ms ease, box-shadow 140ms ease;
       }
       input[type="checkbox"] {
         width: auto;
@@ -155,6 +178,12 @@
         border-radius: 6px;
         background: #fff;
         font: inherit;
+        transition: border-color 140ms ease, box-shadow 140ms ease;
+      }
+      input:focus,
+      select:focus {
+        border-color: rgba(15, 118, 110, 0.55);
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
       }
       button, .button {
         padding: 9px 12px;
@@ -165,6 +194,7 @@
         font: inherit;
         font-weight: 650;
         text-decoration: none;
+        transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
       }
       button:hover, .button:hover {
         filter: brightness(0.95);
@@ -367,6 +397,10 @@
         box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
         transform: translateY(-1px);
       }
+      .home-actions a:focus-visible {
+        border-color: rgba(15, 118, 110, 0.55);
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1), 0 14px 34px rgba(15, 23, 42, 0.08);
+      }
       .home-actions strong {
         display: block;
         margin-bottom: 10px;
@@ -401,13 +435,43 @@
       }
       .analysis-nav {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         flex-wrap: wrap;
+        align-items: center;
+        overflow: visible !important;
         margin: 0 0 22px;
-        padding: 10px;
+        padding: 12px;
         border: 1px solid rgba(15, 118, 110, 0.12);
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.7);
+      }
+      .analysis-nav-link {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        box-sizing: border-box;
+        padding: 9px 24px 10px;
+        border-radius: 7px;
+        color: #344054;
+        background: #fff;
+        box-shadow: inset 0 0 0 1px var(--line);
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.15;
+        white-space: nowrap;
+        text-decoration: none;
+        transition: background 140ms ease, box-shadow 140ms ease, color 140ms ease;
+      }
+      .analysis-nav-link:hover {
+        color: var(--accent-strong);
+        box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.38);
+      }
+      .analysis-nav-link.active {
+        color: var(--accent-strong);
+        background: var(--person-bg);
+        box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.34);
       }
       .analysis-card {
         display: grid;
@@ -427,6 +491,10 @@
         border-color: rgba(15, 118, 110, 0.45);
         box-shadow: 0 12px 26px rgba(15, 23, 42, 0.07);
         transform: translateY(-1px);
+      }
+      .analysis-card:focus-visible {
+        border-color: rgba(15, 118, 110, 0.55);
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1), 0 12px 26px rgba(15, 23, 42, 0.07);
       }
       .analysis-card h2 {
         margin: 0;
@@ -486,6 +554,12 @@
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.78);
         box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+      }
+      .compare-hero {
+        grid-template-columns: minmax(0, 0.72fr) minmax(360px, 1fr);
+      }
+      .compare-command {
+        margin: 0;
       }
       .result-panel {
         margin-top: 22px;
@@ -726,13 +800,15 @@
         margin: 14px 0;
       }
       .pill {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
         padding: 5px 9px;
         border: 1px solid var(--line);
         border-radius: 999px;
         color: var(--ink);
         text-decoration: none;
         background: #fff;
+        line-height: 1.2;
       }
       .tag-person,
       .tag-podcast,
@@ -778,6 +854,11 @@
       .pill.active {
         border-color: var(--accent);
         color: var(--accent);
+      }
+      .pill:focus-visible,
+      .pill-button:focus-visible {
+        border-color: rgba(15, 118, 110, 0.55);
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
       }
       .pill-form {
         display: inline;
@@ -1053,6 +1134,7 @@
       }
       .tabs {
         margin: 22px 0 0;
+        overflow: visible;
       }
       .detail-tabs {
         margin-top: 24px;
@@ -1066,18 +1148,25 @@
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        margin: 0 0 16px;
-        border-bottom: 1px solid var(--line);
+        overflow: visible;
+        margin: 0 0 18px;
+        padding: 8px;
+        border: 1px solid rgba(15, 118, 110, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.64);
       }
       .tab-list label {
-        padding: 9px 12px;
-        border: 1px solid transparent;
-        border-bottom: 0;
-        border-radius: 8px 8px 0 0;
+        display: inline-flex;
+        align-items: center;
+        min-height: 38px;
+        padding: 8px 13px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
         color: var(--muted);
         background: #fff;
         font-weight: 650;
         cursor: pointer;
+        line-height: 1;
       }
       .tab-panel {
         display: none;
@@ -1087,7 +1176,7 @@
       #prediction-tab-fits:checked ~ .tab-list label[for="prediction-tab-fits"] {
         border-color: var(--line);
         color: var(--accent);
-        background: var(--panel);
+        background: var(--person-bg);
       }
       #prediction-tab-scores:checked ~ .tab-panels .prediction-tab-panel-scores,
       #prediction-tab-links:checked ~ .tab-panels .prediction-tab-panel-links,
@@ -1102,7 +1191,7 @@
       #person-tab-fits:checked ~ .tab-list label[for="person-tab-fits"] {
         border-color: var(--line);
         color: var(--accent);
-        background: var(--panel);
+        background: var(--person-bg);
       }
       #podcast-tab-guests:checked ~ .tab-panels .podcast-tab-panel-guests,
       #podcast-tab-fits:checked ~ .tab-panels .podcast-tab-panel-fits,
@@ -1134,6 +1223,38 @@
       .prediction-score-histogram {
         width: 100%;
         height: 560px;
+      }
+      footer {
+        margin-top: 44px;
+        border-top: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.58);
+      }
+      .site-footer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: center;
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 20px 22px;
+      }
+      .site-footer p {
+        margin: 0;
+      }
+      .site-footer-links {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .site-footer-links a {
+        color: var(--accent-strong);
+        font-weight: 650;
+        text-decoration: none;
+      }
+      .site-footer-links a:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
       }
       @media (max-width: 700px) {
         input {
@@ -1182,6 +1303,9 @@
           grid-template-columns: 1fr;
           padding: 18px;
         }
+        .compare-hero {
+          grid-template-columns: 1fr;
+        }
         .dossier-hero {
           grid-template-columns: 1fr;
         }
@@ -1191,6 +1315,12 @@
         .detail-overview {
           grid-template-columns: 1fr;
         }
+        .site-footer {
+          grid-template-columns: 1fr;
+        }
+        .site-footer-links {
+          justify-content: flex-start;
+        }
       }
     </style>
   </head>
@@ -1198,14 +1328,17 @@
     <header>
       <nav>
         {% with active=request.resolver_match.url_name %}
-        <a href="{% url 'explorer:home' %}">Six Degrees to Joe Rogan</a>
+        <a class="brand-link" href="{% url 'explorer:home' %}">
+          <img class="brand-mark" src="{% static 'images/favicon.svg' %}" alt="" aria-hidden="true">
+          <span>Six Degrees to Joe Rogan</span>
+        </a>
         <a class="nav-primary {% if active == 'path' %}active{% endif %}" href="{% url 'explorer:path' %}">Six Degrees</a>
         <a class="nav-primary {% if active == 'map' %}active{% endif %}" href="{% url 'explorer:map' %}">Map</a>
         <a class="nav-primary {% if active == 'recommendations' %}active{% endif %}" href="{% url 'explorer:recommendations' %}">Recommendations</a>
         <a class="nav-primary {% if active == 'rankings' %}active{% endif %}" href="{% url 'explorer:rankings' %}">Rankings</a>
         <a class="{% if active == 'podcasts' or active == 'podcast_detail' %}active{% endif %}" href="{% url 'explorer:podcasts' %}">Podcasts</a>
         <a class="{% if active == 'people' or active == 'person_detail' %}active{% endif %}" href="{% url 'explorer:people' %}">People</a>
-        <a class="{% if active == 'advanced' or active == 'advanced_page' %}active{% endif %}" href="{% url 'explorer:advanced' %}">Analysis</a>
+        <a class="{% if active == 'analysis' or active == 'analysis_page' or active == 'advanced' or active == 'advanced_page' %}active{% endif %}" href="{% url 'explorer:analysis' %}">Analysis</a>
         <a class="creator-tag" href="https://brooksjaredc.github.io">Created by Jared Brooks</a>
         {% endwith %}
       </nav>
@@ -1213,5 +1346,15 @@
     <main>
       {% block content %}{% endblock %}
     </main>
+    <footer>
+      <div class="site-footer">
+        <p class="muted">An interactive podcast network experiment built from guest appearances, paths, recommendations, and rankings.</p>
+        <div class="site-footer-links" aria-label="Footer links">
+          <a href="{% url 'explorer:path' %}">Trace a path</a>
+          <a href="{% url 'explorer:map' %}">Open map</a>
+          <a href="{% url 'explorer:analysis_page' 'definitions' %}">Methods</a>
+        </div>
+      </div>
+    </footer>
   </body>
 </html>

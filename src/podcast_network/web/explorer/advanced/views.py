@@ -47,7 +47,7 @@ def advanced_pages_with_asset_urls() -> dict[str, dict[str, Any]]:
                 )
             if section.get("page"):
                 section["page_url"] = reverse(
-                    "explorer:advanced_page",
+                    "explorer:analysis_page",
                     kwargs={"page": section["page"]},
                 )
     return pages
