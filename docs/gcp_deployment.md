@@ -123,7 +123,7 @@ Before scheduling the job, run the command in dry-run mode and then with tight l
 ```bash
 gcloud run jobs execute weekly-update \
   --region us-central1 \
-  --args manage.py,production_preflight,--require-postgres,--require-production-settings,--require-gcs-artifacts,--future-link-gcs-model-uri,gs://PROJECT_ID-podcast-network-artifacts/future-link-training/MODEL/future_link_online_logistic.joblib
+  --args manage.py,production_preflight,--require-postgres,--require-production-settings,--require-gcs-artifacts,--future-link-gcs-model-uri,gs://PROJECT_ID-podcast-network-artifacts/future-link-training/exact-lr-onecut-20260523/future_link_exact_lr_unweighted_onecut.joblib
 
 gcloud run jobs execute weekly-update \
   --region us-central1 \

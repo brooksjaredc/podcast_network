@@ -78,8 +78,8 @@
     attr(append(glow, "feDropShadow"), "dx", "0");
     attr(glow.lastChild || glow.node().lastChild, "dy", "12");
     attr(glow.lastChild || glow.node().lastChild, "stdDeviation", "10");
-    attr(glow.lastChild || glow.node().lastChild, "flood-color", "#22d3ee");
-    attr(glow.lastChild || glow.node().lastChild, "flood-opacity", "0.28");
+    attr(glow.lastChild || glow.node().lastChild, "flood-color", "#0f766e");
+    attr(glow.lastChild || glow.node().lastChild, "flood-opacity", "0.18");
 
     const arrow = append(defs, "marker");
     attr(arrow, "id", "path-edge-arrow");

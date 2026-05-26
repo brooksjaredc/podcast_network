@@ -6,7 +6,7 @@
   <h1>People</h1>
   <p class="muted">Find guests and hosts, then inspect their appearances, rankings, and network-based podcast fits.</p>
 
-  <form class="toolbar" method="get">
+  <form class="toolbar filter-toolbar" method="get">
     <input name="q" value="{{ query }}" placeholder="Search people" aria-label="Search people">
     <select name="sort" aria-label="Sort people">
       {% for sort_key, sort_label in sort_options.items %}
@@ -18,17 +18,28 @@
       <a class="button secondary-button" href="{% url 'explorer:people' %}">Reset</a>
     {% endif %}
   </form>
+  <div class="table-meta">
+    <strong>{{ people|length }} people shown</strong>
+    <span class="muted">Sorted by {{ sort }}</span>
+  </div>
+
   <table>
     <thead>
-      <tr><th>Rank</th><th>Name</th><th>Appearances</th><th>Podcasts</th><th>Latest</th></tr>
+      <tr>
+        <th>Rank</th>
+        <th>Name</th>
+        <th class="numeric-cell">Appearances</th>
+        <th class="numeric-cell">Podcasts</th>
+        <th>Latest</th>
+      </tr>
     </thead>
     <tbody>
       {% for person in people %}
         <tr>
           <td>{{ forloop.counter }}</td>
           <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-          <td>{{ person.appearances_count }}</td>
-          <td>{{ person.podcast_count }}</td>
+          <td class="numeric-cell">{{ person.appearances_count }}</td>
+          <td class="numeric-cell">{{ person.podcast_count }}</td>
           <td>{{ person.latest|date:"Y-m-d" }}</td>
         </tr>
       {% empty %}

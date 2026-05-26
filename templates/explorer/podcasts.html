@@ -6,7 +6,7 @@
   <h1>Podcasts</h1>
   <p class="muted">Browse shows with guest data, then drill into hosts, frequent guests, and network-based fits.</p>
 
-  <form class="toolbar" method="get">
+  <form class="toolbar filter-toolbar" method="get">
     <input name="q" value="{{ query }}" placeholder="Search podcasts" aria-label="Search podcasts">
     <select name="genre" aria-label="Filter by genre">
       <option value="">All genres</option>
@@ -29,6 +29,11 @@
     {% endif %}
   </form>
 
+  <div class="table-meta">
+    <strong>{{ podcast_rows|length }} podcasts shown</strong>
+    <span class="muted">Sorted by {{ sort }}</span>
+  </div>
+
   <table>
     <thead>
       <tr>
@@ -36,8 +41,8 @@
         <th>Name</th>
         <th>Hosts</th>
         <th>Genres</th>
-        <th>Guest Appearances</th>
-        <th>Unique Guests</th>
+        <th class="numeric-cell">Guest Appearances</th>
+        <th class="numeric-cell">Unique Guests</th>
         <th>Latest Episode</th>
       </tr>
     </thead>
@@ -48,20 +53,20 @@
           <td><a href="{% url 'explorer:podcast_detail' row.podcast.id %}">{{ row.podcast.name }}</a></td>
           <td>
             {% for host in row.hosts %}
-              <a href="{% url 'explorer:person_detail' host.id %}">{{ host.name }}</a>{% if not forloop.last %}, {% endif %}
+              <a class="table-badge" href="{% url 'explorer:person_detail' host.id %}">{{ host.name }}</a>
             {% empty %}
-              <span class="muted">Unknown</span>
+              <span class="table-badge table-badge-muted">Unknown</span>
             {% endfor %}
           </td>
           <td>
             {% for genre in row.genres %}
-              {{ genre }}{% if not forloop.last %}, {% endif %}
+              <span class="table-badge table-badge-genre">{{ genre }}</span>
             {% empty %}
-              <span class="muted">Unknown</span>
+              <span class="table-badge table-badge-muted">Unknown</span>
             {% endfor %}
           </td>
-          <td>{{ row.podcast.guest_appearances }}</td>
-          <td>{{ row.podcast.unique_guests }}</td>
+          <td class="numeric-cell">{{ row.podcast.guest_appearances }}</td>
+          <td class="numeric-cell">{{ row.podcast.unique_guests }}</td>
           <td>{{ row.podcast.latest_episode|date:"Y-m-d" }}</td>
         </tr>
       {% empty %}

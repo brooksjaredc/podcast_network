@@ -14,7 +14,7 @@ main:
           - metrics_job: ${default(map.get(args, "metrics_job"), "podcast-network-weekly-metrics")}
           - predictions_job: ${default(map.get(args, "predictions_job"), "podcast-network-weekly-predictions")}
           - run_label: ${default(map.get(args, "run_label"), "weekly-update-" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID"))}
-          - future_link_gcs_model_uri: ${default(map.get(args, "future_link_gcs_model_uri"), "gs://podcast-network-prod-podcast-network-artifacts/future-link-training/online-logistic-20260522/future_link_online_logistic.joblib")}
+          - future_link_gcs_model_uri: ${default(map.get(args, "future_link_gcs_model_uri"), "gs://podcast-network-prod-podcast-network-artifacts/future-link-training/exact-lr-onecut-20260523/future_link_exact_lr_unweighted_onecut.joblib")}
           - raw_snapshot_storage: ${default(map.get(args, "raw_snapshot_storage"), "gcs")}
           - raw_snapshot_gcs_uri: ${default(map.get(args, "raw_snapshot_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/raw-feed-snapshots")}
           - batch_artifact_gcs_uri: ${default(map.get(args, "batch_artifact_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/openai-batches")}

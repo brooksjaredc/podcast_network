@@ -3,17 +3,46 @@
 {% block title %}{{ person.name }}{% endblock %}
 
 {% block content %}
-  <h1>{{ person.name }}</h1>
+  <section class="dossier-hero">
+    <div class="dossier-copy">
+      <span class="tag-person">Person</span>
+      <h1>{{ person.name }}</h1>
+      <div class="dossier-meta">
+        {% if podcast_rows %}
+          <span class="tag-role">Guest</span>
+        {% endif %}
+        {% if host_podcast_rows %}
+          <span class="tag-role">Host</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="dossier-aside">
+      <div class="dossier-stat-grid" aria-label="Person network summary">
+        <div><strong>{{ podcast_rows|length }}</strong><span>guest podcasts</span></div>
+        <div><strong>{{ host_podcast_rows|length }}</strong><span>hosted shows</span></div>
+        {% if network_metric %}
+          <div><strong>#{{ network_metric.pagerank_rank }}</strong><span>PageRank</span></div>
+        {% elif podcast_rows %}
+          <div><strong>{{ podcast_rows.0.appearances_count }}</strong><span>top show appearances</span></div>
+        {% else %}
+          <div><strong>0</strong><span>loaded appearances</span></div>
+        {% endif %}
+      </div>
+      <div class="dossier-actions">
+        <a class="button" href="{% url 'explorer:path' %}?source={{ person.name|urlencode }}&target=Joe%20Rogan">Find path to Joe Rogan</a>
+      </div>
+    </div>
+  </section>
 
-  <div class="grid">
-    <section class="panel">
+  <div class="detail-overview">
+    <section class="detail-section">
       <h2>Guest On</h2>
       {% if podcast_rows %}
-        <ul>
+        <ul class="link-list">
           {% for podcast in podcast_rows|slice:":20" %}
             <li>
               <a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a>
-              ({{ podcast.appearances_count }})
+              <span class="count">{{ podcast.appearances_count }} appearances</span>
             </li>
           {% endfor %}
         </ul>
@@ -24,20 +53,15 @@
 
     <section class="panel">
       <h2>Network Snapshot</h2>
-      <table>
-        <tbody>
-          <tr><td>Guest podcasts</td><td>{{ podcast_rows|length }}</td></tr>
-          <tr><td>Hosted shows</td><td>{{ host_podcast_rows|length }}</td></tr>
-          {% if network_metric %}
-            <tr><td>Best rank</td><td>#{{ network_metric.pagerank_rank }} PageRank</td></tr>
-          {% elif podcast_rows %}
-            <tr><td>Most frequent show</td><td>{{ podcast_rows.0.name }}</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
-      <p>
-        <a href="{% url 'explorer:path' %}?source={{ person.name|urlencode }}&target=Joe%20Rogan">Find path to Joe Rogan</a>
-      </p>
+      <div class="summary-list">
+        <div class="summary-item"><span>Guest podcasts</span><strong>{{ podcast_rows|length }}</strong></div>
+        <div class="summary-item"><span>Hosted shows</span><strong>{{ host_podcast_rows|length }}</strong></div>
+        {% if network_metric %}
+          <div class="summary-item"><span>Best rank</span><strong>#{{ network_metric.pagerank_rank }}</strong></div>
+        {% elif podcast_rows %}
+          <div class="summary-item"><span>Most frequent show</span><strong>{{ podcast_rows.0.name }}</strong></div>
+        {% endif %}
+      </div>
     </section>
   </div>
 

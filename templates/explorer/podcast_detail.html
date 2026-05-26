@@ -3,37 +3,51 @@
 {% block title %}{{ podcast.name }}{% endblock %}
 
 {% block content %}
-  <h1>{{ podcast.name }}</h1>
-  <p class="muted">{{ podcast.website_url }}</p>
-  <p>{{ podcast.description|striptags }}</p>
-  {% if genres %}
-    <div class="pill-row" aria-label="Podcast genres">
-      {% for genre in genres %}
-        <span class="pill">{{ genre }}</span>
-      {% endfor %}
+  <section class="dossier-hero">
+    <div class="dossier-copy">
+      <span class="tag-podcast">Podcast</span>
+      <h1>{{ podcast.name }}</h1>
+      {% if podcast.website_url %}
+        <p class="muted">{{ podcast.website_url }}</p>
+      {% endif %}
+      <p>{{ podcast.description|striptags }}</p>
+      {% if genres %}
+        <div class="dossier-meta" aria-label="Podcast genres">
+          {% for genre in genres %}
+            <span class="pill">{{ genre }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
     </div>
-  {% endif %}
-
-  <section class="stats">
-    <div class="stat"><strong>{{ episode_count }}</strong><span>episodes</span></div>
-    <div class="stat"><strong>{{ guest_appearance_count }}</strong><span>guest appearances</span></div>
-    <div class="stat"><strong>{{ unique_guest_count }}</strong><span>unique guests shown</span></div>
+    <div class="dossier-aside">
+      <div class="dossier-stat-grid" aria-label="Podcast network summary">
+        <div><strong>{{ episode_count }}</strong><span>episodes</span></div>
+        <div><strong>{{ guest_appearance_count }}</strong><span>guest appearances</span></div>
+        <div><strong>{{ unique_guest_count }}</strong><span>unique guests</span></div>
+      </div>
+      <div class="dossier-actions">
+        <a class="button" href="{% url 'explorer:common' %}?first={{ podcast.id }}">Compare Shows</a>
+      </div>
+    </div>
   </section>
 
-  <h2>Hosts</h2>
-  {% if hosts %}
-    <ul>
-      {% for host in hosts %}
-        <li><a href="{% url 'explorer:person_detail' host.id %}">{{ host.name }}</a></li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p class="muted">No host metadata loaded.</p>
-  {% endif %}
-
-  <p>
-    <a href="{% url 'explorer:common' %}?first={{ podcast.id }}">Compare this show with another podcast</a>
-  </p>
+  <section class="detail-overview detail-overview-single">
+    <div class="detail-section">
+      <h2>Hosts</h2>
+      {% if hosts %}
+        <ul class="link-list">
+          {% for host in hosts %}
+            <li>
+              <a href="{% url 'explorer:person_detail' host.id %}">{{ host.name }}</a>
+              <span class="count">host</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No host metadata loaded.</p>
+      {% endif %}
+    </div>
+  </section>
 
   <div class="tabs detail-tabs">
     <input class="tab-radio" type="radio" name="podcast-detail-tab" id="podcast-tab-guests" checked>

@@ -18,7 +18,7 @@
     </p>
   </details>
 
-  <form class="toolbar" method="get">
+  <form class="toolbar filter-toolbar" method="get">
     <input name="q" value="{{ query }}" placeholder="Search people">
     <select name="rank">
       <option value="appearances" {% if rank == "appearances" %}selected{% endif %}>Guest appearances</option>
@@ -38,13 +38,18 @@
     </p>
   {% endif %}
 
+  <div class="table-meta">
+    <strong>{{ people|length }} ranked people shown</strong>
+    <span class="muted">{{ rank_label }}</span>
+  </div>
+
   <table>
     <thead>
       <tr>
         <th>Rank</th>
         <th>Name</th>
-        <th>Appearances</th>
-        <th>Podcasts</th>
+        <th class="numeric-cell">Appearances</th>
+        <th class="numeric-cell">Podcasts</th>
         <th>Latest</th>
       </tr>
     </thead>
@@ -54,12 +59,12 @@
           <td>{{ forloop.counter }}</td>
           {% if person.representative_person_id %}
             <td><a href="{% url 'explorer:person_detail' person.representative_person_id %}">{{ person.display_name }}</a></td>
-            <td>{{ person.guest_appearances }}</td>
+            <td class="numeric-cell">{{ person.guest_appearances }}</td>
           {% else %}
             <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-            <td>{{ person.appearances_count }}</td>
+            <td class="numeric-cell">{{ person.appearances_count }}</td>
           {% endif %}
-          <td>{{ person.podcast_count }}</td>
+          <td class="numeric-cell">{{ person.podcast_count }}</td>
           <td>
             {% if person.latest_episode_at %}
               {{ person.latest_episode_at|date:"Y-m-d" }}

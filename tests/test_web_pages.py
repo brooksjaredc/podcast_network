@@ -105,13 +105,14 @@ def test_home_page_loads() -> None:
     assert b"Six Degrees to Joe Rogan" in response.content
     assert b'href="https://brooksjaredc.github.io"' in response.content
     assert b"Created by Jared Brooks" in response.content
-    assert b"Find the podcast path between almost anyone." in response.content
+    assert b'images/favicon.svg' in response.content
+    assert b"See who connects through the interview podcast graph." in response.content
     assert b"home-path-form" in response.content
     assert b"Joe Rogan to Hillary Clinton" in response.content
     assert b"Conan O'Brien to Jordan Peterson" in response.content
     assert b"Oprah Winfrey to Bill Burr" in response.content
-    assert b"home-hero-art" in response.content
-    assert b"ChatGPT Image May 17" in response.content
+    assert b"Interactive Podcast Network Experiment" in response.content
+    assert b"home-command" in response.content
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -156,6 +157,7 @@ def test_path_page_loads_real_query() -> None:
     assert f'href="/podcasts/{first_podcast.id}/"'.encode() in response.content
     assert b"data-path-graph" in response.content
     assert b"path_graph.js" in response.content
+    assert b'class="nav-primary active" href="/path/"' in response.content
     assert b"Jan 15, 2024" in response.content
     assert b'name="start_date"' in response.content
     assert b'name="end_date"' in response.content

@@ -4,34 +4,31 @@
 {% block title %}Six Degrees to Joe Rogan{% endblock %}
 
 {% block content %}
-  <section class="home-hero">
+  <section
+    class="home-hero"
+    style="--hero-image: url('{% static 'images/ChatGPT Image May 25, 2026, 10_14_46 PM.png' %}')"
+  >
     <div class="home-hero-copy">
-      <p class="eyebrow">Six Degrees to Joe Rogan</p>
-      <h1>Find the podcast path between almost anyone.</h1>
+      <p class="eyebrow">Interactive Podcast Network Experiment</p>
+      <h1>See who connects through the interview podcast graph.</h1>
       <p class="home-lede">
-        Explore the wider interview podcast network: who appeared where, which
-        shows bridge different cultural worlds, and how public figures connect
-        through long-form conversations.
+        Search two names, trace the shortest appearance path, and explore the
+        data behind podcast guests, hosts, recommendations, and rankings.
       </p>
     </div>
 
-    <figure class="home-hero-art" aria-label="Podcast network illustration">
-      <img
-        src="{% static 'images/ChatGPT Image May 17, 2026, 01_15_31 PM.png' %}"
-        alt="A podcast recommendation network centered on microphones, hosts, and connected shows"
-      >
-    </figure>
-
     <div class="home-hero-search">
-      <form class="home-path-form" method="get" action="{% url 'explorer:path' %}">
-        <input name="source" value="Joe Rogan" aria-label="First person">
-        <input name="target" value="Marc Maron" aria-label="Second person">
-        <button type="submit">Find Path</button>
-      </form>
-      <div class="home-examples" aria-label="Example paths">
-        <a href="{% url 'explorer:path' %}?source=Joe%20Rogan&target=Hillary%20Clinton">Joe Rogan to Hillary Clinton</a>
-        <a href="{% url 'explorer:path' %}?source=Conan%20O%27Brien&target=Jordan%20Peterson">Conan O'Brien to Jordan Peterson</a>
-        <a href="{% url 'explorer:path' %}?source=Oprah%20Winfrey&target=Bill%20Burr">Oprah Winfrey to Bill Burr</a>
+      <div class="home-command">
+        <form class="home-path-form" method="get" action="{% url 'explorer:path' %}">
+          <input name="source" value="Joe Rogan" aria-label="First person">
+          <input name="target" value="Marc Maron" aria-label="Second person">
+          <button type="submit">Find Path</button>
+        </form>
+        <div class="home-examples" aria-label="Example paths">
+          <a href="{% url 'explorer:path' %}?source=Joe%20Rogan&target=Hillary%20Clinton">Try Joe Rogan to Hillary Clinton</a>
+          <a href="{% url 'explorer:path' %}?source=Conan%20O%27Brien&target=Jordan%20Peterson">Try Conan O'Brien to Jordan Peterson</a>
+          <a href="{% url 'explorer:path' %}?source=Oprah%20Winfrey&target=Bill%20Burr">Try Oprah Winfrey to Bill Burr</a>
+        </div>
       </div>
     </div>
   </section>

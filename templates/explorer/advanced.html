@@ -4,16 +4,21 @@
 {% block title %}{{ page.title }}{% endblock %}
 
 {% block content %}
-  <h1>{{ page.title }}</h1>
-  {% if page.lede %}
-    <p class="muted">{{ page.lede }}</p>
-  {% endif %}
+  <section class="analysis-hero">
+    <div>
+      <p class="eyebrow">Network Analysis</p>
+      <h1>{{ page.title }}</h1>
+      {% if page.lede %}
+        <p class="muted">{{ page.lede }}</p>
+      {% endif %}
+    </div>
+  </section>
 
-  <div class="pill-row">
+  <nav class="analysis-nav" aria-label="Analysis sections">
     {% for slug, item in pages.items %}
       <a class="pill {% if item.title == page.title %}active{% endif %}" href="{% url 'explorer:advanced_page' slug %}">{{ item.title }}</a>
     {% endfor %}
-  </div>
+  </nav>
 
   {% if page.layout == "cards" %}
     <section class="analysis-cards" aria-label="Analysis sections">
@@ -29,9 +34,11 @@
     </section>
   {% else %}
     {% for section in page.sections %}
-      <section>
-        <h2>{{ section.heading }}</h2>
-        <p>{{ section.body }}</p>
+      <section class="analysis-section {% if section.plot or section.image %}analysis-section-visual{% endif %}">
+        <div class="analysis-section-copy">
+          <h2>{{ section.heading }}</h2>
+          <p>{{ section.body }}</p>
+        </div>
         {% if section.plot %}
           <div class="plot interactive-plot">
             <iframe src="{{ section.plot_url }}" title="{{ section.heading }}" loading="lazy"></iframe>
