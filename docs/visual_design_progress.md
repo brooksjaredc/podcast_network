@@ -24,7 +24,7 @@ clusters, and surprising adjacency feel alive.
 
 ## Design Gaps To Track
 
-1. [In progress] Reframe the visual identity around cultural cartography.
+1. [Done] Reframe the visual identity around cultural cartography.
    - Use warmer page surfaces and clearer editorial hierarchy.
    - Keep dense data pages efficient, but make core network pages more memorable.
    - Avoid a generic sci-fi analytics look.
@@ -65,7 +65,7 @@ clusters, and surprising adjacency feel alive.
    - Preserve density while improving hierarchy.
    - Add table context and filter-bar surfaces to browse/ranking pages.
 
-6. [In progress] Make Map and Six Degrees more immersive than browse pages.
+6. [Done] Make Map and Six Degrees more immersive than browse pages.
    - Treat graph/path visuals and command surfaces as first-class experiment areas.
    - Keep the surrounding UI light enough that the visualizations stand out.
    - Align the Six Degrees path graphic palette with the warm site system instead
@@ -73,7 +73,7 @@ clusters, and surprising adjacency feel alive.
    - Give Analysis/Map pages a stronger header, section navigation, and framed
      visualization blocks.
 
-7. [In progress] Reduce visual sameness across cards, panels, pills, and tables.
+7. [Done] Reduce visual sameness across cards, panels, pills, and tables.
    - Reserve panels for actual tools or grouped controls.
    - Use flatter page sections where possible.
    - Introduce a small set of reusable hero, command, dossier, and table patterns.
@@ -97,6 +97,17 @@ clusters, and surprising adjacency feel alive.
 - Keep the UI accessible and readable on mobile.
 - Use the current semantic colors as a starting point, but do not let the interface
   become a one-color teal theme.
+
+## Completion Notes
+
+The initial visual design plan is complete. The site now has a warmer visual system,
+a real homepage hero asset, coherent tool surfaces, stronger detail pages, improved
+tables, branded navigation, a custom favicon/header mark, Analysis URLs that match
+the user-facing label, scoped CSS, and consistent focus states.
+
+Future visual work should be tracked as a new iteration rather than added to this
+initial pass. Good candidates for a next round would be deeper mobile navigation,
+plot theme regeneration, or a dedicated design-system CSS extraction.
 
 ## Hero Image Direction
 
@@ -170,3 +181,5 @@ futuristic HUD, no readable tiny text.
   matching browser theme color.
 - 2026-05-26: Scoped global navigation CSS to the header and added cohesive
   focus states for links, controls, cards, pills, and form fields.
+- 2026-05-26: Completed the initial visual design plan and closed all tracked
+  design gaps.
