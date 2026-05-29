@@ -118,6 +118,7 @@ STORAGES = {
     },
 }
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+DATABASE_GRAPH_CACHE_TTL_SECONDS = int(os.environ.get("DATABASE_GRAPH_CACHE_TTL_SECONDS", "300"))
 
 TEMPLATES = [
     {

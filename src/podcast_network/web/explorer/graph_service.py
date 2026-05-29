@@ -1,3 +1,5 @@
+import logging
+from threading import Lock
 from time import monotonic
 
 from django.conf import settings
@@ -11,7 +13,10 @@ from podcast_network.web.catalog.models import Appearance, PersonEntityLink, Pod
 COHOST_EPISODE_THRESHOLD = 100
 COHOST_EPISODE_SHARE = 0.20
 
+logger = logging.getLogger(__name__)
+
 _DATABASE_GRAPH_CACHE: tuple[float, SixDegreesGraph] | None = None
+_DATABASE_GRAPH_CACHE_LOCK = Lock()
 
 
 def database_six_degrees_graph() -> SixDegreesGraph:
@@ -25,9 +30,26 @@ def database_six_degrees_graph() -> SixDegreesGraph:
     ):
         return _DATABASE_GRAPH_CACHE[1]
 
-    graph = build_database_six_degrees_graph()
-    _DATABASE_GRAPH_CACHE = (now, graph)
-    return graph
+    with _DATABASE_GRAPH_CACHE_LOCK:
+        now = monotonic()
+        if (
+            _DATABASE_GRAPH_CACHE is not None
+            and ttl_seconds > 0
+            and now - _DATABASE_GRAPH_CACHE[0] < ttl_seconds
+        ):
+            return _DATABASE_GRAPH_CACHE[1]
+
+        started = monotonic()
+        graph = build_database_six_degrees_graph()
+        elapsed = monotonic() - started
+        _DATABASE_GRAPH_CACHE = (monotonic(), graph)
+        logger.info(
+            "Built database six-degrees graph in %.2fs with %d people and %d podcasts.",
+            elapsed,
+            graph.person_count,
+            graph.podcast_count,
+        )
+        return graph
 
 
 def clear_database_six_degrees_graph_cache() -> None:
