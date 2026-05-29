@@ -5,6 +5,10 @@ GCP_REGION ?= us-central1
 CLOUD_SQL_INSTANCE ?= podcast-network-db
 CLOUD_RUN_SERVICE ?= podcast-network-web
 IMAGE ?= us-central1-docker.pkg.dev/$(GCP_PROJECT)/podcast-network/web:latest
+CUSTOM_DOMAIN ?=
+DJANGO_ALLOWED_HOSTS ?= .run.app$(if $(CUSTOM_DOMAIN),$(comma)$(CUSTOM_DOMAIN),)
+DJANGO_CSRF_TRUSTED_ORIGINS ?= $(if $(CUSTOM_DOMAIN),https://$(CUSTOM_DOMAIN),)
+comma := ,
 
 .PHONY: install dev migrate test lint check preflight cloud-sql-proxy sync-cloud-db cloud-status deploy
 
@@ -45,6 +49,6 @@ deploy:
 		--region $(GCP_REGION) \
 		--image $(IMAGE) \
 		--add-cloudsql-instances $(GCP_PROJECT):$(GCP_REGION):$(CLOUD_SQL_INSTANCE) \
-		--set-env-vars DJANGO_DEBUG=false,DJANGO_ALLOWED_HOSTS=.run.app,DJANGO_SECURE_SSL_REDIRECT=true \
+		--set-env-vars "^|^DJANGO_DEBUG=false|DJANGO_ALLOWED_HOSTS=$(DJANGO_ALLOWED_HOSTS)|DJANGO_CSRF_TRUSTED_ORIGINS=$(DJANGO_CSRF_TRUSTED_ORIGINS)|DJANGO_SECURE_SSL_REDIRECT=true" \
 		--set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest \
 		--allow-unauthenticated
