@@ -1,4 +1,4 @@
-PYTHON ?= python
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 MANAGE ?= $(PYTHON) manage.py
 GCP_PROJECT ?= podcast-network-prod
 GCP_REGION ?= us-central1

@@ -9,6 +9,7 @@ build/
 *.egg-info/
 db.sqlite3
 data/raw/
+data/artifacts/
 data/reports/
 staticfiles/
 media/
