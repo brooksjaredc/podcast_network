@@ -4,6 +4,8 @@ from django.core.management import call_command
 from django.test import Client, override_settings
 from django.utils import timezone
 
+from podcast_network.graph import SixDegreesGraph
+from podcast_network.graph.six_degrees import Edge
 from podcast_network.network.metrics import calculate_and_store_network_metrics
 from podcast_network.web.catalog.models import (
     Appearance,
@@ -16,6 +18,7 @@ from podcast_network.web.catalog.models import (
     Person,
     Podcast,
 )
+from podcast_network.web.explorer.graph_artifact import load_graph_artifact, write_graph_artifact
 from podcast_network.web.explorer.graph_service import database_six_degrees_graph
 
 
@@ -168,6 +171,47 @@ def test_path_page_loads_real_query() -> None:
     assert b"Joe Rogan to Hillary Clinton" in response.content
     assert b"Conan O" in response.content
     assert b"Jordan Peterson" in response.content
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"], SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI="")
+def test_database_graph_loads_configured_artifact(tmp_path) -> None:
+    artifact_path = tmp_path / "six_degrees_graph.pkl.gz"
+    write_graph_artifact(
+        graph=SixDegreesGraph(
+            edges=[
+                Edge("Artifact Alice", "Artifact Podcast", "host"),
+                Edge("Artifact Bob", "Artifact Podcast", "guest"),
+            ],
+            names={"Artifact Alice", "Artifact Bob"},
+        ),
+        path=artifact_path,
+    )
+    database_six_degrees_graph.cache_clear()
+
+    try:
+        with override_settings(SIX_DEGREES_GRAPH_ARTIFACT_PATH=str(artifact_path)):
+            graph = database_six_degrees_graph()
+    finally:
+        database_six_degrees_graph.cache_clear()
+
+    result = graph.explain("Artifact Alice", "Artifact Bob")
+    assert result.found
+    assert result.path == ("Artifact Alice", "Artifact Podcast", "Artifact Bob")
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+def test_build_six_degrees_graph_artifact_command_writes_graph(tmp_path) -> None:
+    make_db_graph()
+    output_path = tmp_path / "six_degrees_graph.pkl.gz"
+
+    call_command("build_six_degrees_graph_artifact", output=str(output_path))
+
+    graph = database_six_degrees_graph()
+    artifact = load_graph_artifact(output_path)
+    result = artifact.graph.explain("Joe Rogan", "Marc Maron")
+    assert result.found
+    assert artifact.metadata["person_count"] == graph.person_count
+    assert output_path.with_name(f"{output_path.name}.json").exists()
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])

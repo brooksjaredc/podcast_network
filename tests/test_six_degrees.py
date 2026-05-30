@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from podcast_network.graph.six_degrees import (
     Edge,
@@ -7,6 +9,7 @@ from podcast_network.graph.six_degrees import (
     ngram_distance,
     normalize_name,
 )
+from podcast_network.web.explorer.graph_artifact import load_graph_artifact, write_graph_artifact
 
 
 class SixDegreesGraphTests(unittest.TestCase):
@@ -149,6 +152,35 @@ class SixDegreesGraphTests(unittest.TestCase):
 
     def test_ngram_distance_exact_match_is_zero(self) -> None:
         self.assertEqual(ngram_distance("marc", "marc"), 0)
+
+    def test_graph_artifact_round_trips_graph_and_metadata(self) -> None:
+        graph = SixDegreesGraph(
+            edges=[
+                Edge("Alice", "Podcast A", "host"),
+                Edge("Bob", "Podcast A", "guest", date="2024-01-15"),
+            ],
+            names={"Alice", "Bob"},
+            podcast_ids={"Podcast A": 1},
+            person_ids={"Alice": 1, "Bob": 2},
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "graph.pkl.gz"
+            metadata = write_graph_artifact(
+                graph=graph,
+                path=path,
+                metadata={"git_sha": "abc123"},
+            )
+
+            artifact = load_graph_artifact(path)
+
+        self.assertEqual(metadata["format"], "podcast-network-six-degrees-graph")
+        self.assertEqual(metadata["person_count"], 2)
+        self.assertEqual(metadata["podcast_count"], 1)
+        self.assertEqual(artifact.metadata["git_sha"], "abc123")
+        result = artifact.graph.explain("Alice", "Bob")
+        self.assertTrue(result.found)
+        self.assertEqual(result.path, ("Alice", "Podcast A", "Bob"))
 
 
 if __name__ == "__main__":

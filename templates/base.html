@@ -31,6 +31,11 @@
         font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         background: var(--surface);
       }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
       a {
         color: var(--accent-strong);
       }
@@ -186,6 +191,10 @@
         box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
       }
       button, .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
         padding: 9px 12px;
         border: 1px solid var(--accent);
         border-radius: 6px;
@@ -642,7 +651,7 @@
         box-shadow: 0 24px 60px rgba(92, 64, 32, 0.12);
       }
       .path-graphic-stage {
-        min-width: 720px;
+        min-width: min(720px, 100%);
       }
       .path-graphic-fallback {
         margin: 0;
@@ -654,7 +663,7 @@
       }
       .path-graphic-svg {
         display: block;
-        min-width: 720px;
+        min-width: min(720px, 100%);
         width: 100%;
         height: auto;
       }
@@ -865,6 +874,7 @@
         margin: 0;
       }
       .pill-button {
+        min-height: 34px;
         padding: 5px 9px;
         border: 1px solid var(--line);
         border-radius: 999px;
@@ -1168,8 +1178,12 @@
         cursor: pointer;
         line-height: 1;
       }
+      .tab-panels {
+        min-width: 0;
+      }
       .tab-panel {
         display: none;
+        min-width: 0;
       }
       #prediction-tab-scores:checked ~ .tab-list label[for="prediction-tab-scores"],
       #prediction-tab-links:checked ~ .tab-list label[for="prediction-tab-links"],
@@ -1256,67 +1270,254 @@
         text-decoration: underline;
         text-underline-offset: 3px;
       }
-      @media (max-width: 700px) {
-        input {
+      @media (max-width: 1040px) {
+        .home-actions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .recommendations-layout {
+          grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1.22fr);
+        }
+        .recommendations-filters {
+          grid-column: 1 / -1;
+        }
+        .filter-section .pill-row {
+          max-height: 220px;
+          overflow-y: auto;
+          padding-right: 2px;
+        }
+      }
+      @media (max-width: 860px) {
+        header nav {
+          flex-wrap: nowrap;
+          gap: 12px;
+          overflow-x: auto;
+          padding: 12px 16px;
+          -webkit-overflow-scrolling: touch;
+        }
+        header nav a {
+          flex: 0 0 auto;
+          white-space: nowrap;
+        }
+        header nav a:first-child {
+          margin-right: 4px;
+        }
+        .brand-link span {
+          max-width: 220px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        main {
+          padding: 16px;
+        }
+        h1 {
+          font-size: 30px;
+        }
+        .experiment-hero,
+        .compare-hero,
+        .recommendations-hero,
+        .dossier-hero,
+        .detail-overview,
+        .recommendations-layout {
+          grid-template-columns: 1fr;
+        }
+        .analysis-nav,
+        .tab-list {
+          flex-wrap: nowrap;
+          overflow-x: auto !important;
+          -webkit-overflow-scrolling: touch;
+          scroll-padding-inline: 8px;
+        }
+        .analysis-nav-link,
+        .tab-list label {
+          flex: 0 0 auto;
+        }
+        .home-hero {
+          min-height: 0;
+          gap: 20px;
+          margin: -16px -16px 22px;
+          padding: 46px 16px 32px;
+          background:
+            linear-gradient(180deg, rgba(255, 253, 250, 0.96) 0%, rgba(255, 253, 250, 0.86) 56%, rgba(255, 253, 250, 0.48) 100%),
+            var(--hero-image);
+          background-position: center;
+          background-size: cover;
+        }
+        .home-hero h1 {
+          font-size: 46px;
+          line-height: 1;
+        }
+        .home-lede {
+          font-size: 17px;
+        }
+        .home-command,
+        .tool-command {
+          padding: 14px;
+        }
+        .home-path-form,
+        .path-main-fields,
+        .toolbar {
+          align-items: stretch;
+        }
+        .home-path-form > *,
+        .path-main-fields > *,
+        .toolbar > input,
+        .toolbar > select,
+        .toolbar > button,
+        .toolbar > .button {
+          flex: 1 1 220px;
+        }
+        input,
+        select {
           width: 100%;
           min-width: 0;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+          max-width: 100%;
+          font-size: 14px;
+          -webkit-overflow-scrolling: touch;
+        }
+        th,
+        td {
+          padding: 10px;
+        }
+        td:first-child,
+        th:first-child {
+          white-space: normal;
+        }
+        .numeric-cell {
+          white-space: nowrap;
+        }
+        .analysis-hero,
+        .analysis-section-visual,
+        .experiment-hero,
+        .dossier-hero,
+        .result-panel,
+        .panel {
+          padding: 16px;
+        }
+        .analysis-section-visual {
+          margin-inline: -1px;
+        }
+        .recommendations-summary,
+        .dossier-stat-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .recommendation-card .podcast-row-header,
+        .podcast-row-header {
+          display: grid;
+          grid-template-columns: 1fr;
+        }
+        .recommendation-actions,
+        .dossier-actions {
+          justify-content: flex-start;
+        }
+        .interactive-plot iframe,
+        .prediction-score-histogram {
+          height: 420px;
+        }
+      }
+      @media (max-width: 560px) {
+        body {
+          font-size: 15px;
+        }
+        header nav {
+          padding-inline: 14px;
+        }
+        .brand-mark {
+          width: 26px;
+          height: 26px;
+        }
+        .brand-link span {
+          max-width: 190px;
+        }
+        main {
+          padding: 14px;
+        }
+        h1 {
+          margin-top: 14px;
+          font-size: 28px;
+        }
+        h2 {
+          font-size: 20px;
         }
         table {
           font-size: 14px;
         }
         .home-hero {
-          min-height: 0;
-          gap: 16px;
-          margin: -18px -22px 20px;
-          padding-top: 44px;
+          margin: -14px -14px 20px;
+          padding: 34px 14px 24px;
         }
         .home-hero h1 {
-          font-size: 42px;
+          font-size: 38px;
           line-height: 1;
         }
         .home-command {
           padding: 12px;
         }
-        .home-hero-art img {
-          max-height: none;
+        .home-stats {
+          grid-template-columns: 1fr;
         }
-        .home-stats,
         .home-actions {
           grid-template-columns: 1fr;
         }
-        .recommendations-layout {
+        .home-actions a {
+          min-height: 0;
+        }
+        .home-examples a,
+        .pill,
+        .pill-button {
+          white-space: normal;
+        }
+        .path-query-form,
+        .path-main-fields,
+        .path-filter-fields,
+        .filter-toolbar,
+        .compare-command {
+          display: grid;
           grid-template-columns: 1fr;
         }
-        .recommendations-hero {
-          grid-template-columns: 1fr;
+        .path-query-form button,
+        .home-path-form button,
+        .toolbar button,
+        .toolbar .button,
+        .suggestion-action button,
+        .recommendation-actions button,
+        .dossier-actions .button {
+          width: 100%;
         }
         .recommendations-summary {
-          grid-template-columns: 1fr;
-        }
-        .recommendation-card .podcast-row-header {
-          display: grid;
-        }
-        .recommendation-actions {
-          justify-content: flex-start;
-        }
-        .experiment-hero {
-          grid-template-columns: 1fr;
-          padding: 18px;
-        }
-        .compare-hero {
-          grid-template-columns: 1fr;
-        }
-        .dossier-hero {
           grid-template-columns: 1fr;
         }
         .dossier-stat-grid {
           grid-template-columns: 1fr;
         }
-        .detail-overview {
-          grid-template-columns: 1fr;
+        .link-list li,
+        .summary-item {
+          display: grid;
+          justify-content: stretch;
+        }
+        .link-list .count {
+          white-space: normal;
+        }
+        .tab-list label {
+          min-height: 42px;
+        }
+        .path-graphic {
+          margin-inline: -2px;
+        }
+        .path-graphic-stage,
+        .path-graphic-svg {
+          min-width: 620px;
+        }
+        .interactive-plot iframe,
+        .prediction-score-histogram {
+          height: 340px;
         }
         .site-footer {
           grid-template-columns: 1fr;
+          padding: 18px 14px;
         }
         .site-footer-links {
           justify-content: flex-start;

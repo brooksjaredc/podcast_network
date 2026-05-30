@@ -6,11 +6,12 @@ CLOUD_SQL_INSTANCE ?= podcast-network-db
 CLOUD_RUN_SERVICE ?= podcast-network-web
 IMAGE ?= us-central1-docker.pkg.dev/$(GCP_PROJECT)/podcast-network/web:latest
 CUSTOM_DOMAIN ?=
+SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI ?= gs://$(GCP_PROJECT)-podcast-network-artifacts/six-degrees-graph/latest/six_degrees_graph.pkl.gz
 DJANGO_ALLOWED_HOSTS ?= .run.app$(if $(CUSTOM_DOMAIN),$(comma)$(CUSTOM_DOMAIN),)
 DJANGO_CSRF_TRUSTED_ORIGINS ?= $(if $(CUSTOM_DOMAIN),https://$(CUSTOM_DOMAIN),)
 comma := ,
 
-.PHONY: install dev migrate test lint check preflight cloud-sql-proxy sync-cloud-db cloud-status deploy
+.PHONY: install dev migrate test lint check preflight cloud-sql-proxy sync-cloud-db cloud-status build-graph-artifact deploy
 
 install:
 	python3.13 -m venv .venv
@@ -42,6 +43,9 @@ sync-cloud-db:
 cloud-status:
 	gcloud run services describe $(CLOUD_RUN_SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION)
 
+build-graph-artifact:
+	$(MANAGE) build_six_degrees_graph_artifact --gcs-output-uri $(SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI)
+
 deploy:
 	gcloud builds submit --project $(GCP_PROJECT) --tag $(IMAGE)
 	gcloud run deploy $(CLOUD_RUN_SERVICE) \
@@ -49,6 +53,7 @@ deploy:
 		--region $(GCP_REGION) \
 		--image $(IMAGE) \
 		--add-cloudsql-instances $(GCP_PROJECT):$(GCP_REGION):$(CLOUD_SQL_INSTANCE) \
-		--set-env-vars "^|^DJANGO_DEBUG=false|DJANGO_ALLOWED_HOSTS=$(DJANGO_ALLOWED_HOSTS)|DJANGO_CSRF_TRUSTED_ORIGINS=$(DJANGO_CSRF_TRUSTED_ORIGINS)|DJANGO_SECURE_SSL_REDIRECT=true" \
+		--memory 1Gi \
+		--set-env-vars "^|^DJANGO_DEBUG=false|DJANGO_ALLOWED_HOSTS=$(DJANGO_ALLOWED_HOSTS)|DJANGO_CSRF_TRUSTED_ORIGINS=$(DJANGO_CSRF_TRUSTED_ORIGINS)|DJANGO_SECURE_SSL_REDIRECT=true|PODCAST_NETWORK_SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI=$(SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI)|DATABASE_GRAPH_CACHE_TTL_SECONDS=3600|WEB_CONCURRENCY=1" \
 		--set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest \
 		--allow-unauthenticated

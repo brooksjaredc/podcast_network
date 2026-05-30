@@ -34,6 +34,7 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
         "audit_future_link_weekly_new_links",
         "score_future_link_predictions",
         "generate_static_plots",
+        "build_six_degrees_graph_artifact",
     ]
     batch_step = steps[1]
     assert batch_step.options["new_episodes_only"] is True
@@ -69,6 +70,11 @@ def test_weekly_update_plan_defaults_to_new_episode_extraction() -> None:
     assert prediction_step.options["top_n"] == 1000
     plot_step = steps[9]
     assert plot_step.options["output_dir"] == "static/plots"
+    graph_artifact_step = steps[10]
+    assert (
+        graph_artifact_step.options["output"]
+        == "/tmp/podcast-network-artifacts/six_degrees_graph.pkl.gz"
+    )
 
 
 def test_weekly_update_plan_can_reprocess_current_prompt() -> None:
@@ -89,7 +95,11 @@ def test_weekly_update_plan_can_run_independent_cloud_job_phases() -> None:
             "promote_frequent_guests_to_cohosts",
             "refresh_person_entity_resolution",
         ],
-        "metrics": ["calculate_network_metrics", "calculate_network_evolution"],
+        "metrics": [
+            "calculate_network_metrics",
+            "calculate_network_evolution",
+            "build_six_degrees_graph_artifact",
+        ],
         "predictions": [
             "audit_future_link_weekly_new_links",
             "score_future_link_predictions",
@@ -269,6 +279,8 @@ def default_options() -> dict[str, object]:
         "future_link_max_degree": 3,
         "plot_output_dir": "static/plots",
         "plot_gcs_output_uri": "",
+        "graph_artifact_output": "/tmp/podcast-network-artifacts/six_degrees_graph.pkl.gz",
+        "graph_artifact_gcs_uri": "",
         "reprocess_current_prompt": False,
         "skip_scrape": False,
         "skip_llm": False,
@@ -278,6 +290,7 @@ def default_options() -> dict[str, object]:
         "skip_network_evolution": False,
         "skip_future_link_predictions": False,
         "skip_static_plots": False,
+        "skip_graph_artifact": False,
         "skip_graph_warm": False,
         "phase": "all",
     }

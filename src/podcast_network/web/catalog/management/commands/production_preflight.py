@@ -135,6 +135,10 @@ def gcs_artifact_checks() -> list[PreflightCheck]:
         gcs_uri_check("raw_snapshot_gcs_uri", settings.RAW_SNAPSHOT_GCS_URI),
         gcs_uri_check("batch_artifact_gcs_uri", settings.BATCH_ARTIFACT_GCS_URI),
         gcs_uri_check("plot_artifact_gcs_uri", settings.PLOT_ARTIFACT_GCS_URI),
+        gcs_uri_check(
+            "six_degrees_graph_artifact_gcs_uri",
+            settings.SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI,
+        ),
     ]
 
 

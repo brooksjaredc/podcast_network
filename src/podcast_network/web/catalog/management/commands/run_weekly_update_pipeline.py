@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import close_old_connections
@@ -130,6 +131,11 @@ class Command(BaseCommand):
         parser.add_argument("--plot-output-dir", default="static/plots")
         parser.add_argument("--plot-gcs-output-uri", default="")
         parser.add_argument(
+            "--graph-artifact-output",
+            default="/tmp/podcast-network-artifacts/six_degrees_graph.pkl.gz",
+        )
+        parser.add_argument("--graph-artifact-gcs-uri", default="")
+        parser.add_argument(
             "--reprocess-current-prompt",
             action="store_true",
             help=(
@@ -145,6 +151,7 @@ class Command(BaseCommand):
         parser.add_argument("--skip-network-evolution", action="store_true")
         parser.add_argument("--skip-future-link-predictions", action="store_true")
         parser.add_argument("--skip-static-plots", action="store_true")
+        parser.add_argument("--skip-graph-artifact", action="store_true")
         parser.add_argument("--skip-graph-warm", action="store_true")
         parser.add_argument(
             "--dry-run",
@@ -369,6 +376,20 @@ def build_pipeline_steps(options: dict[str, object]) -> list[PipelineStep]:
                 options={
                     "output_dir": str(options["plot_output_dir"]),
                     "gcs_output_uri": str(options["plot_gcs_output_uri"]),
+                },
+            )
+        )
+    if phase in {"all", "metrics"} and not options["skip_graph_artifact"]:
+        steps.append(
+            PipelineStep(
+                name="Build six-degrees graph artifact",
+                command="build_six_degrees_graph_artifact",
+                options={
+                    "output": str(options["graph_artifact_output"]),
+                    "gcs_output_uri": str(
+                        options["graph_artifact_gcs_uri"]
+                        or settings.SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI
+                    ),
                 },
             )
         )

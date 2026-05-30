@@ -60,6 +60,7 @@ Use stable prefixes in that bucket for generated artifacts and raw ingestion sna
 
 ```text
 gs://PROJECT_ID-podcast-network-artifacts/static-plots/latest
+gs://PROJECT_ID-podcast-network-artifacts/six-degrees-graph/latest/six_degrees_graph.pkl.gz
 gs://PROJECT_ID-podcast-network-artifacts/raw-feed-snapshots
 gs://PROJECT_ID-podcast-network-artifacts/openai-batches
 ```
@@ -96,9 +97,24 @@ gcloud run deploy podcast-network-web \
   --image us-central1-docker.pkg.dev/PROJECT_ID/podcast-network/web:latest \
   --region us-central1 \
   --add-cloudsql-instances PROJECT_ID:us-central1:podcast-network-db \
-  --set-env-vars DJANGO_DEBUG=false,DJANGO_ALLOWED_HOSTS=.run.app,DJANGO_SECURE_SSL_REDIRECT=true \
+  --memory 1Gi \
+  --set-env-vars DJANGO_DEBUG=false,DJANGO_ALLOWED_HOSTS=.run.app,DJANGO_SECURE_SSL_REDIRECT=true,WEB_CONCURRENCY=1,DATABASE_GRAPH_CACHE_TTL_SECONDS=3600,PODCAST_NETWORK_SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/six-degrees-graph/latest/six_degrees_graph.pkl.gz \
   --set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest
 ```
+
+Before deploying a revision that reads the serialized six-degrees graph, build and upload
+the artifact from a shell that can reach the production database:
+
+```bash
+DATABASE_URL=postgresql://podcast_app:DB_PASSWORD@/podcast_network?host=/cloudsql/PROJECT_ID:us-central1:podcast-network-db \
+  python manage.py build_six_degrees_graph_artifact \
+  --gcs-output-uri gs://PROJECT_ID-podcast-network-artifacts/six-degrees-graph/latest/six_degrees_graph.pkl.gz
+```
+
+At runtime, the web service downloads this artifact on a graph cache miss and falls back
+to building from Postgres if the artifact is missing or invalid. The fallback keeps the
+page available during rollout, but the artifact should be treated as the normal serving
+path because it keeps the expensive graph build out of user requests.
 
 ## Jobs
 
@@ -109,7 +125,7 @@ gcloud run jobs create weekly-update \
   --image us-central1-docker.pkg.dev/PROJECT_ID/podcast-network/web:latest \
   --region us-central1 \
   --set-cloudsql-instances PROJECT_ID:us-central1:podcast-network-db \
-  --set-env-vars PODCAST_NETWORK_RAW_SNAPSHOT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/raw-feed-snapshots,PODCAST_NETWORK_BATCH_ARTIFACT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/openai-batches \
+  --set-env-vars PODCAST_NETWORK_RAW_SNAPSHOT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/raw-feed-snapshots,PODCAST_NETWORK_BATCH_ARTIFACT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/openai-batches,PODCAST_NETWORK_SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI=gs://PROJECT_ID-podcast-network-artifacts/six-degrees-graph/latest/six_degrees_graph.pkl.gz \
   --set-secrets DATABASE_URL=database-url:latest,DJANGO_SECRET_KEY=django-secret-key:latest,OPENAI_API_KEY=openai-api-key:latest,PODCAST_NETWORK_WEEKLY_UPDATE_ALERT_WEBHOOK_URL=weekly-update-alert-webhook-url:latest \
   --command python \
   --args manage.py,run_weekly_update_pipeline \
@@ -152,6 +168,11 @@ To persist OpenAI Batch API JSONL artifacts, set `PODCAST_NETWORK_BATCH_ARTIFACT
 or pass `--batch-artifact-gcs-uri`. Extraction run metadata will keep both the local
 temporary path and durable `input_jsonl_gcs_uri`, `output_jsonl_gcs_uri`, and optional
 `error_jsonl_gcs_uri` values.
+
+To refresh the serving graph as part of the weekly pipeline, pass
+`--graph-artifact-gcs-uri gs://PROJECT_ID-podcast-network-artifacts/six-degrees-graph/latest/six_degrees_graph.pkl.gz`
+to `run_weekly_update_pipeline`. The web service should use the same URI in
+`PODCAST_NETWORK_SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI`.
 
 Future-link prediction/audit runs record model artifact `model_sha256`,
 `model_size_bytes`, and the current `git_sha` in run metadata. Trained person-entity

@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+from tempfile import gettempdir
 from threading import Lock
 from time import monotonic
 
@@ -6,9 +8,11 @@ from django.conf import settings
 from django.db.models import Count
 
 from podcast_network.cleaning import is_likely_english_podcast_name
+from podcast_network.cloud_artifacts import download_gcs_to_path
 from podcast_network.graph import SixDegreesGraph
 from podcast_network.graph.six_degrees import Edge
 from podcast_network.web.catalog.models import Appearance, PersonEntityLink, Podcast
+from podcast_network.web.explorer.graph_artifact import load_graph_artifact
 
 COHOST_EPISODE_THRESHOLD = 100
 COHOST_EPISODE_SHARE = 0.20
@@ -40,11 +44,11 @@ def database_six_degrees_graph() -> SixDegreesGraph:
             return _DATABASE_GRAPH_CACHE[1]
 
         started = monotonic()
-        graph = build_database_six_degrees_graph()
+        graph = configured_six_degrees_graph_artifact() or build_database_six_degrees_graph()
         elapsed = monotonic() - started
         _DATABASE_GRAPH_CACHE = (monotonic(), graph)
         logger.info(
-            "Built database six-degrees graph in %.2fs with %d people and %d podcasts.",
+            "Loaded database six-degrees graph in %.2fs with %d people and %d podcasts.",
             elapsed,
             graph.person_count,
             graph.podcast_count,
@@ -58,6 +62,39 @@ def clear_database_six_degrees_graph_cache() -> None:
 
 
 database_six_degrees_graph.cache_clear = clear_database_six_degrees_graph_cache
+
+
+def configured_six_degrees_graph_artifact() -> SixDegreesGraph | None:
+    artifact_path = configured_graph_artifact_path()
+    gcs_uri = str(getattr(settings, "SIX_DEGREES_GRAPH_ARTIFACT_GCS_URI", "")).strip()
+    if gcs_uri:
+        try:
+            download_gcs_to_path(gcs_uri=gcs_uri, local_path=artifact_path)
+        except Exception:
+            logger.warning("Could not download six-degrees graph artifact from %s.", gcs_uri)
+            return None
+    elif not artifact_path.exists():
+        return None
+
+    try:
+        artifact = load_graph_artifact(artifact_path)
+    except Exception:
+        logger.warning("Could not load six-degrees graph artifact from %s.", artifact_path)
+        return None
+
+    logger.info(
+        "Loaded six-degrees graph artifact from %s created at %s.",
+        artifact_path,
+        artifact.metadata.get("created_at", "unknown"),
+    )
+    return artifact.graph
+
+
+def configured_graph_artifact_path() -> Path:
+    artifact_path = str(getattr(settings, "SIX_DEGREES_GRAPH_ARTIFACT_PATH", "")).strip()
+    if artifact_path:
+        return Path(artifact_path)
+    return Path(gettempdir()) / "podcast_network" / "six_degrees_graph.pkl.gz"
 
 
 def build_database_six_degrees_graph() -> SixDegreesGraph:
