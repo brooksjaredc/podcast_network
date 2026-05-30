@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Podcasts{% endblock %}
 
@@ -30,7 +31,7 @@
   </form>
 
   <div class="table-meta">
-    <strong>{{ podcast_rows|length }} podcasts shown</strong>
+    <strong>{{ podcast_rows|length|intcomma }} podcasts shown</strong>
     <span class="muted">Sorted by {{ sort }}</span>
   </div>
 
@@ -49,7 +50,7 @@
     <tbody>
       {% for row in podcast_rows %}
         <tr>
-          <td>{{ forloop.counter }}</td>
+          <td>{{ forloop.counter|intcomma }}</td>
           <td><a href="{% url 'explorer:podcast_detail' row.podcast.id %}">{{ row.podcast.name }}</a></td>
           <td>
             {% for host in row.hosts %}
@@ -65,8 +66,8 @@
               <span class="table-badge table-badge-muted">Unknown</span>
             {% endfor %}
           </td>
-          <td class="numeric-cell">{{ row.podcast.guest_appearances }}</td>
-          <td class="numeric-cell">{{ row.podcast.unique_guests }}</td>
+          <td class="numeric-cell">{{ row.podcast.guest_appearances|intcomma }}</td>
+          <td class="numeric-cell">{{ row.podcast.unique_guests|intcomma }}</td>
           <td>{{ row.podcast.latest_episode|date:"Y-m-d" }}</td>
         </tr>
       {% empty %}

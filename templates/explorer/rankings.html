@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Rankings{% endblock %}
 
@@ -39,7 +40,7 @@
   {% endif %}
 
   <div class="table-meta">
-    <strong>{{ people|length }} ranked people shown</strong>
+    <strong>{{ people|length|intcomma }} ranked people shown</strong>
     <span class="muted">{{ rank_label }}</span>
   </div>
 
@@ -56,15 +57,15 @@
     <tbody>
       {% for person in people %}
         <tr>
-          <td>{{ forloop.counter }}</td>
+          <td>{{ forloop.counter|intcomma }}</td>
           {% if person.representative_person_id %}
             <td><a href="{% url 'explorer:person_detail' person.representative_person_id %}">{{ person.display_name }}</a></td>
-            <td class="numeric-cell">{{ person.guest_appearances }}</td>
+            <td class="numeric-cell">{{ person.guest_appearances|intcomma }}</td>
           {% else %}
             <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-            <td class="numeric-cell">{{ person.appearances_count }}</td>
+            <td class="numeric-cell">{{ person.appearances_count|intcomma }}</td>
           {% endif %}
-          <td class="numeric-cell">{{ person.podcast_count }}</td>
+          <td class="numeric-cell">{{ person.podcast_count|intcomma }}</td>
           <td>
             {% if person.latest_episode_at %}
               {{ person.latest_episode_at|date:"Y-m-d" }}

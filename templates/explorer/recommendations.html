@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Recommendations{% endblock %}
 
@@ -12,9 +13,9 @@
       </p>
     </div>
     <div class="recommendations-summary" aria-label="Recommendation workflow summary">
-      <div><strong>{{ selected_podcasts|length }}</strong><span>selected</span></div>
-      <div><strong>{{ recommendation_rows|length }}</strong><span>matches</span></div>
-      <div><strong>{{ selected_genres|length }}</strong><span>genre filters</span></div>
+      <div><strong>{{ selected_podcasts|length|intcomma }}</strong><span>selected</span></div>
+      <div><strong>{{ recommendation_rows|length|intcomma }}</strong><span>matches</span></div>
+      <div><strong>{{ selected_genres|length|intcomma }}</strong><span>genre filters</span></div>
     </div>
   </section>
 
@@ -46,7 +47,7 @@
               <div class="podcast-row-header">
                 <div>
                   <h3><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></h3>
-                  <p class="muted">{{ podcast.unique_guests }} guests</p>
+                  <p class="muted">{{ podcast.unique_guests|intcomma }} guests</p>
                 </div>
                 <form method="get">
                   {% for selected_id in selected_ids %}
@@ -97,7 +98,7 @@
             <div class="podcast-row-header">
               <div>
                 <h3><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></h3>
-                <p class="muted">{{ podcast.unique_guests }} guests</p>
+                <p class="muted">{{ podcast.unique_guests|intcomma }} guests</p>
               </div>
               <form method="get">
                 {% for selected_id in selected_ids %}
@@ -180,9 +181,9 @@
               <div>
                 <h3><a href="{% url 'explorer:podcast_detail' row.podcast.id %}">{{ row.podcast.name }}</a></h3>
                 <div class="recommendation-metrics" aria-label="Recommendation metrics">
-                  <span>{{ row.podcast.shared_guest_count }} shared guests</span>
-                  <span>{{ row.podcast.overlap_rate_percent }}% overlap rate</span>
-                  <span>{{ row.podcast.matching_appearances }} appearances</span>
+                  <span>{{ row.podcast.shared_guest_count|intcomma }} shared guests</span>
+                  <span>{{ row.podcast.overlap_rate_percent|intcomma }}% overlap rate</span>
+                  <span>{{ row.podcast.matching_appearances|intcomma }} appearances</span>
                   {% if row.podcast.is_active %}<span>active</span>{% endif %}
                 </div>
               </div>
@@ -235,7 +236,7 @@
             {% endif %}
             {% if row.explanation %}
               <p>
-                Recommended because it shares {{ row.explanation.guest_count }}
+                Recommended because it shares {{ row.explanation.guest_count|intcomma }}
                 guests with {{ row.explanation.source_podcast }}:
                 {% for guest in row.explanation.guests %}
                   {{ guest }}{% if not forloop.last %}, {% endif %}

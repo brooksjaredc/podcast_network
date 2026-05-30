@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Six Degrees to Joe Rogan{% endblock %}
 
@@ -34,9 +35,9 @@
   </section>
 
   <section class="home-stats" aria-label="Network size">
-    <div><strong>{{ podcast_count }}</strong><span>podcasts</span></div>
-    <div><strong>{{ person_count }}</strong><span>people</span></div>
-    <div><strong>{{ duration_count }}</strong><span>guest appearances</span></div>
+    <div><strong>{{ podcast_count|intcomma }}</strong><span>podcasts</span></div>
+    <div><strong>{{ person_count|intcomma }}</strong><span>people</span></div>
+    <div><strong>{{ duration_count|intcomma }}</strong><span>guest appearances</span></div>
   </section>
 
   <section class="home-actions" aria-label="Things to explore">

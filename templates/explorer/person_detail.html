@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}{{ person.name }}{% endblock %}
 
@@ -18,12 +19,12 @@
     </div>
     <div class="dossier-aside">
       <div class="dossier-stat-grid" aria-label="Person network summary">
-        <div><strong>{{ podcast_rows|length }}</strong><span>guest podcasts</span></div>
-        <div><strong>{{ host_podcast_rows|length }}</strong><span>hosted shows</span></div>
+        <div><strong>{{ podcast_rows|length|intcomma }}</strong><span>guest podcasts</span></div>
+        <div><strong>{{ host_podcast_rows|length|intcomma }}</strong><span>hosted shows</span></div>
         {% if network_metric %}
-          <div><strong>#{{ network_metric.pagerank_rank }}</strong><span>PageRank</span></div>
+          <div><strong>#{{ network_metric.pagerank_rank|intcomma }}</strong><span>PageRank</span></div>
         {% elif podcast_rows %}
-          <div><strong>{{ podcast_rows.0.appearances_count }}</strong><span>top show appearances</span></div>
+          <div><strong>{{ podcast_rows.0.appearances_count|intcomma }}</strong><span>top show appearances</span></div>
         {% else %}
           <div><strong>0</strong><span>loaded appearances</span></div>
         {% endif %}
@@ -42,7 +43,7 @@
           {% for podcast in podcast_rows|slice:":20" %}
             <li>
               <a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a>
-              <span class="count">{{ podcast.appearances_count }} appearances</span>
+              <span class="count">{{ podcast.appearances_count|intcomma }} appearances</span>
             </li>
           {% endfor %}
         </ul>
@@ -54,10 +55,10 @@
     <section class="panel">
       <h2>Network Snapshot</h2>
       <div class="summary-list">
-        <div class="summary-item"><span>Guest podcasts</span><strong>{{ podcast_rows|length }}</strong></div>
-        <div class="summary-item"><span>Hosted shows</span><strong>{{ host_podcast_rows|length }}</strong></div>
+        <div class="summary-item"><span>Guest podcasts</span><strong>{{ podcast_rows|length|intcomma }}</strong></div>
+        <div class="summary-item"><span>Hosted shows</span><strong>{{ host_podcast_rows|length|intcomma }}</strong></div>
         {% if network_metric %}
-          <div class="summary-item"><span>Best rank</span><strong>#{{ network_metric.pagerank_rank }}</strong></div>
+          <div class="summary-item"><span>Best rank</span><strong>#{{ network_metric.pagerank_rank|intcomma }}</strong></div>
         {% elif podcast_rows %}
           <div class="summary-item"><span>Most frequent show</span><strong>{{ podcast_rows.0.name }}</strong></div>
         {% endif %}
@@ -89,7 +90,7 @@
             {% for podcast in host_podcast_rows %}
               <tr>
                 <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
-                <td>{{ podcast.appearances_count }}</td>
+                <td>{{ podcast.appearances_count|intcomma }}</td>
                 <td>{{ podcast.latest|date:"Y-m-d" }}</td>
               </tr>
             {% empty %}
@@ -110,7 +111,7 @@
               <tr>
                 <td><a href="{% url 'explorer:podcast_detail' podcast.id %}">{{ podcast.name }}</a></td>
                 <td></td>
-                <td>{{ podcast.appearances_count }}</td>
+                <td>{{ podcast.appearances_count|intcomma }}</td>
                 <td>{{ podcast.latest|date:"Y-m-d" }}</td>
               </tr>
             {% empty %}
@@ -130,8 +131,8 @@
             {% for row in network_rank_rows %}
               <tr>
                 <td><a href="{% url 'explorer:rankings' %}?rank={{ row.rank_key }}">{{ row.label }}</a></td>
-                <td>#{{ row.rank }}</td>
-                <td>{{ row.score|floatformat:6 }}</td>
+                <td>#{{ row.rank|intcomma }}</td>
+                <td>{{ row.score|floatformat:6|intcomma }}</td>
               </tr>
             {% empty %}
               <tr><td colspan="3">No network rankings loaded yet.</td></tr>
@@ -153,9 +154,9 @@
           <tbody>
             {% for prediction in predictions %}
               <tr>
-                <td>#{{ prediction.rank }}</td>
+                <td>#{{ prediction.rank|intcomma }}</td>
                 <td><a href="{% url 'explorer:podcast_detail' prediction.podcast_id %}">{{ prediction.podcast_name }}</a></td>
-                <td>{{ prediction.score|floatformat:3 }}</td>
+                <td>{{ prediction.score|floatformat:3|intcomma }}</td>
                 <td>
                   {% if prediction.reason %}
                     {{ prediction.reason }}

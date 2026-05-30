@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}People{% endblock %}
 
@@ -19,7 +20,7 @@
     {% endif %}
   </form>
   <div class="table-meta">
-    <strong>{{ people|length }} people shown</strong>
+    <strong>{{ people|length|intcomma }} people shown</strong>
     <span class="muted">Sorted by {{ sort }}</span>
   </div>
 
@@ -36,10 +37,10 @@
     <tbody>
       {% for person in people %}
         <tr>
-          <td>{{ forloop.counter }}</td>
+          <td>{{ forloop.counter|intcomma }}</td>
           <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-          <td class="numeric-cell">{{ person.appearances_count }}</td>
-          <td class="numeric-cell">{{ person.podcast_count }}</td>
+          <td class="numeric-cell">{{ person.appearances_count|intcomma }}</td>
+          <td class="numeric-cell">{{ person.podcast_count|intcomma }}</td>
           <td>{{ person.latest|date:"Y-m-d" }}</td>
         </tr>
       {% empty %}

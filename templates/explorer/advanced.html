@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}{{ page.title }}{% endblock %}
 
@@ -55,19 +56,19 @@
   {% if page_slug == "predictions" and prediction_run %}
     <div class="stats">
       <div class="stat">
-        <strong>{{ prediction_run.metadata.rows_written }}</strong>
+        <strong>{{ prediction_run.metadata.rows_written|intcomma }}</strong>
         <span>top network fits</span>
       </div>
       <div class="stat">
-        <strong>{{ prediction_run.metadata.candidate_count }}</strong>
+        <strong>{{ prediction_run.metadata.candidate_count|intcomma }}</strong>
         <span>candidate pairs scored</span>
       </div>
       <div class="stat">
-        <strong>{{ prediction_run.metadata.scored_podcast_count }}</strong>
+        <strong>{{ prediction_run.metadata.scored_podcast_count|intcomma }}</strong>
         <span>podcasts scored</span>
       </div>
       <div class="stat">
-        <strong>{{ prediction_run.metadata.max_degree }}</strong>
+        <strong>{{ prediction_run.metadata.max_degree|intcomma }}</strong>
         <span>maximum network degree</span>
       </div>
     </div>
@@ -130,8 +131,8 @@
             <p class="muted">
               Published {{ audit_run.metadata.week_start|slice:":10" }} through
               {{ audit_run.metadata.week_end|slice:":10" }};
-              {{ audit_run.metadata.repeat_pair_excluded_count }} repeat links excluded;
-              {{ audit_run.metadata.scored_link_count }} of {{ audit_run.metadata.new_link_count }}
+              {{ audit_run.metadata.repeat_pair_excluded_count|intcomma }} repeat links excluded;
+              {{ audit_run.metadata.scored_link_count|intcomma }} of {{ audit_run.metadata.new_link_count|intcomma }}
               first-time links were in the prior candidate universe.
             </p>
           {% endif %}
@@ -160,8 +161,8 @@
                       {% endif %}
                     </td>
                     {% if row.score != None %}
-                      <td>{{ row.rank }}</td>
-                      <td>{{ row.score|floatformat:3 }}</td>
+                      <td>{{ row.rank|intcomma }}</td>
+                      <td>{{ row.score|floatformat:3|intcomma }}</td>
                       <td>{{ audit_run.run_id }}</td>
                     {% else %}
                       <td colspan="3" class="muted">Not in prior candidate universe</td>
@@ -195,7 +196,7 @@
             <tbody>
               {% for item in predictions|slice:":200" %}
                 <tr>
-                  <td>{{ item.rank }}</td>
+                  <td>{{ item.rank|intcomma }}</td>
                   <td><a href="{% url 'explorer:podcast_detail' item.podcast_id %}">{{ item.podcast_name }}</a></td>
                   <td>
                     {% if item.person_id %}
@@ -204,9 +205,9 @@
                       {{ item.guest_name }}
                     {% endif %}
                   </td>
-                  <td>{{ item.score|floatformat:3 }}</td>
-                  <td>{{ item.shared_neighbor_score|floatformat:0 }}</td>
-                  <td>{{ item.guest_appearance_count|floatformat:0 }}</td>
+                  <td>{{ item.score|floatformat:3|intcomma }}</td>
+                  <td>{{ item.shared_neighbor_score|floatformat:0|intcomma }}</td>
+                  <td>{{ item.guest_appearance_count|floatformat:0|intcomma }}</td>
                 </tr>
               {% endfor %}
             </tbody>

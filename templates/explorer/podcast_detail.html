@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}{{ podcast.name }}{% endblock %}
 
@@ -21,9 +22,9 @@
     </div>
     <div class="dossier-aside">
       <div class="dossier-stat-grid" aria-label="Podcast network summary">
-        <div><strong>{{ episode_count }}</strong><span>episodes</span></div>
-        <div><strong>{{ guest_appearance_count }}</strong><span>guest appearances</span></div>
-        <div><strong>{{ unique_guest_count }}</strong><span>unique guests</span></div>
+        <div><strong>{{ episode_count|intcomma }}</strong><span>episodes</span></div>
+        <div><strong>{{ guest_appearance_count|intcomma }}</strong><span>guest appearances</span></div>
+        <div><strong>{{ unique_guest_count|intcomma }}</strong><span>unique guests</span></div>
       </div>
       <div class="dossier-actions">
         <a class="button" href="{% url 'explorer:common' %}?first={{ podcast.id }}">Compare Shows</a>
@@ -69,7 +70,7 @@
             {% for row in guest_rows %}
               <tr>
                 <td><a href="{% url 'explorer:person_detail' row.id %}">{{ row.name }}</a></td>
-                <td>{{ row.appearances_count }}</td>
+                <td>{{ row.appearances_count|intcomma }}</td>
                 <td></td>
                 <td>{{ row.latest|date:"Y-m-d" }}</td>
               </tr>
@@ -93,7 +94,7 @@
           <tbody>
             {% for prediction in predictions %}
               <tr>
-                <td>#{{ prediction.rank }}</td>
+                <td>#{{ prediction.rank|intcomma }}</td>
                 <td>
                   {% if prediction.person_id %}
                     <a href="{% url 'explorer:person_detail' prediction.person_id %}">{{ prediction.guest_name }}</a>
@@ -101,7 +102,7 @@
                     {{ prediction.guest_name }}
                   {% endif %}
                 </td>
-                <td>{{ prediction.score|floatformat:3 }}</td>
+                <td>{{ prediction.score|floatformat:3|intcomma }}</td>
                 <td>
                   {% if prediction.reason %}
                     {{ prediction.reason }}

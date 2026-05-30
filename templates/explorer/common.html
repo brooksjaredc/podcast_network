@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Compare Podcasts{% endblock %}
 
@@ -31,7 +32,7 @@
     <div class="table-meta">
       <div>
         <h2>{{ first_podcast.name }} and {{ second_podcast.name }}</h2>
-        <span class="muted">{{ common_people|length }} shared guests found</span>
+        <span class="muted">{{ common_people|length|intcomma }} shared guests found</span>
       </div>
     </div>
     <table>
@@ -46,8 +47,8 @@
         {% for person in common_people %}
           <tr>
             <td><a href="{% url 'explorer:person_detail' person.id %}">{{ person.name }}</a></td>
-            <td class="numeric-cell">{{ person.first_appearances }}</td>
-            <td class="numeric-cell">{{ person.second_appearances }}</td>
+            <td class="numeric-cell">{{ person.first_appearances|intcomma }}</td>
+            <td class="numeric-cell">{{ person.second_appearances|intcomma }}</td>
           </tr>
         {% empty %}
           <tr><td colspan="3">No common guests found.</td></tr>

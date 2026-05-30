@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Six Degrees{% endblock %}
 
@@ -68,7 +69,7 @@
       {% endif %}
     {% endif %}
     {% if result.found %}
-      <p class="muted">Length: {{ result.length }}</p>
+      <p class="muted">Length: {{ result.length|intcomma }}</p>
       {% if path_graph %}
         <section
           class="path-graphic"

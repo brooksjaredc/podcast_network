@@ -964,10 +964,10 @@ def test_advanced_predictions_loads() -> None:
         feature_names=["shared_neighbor_score", "guest_appearance_count"],
         score_histogram=[{"lower": 0.0, "upper": 0.1, "count": 1}],
         metadata={"score_histogram": [{"lower": 0.0, "upper": 0.1, "count": 1}]},
-        candidate_count=1,
-        scored_podcast_count=1,
-        rows_written=1,
-        max_degree=3,
+        candidate_count=1234,
+        scored_podcast_count=1234,
+        rows_written=12345,
+        max_degree=1234,
     )
     FutureLinkPrediction.objects.create(
         run=run,
@@ -1011,6 +1011,8 @@ def test_advanced_predictions_loads() -> None:
     assert b"plot.ly" not in response.content
     assert b"Score Distribution" in response.content
     assert b"Top Network Fits" in response.content
+    assert b"12,345" in response.content
+    assert b"1,234" in response.content
     assert f"/people/{person.id}/".encode() in response.content
 
 
