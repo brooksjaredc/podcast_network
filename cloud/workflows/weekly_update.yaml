@@ -18,6 +18,7 @@ main:
           - raw_snapshot_storage: ${default(map.get(args, "raw_snapshot_storage"), "gcs")}
           - raw_snapshot_gcs_uri: ${default(map.get(args, "raw_snapshot_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/raw-feed-snapshots")}
           - batch_artifact_gcs_uri: ${default(map.get(args, "batch_artifact_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/openai-batches")}
+          - graph_artifact_gcs_uri: ${default(map.get(args, "graph_artifact_gcs_uri"), "gs://podcast-network-prod-podcast-network-artifacts/six-degrees-graph/latest/six_degrees_graph.pkl.gz")}
           - alert_webhook_url: ${default(map.get(args, "alert_webhook_url"), "")}
           - plot_output_dir: ${default(map.get(args, "plot_output_dir"), "/tmp/static-plots")}
           - plot_gcs_output_uri: ${default(map.get(args, "plot_gcs_output_uri"), "gs://podcast-network-prod-podcast-network-artifacts/static-plots/latest")}
@@ -100,6 +101,8 @@ main:
                     - metrics
                     - --coordinator-label
                     - ${run_label}
+                    - --graph-artifact-gcs-uri
+                    - ${graph_artifact_gcs_uri}
                 result: metrics_execution
             - run_predictions:
                 call: run_job
