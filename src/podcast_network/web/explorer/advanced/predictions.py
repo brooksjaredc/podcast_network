@@ -30,10 +30,11 @@ def advanced_prediction_context() -> dict[str, object]:
     recent_link_rows = audit_run["rows"] if audit_run else []
     enrich_prediction_links(recent_link_rows)
     candidate_score_histogram = metadata_score_histogram_counts(
-        prediction_run["metadata"].get("score_histogram")
+        prediction_run["metadata"].get("score_histogram"), bin_count=100
     )
     recent_hit_histogram = metadata_score_histogram_counts(
-        audit_run["metadata"].get("score_histogram") if audit_run else None
+        audit_run["metadata"].get("score_histogram") if audit_run else None,
+        bin_count=100,
     )
     return {
         "prediction_run": prediction_run,
@@ -219,6 +220,8 @@ def score_histogram_plot(
     hit_percent = percent_values(hit_counts)
     bin_width = 1 / bin_count
     centers = [(index + 0.5) * bin_width for index in range(bin_count)]
+    candidate_y = log_plot_values(candidate_percent)
+    hit_y = log_plot_values(hit_percent)
     candidate_hover = [
         f"Score {index / bin_count:.2f}-{(index + 1) / bin_count:.2f}<br>"
         f"All candidates: {candidate_counts[index]:,}<br>"
@@ -234,36 +237,41 @@ def score_histogram_plot(
     return {
         "data": [
             {
-                "type": "bar",
+                "type": "scatter",
+                "mode": "lines+markers",
                 "name": "All candidates",
                 "x": centers,
-                "y": candidate_percent,
-                "width": bin_width * 0.92,
-                "marker": {"color": "#0f766e"},
+                "y": candidate_y,
+                "line": {"color": "#0f766e", "width": 3},
+                "marker": {"color": "#0f766e", "size": 5},
                 "opacity": 0.58,
                 "hovertext": candidate_hover,
                 "hoverinfo": "text",
             },
             {
-                "type": "bar",
+                "type": "scatter",
+                "mode": "lines+markers",
                 "name": "New weekly links",
                 "x": centers,
-                "y": hit_percent,
-                "width": bin_width * 0.52,
-                "marker": {"color": "#b45309"},
+                "y": hit_y,
+                "line": {"color": "#b45309", "width": 3},
+                "marker": {"color": "#b45309", "size": 6},
                 "opacity": 0.78,
+                "connectgaps": False,
                 "hovertext": hit_hover,
                 "hoverinfo": "text",
             },
         ],
         "layout": {
             "title": {"text": "Prediction Score Distribution"},
-            "barmode": "overlay",
-            "xaxis": {"title": {"text": "Prediction score"}, "range": [0, 1]},
+            "xaxis": {
+                "title": {"text": "Prediction score"},
+                "type": "log",
+                "range": [-2.31, 0],
+            },
             "yaxis": {
                 "title": {"text": "Percent of population"},
                 "type": "log",
-                "rangemode": "tozero",
             },
             "legend": {"orientation": "h", "y": 1.12},
             "margin": {"l": 62, "r": 32, "t": 88, "b": 58},
@@ -284,3 +292,7 @@ def percent_values(counts: list[int]) -> list[float]:
     if not total:
         return [0.0 for _count in counts]
     return [count / total * 100 for count in counts]
+
+
+def log_plot_values(values: list[float]) -> list[float | None]:
+    return [value if value > 0 else None for value in values]

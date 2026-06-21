@@ -1066,6 +1066,21 @@ def test_advanced_prediction_histogram_accepts_count_bins() -> None:
     assert metadata_score_histogram_counts([1] * 100) == [10] * 10
 
 
+def test_advanced_prediction_plot_hides_zeroes_on_log_axis() -> None:
+    from podcast_network.web.explorer.advanced.predictions import (
+        log_plot_values,
+        score_histogram_plot,
+    )
+
+    payload = score_histogram_plot(candidate_counts=[9, 1], hit_counts=[10, 0])
+
+    assert log_plot_values([10.0, 0.0, 0.1]) == [10.0, None, 0.1]
+    assert payload is not None
+    assert payload["layout"]["xaxis"]["type"] == "log"
+    assert payload["layout"]["yaxis"]["type"] == "log"
+    assert payload["data"][1]["y"] == [100.0, None]
+
+
 @override_settings(ALLOWED_HOSTS=["testserver"], PLOT_ARTIFACT_GCS_URI="")
 def test_advanced_pages_use_dynamic_plot_asset_route() -> None:
     response = Client().get("/analysis/map/")

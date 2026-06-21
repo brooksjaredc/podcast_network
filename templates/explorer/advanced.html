@@ -88,8 +88,9 @@
         <section class="tab-panel prediction-tab-panel-scores">
           <h2>Score Distribution</h2>
           <p class="muted">
-            Shows how the model spreads scores across all candidate podcast and guest pairs.
-            A long tail means only a small share of pairs look especially network-plausible.
+            Shows how the model spreads scores across all candidate podcast and guest pairs, with
+            recent first-time links overlaid. The log-scaled score axis makes the lower-score mass
+            easier to inspect while keeping the high-score tail visible.
           </p>
           {% if score_histogram_plot %}
             {{ score_histogram_plot|json_script:"prediction-score-histogram-data" }}
